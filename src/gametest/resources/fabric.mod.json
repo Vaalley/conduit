@@ -8,7 +8,8 @@
   "entrypoints": {
     "fabric-gametest": [
       "eu.mctraveler.gametest.ScaffoldGameTest",
-      "eu.mctraveler.gametest.PersistenceGameTest"
+      "eu.mctraveler.gametest.PersistenceGameTest",
+      "eu.mctraveler.gametest.XpOrbMergeGameTest"
     ],
     "server": [
       {

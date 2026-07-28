@@ -136,7 +136,7 @@ A single Fabric dedicated server (Minecraft 26.2) running one server-side Kotlin
 9. Region entry/exit is detected on teleports and portal arrivals (was move-packet-only).
 10. A real name cache replaces the op-only uuid cache (member lists complete).
 11. Travel is near-instant (no 2 s disconnect delay) and cannot lose state to a stale sync.
-12. XP orb merging happens server-side (was client-side packet illusion).
+12. XP orb merging happens server-side (was client-side packet illusion). Merged orbs stack per value class via vanilla's lossless count mechanism — a burst leaves one orb per orb size — rather than the Portal's summing of mixed values into a single orb; totals are identical, and pickup/Mending granularity stays vanilla.
 13. enforcesSecureChat is advertised honestly.
 14. Player skins/identity need no offline-UUID surgery (single online-mode server).
 15. The text DSL keeps a nested part's own style when collapsing single-part content (the Portal's NBT path overwrote the child's color with the parent's; its legacy-string path kept it — the legacy behaviour is the plain intent).
