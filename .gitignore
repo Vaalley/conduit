@@ -1,0 +1,20 @@
+# Gradle
+.gradle/
+build/
+
+# Fabric Loom local cache
+.fabric/
+
+# Dev/test/smoke server run dirs and stray server logs
+run/
+logs/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+out/
+classes/
+
+# OS
+.DS_Store

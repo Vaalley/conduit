@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "mctraveler-test",
+  "version": "${version}",
+  "name": "MCTraveler test harness",
+  "description": "Headless gametests and the production smoke hook for the mctraveler mod.",
+  "environment": "server",
+  "entrypoints": {
+    "fabric-gametest": [
+      "eu.mctraveler.gametest.ScaffoldGameTest"
+    ],
+    "server": [
+      {
+        "adapter": "kotlin",
+        "value": "eu.mctraveler.gametest.SmokeHook"
+      }
+    ]
+  },
+  "depends": {
+    "mctraveler": "*"
+  }
+}
