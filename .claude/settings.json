@@ -1,0 +1,7 @@
+{
+  "model": "claude-fable-5",
+  "forceLoginMethod": "claudeai",
+  "env": {
+    "CLAUDE_CODE_SUBAGENT_MODEL": "claude-opus-5"
+  }
+}
