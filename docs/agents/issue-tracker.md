@@ -4,7 +4,7 @@ Issues and specs (you may know a spec as a PRD) for this repo live as markdown f
 
 ## GitHub Project mirror (tracking view only)
 
-The local files are canonical. A read-only-ish mirror lives on the GitHub Project "Conduit" at https://github.com/users/Vaalley/projects/3 (draft items, one per ticket, titled `NN — <title>`). When a ticket's state changes locally, sync its board Status: unblocked → `Ready`, claimed → `In progress`, resolved/done → `Done`. IDs for `gh project item-edit`: project `PVT_kwHOA6M0Es4BeufK`, status field `PVTSSF_lAHOA6M0Es4BeufKzhZGiwo`, options Backlog `f75ad846`, Ready `e18bf179`, In progress `47fc9ee4`, In review `aba860b9`, Done `98236657`. Requires `gh` auth with the `project` scope (account Blazzike has write access).
+The local files are canonical. A read-only-ish mirror lives on the GitHub Project "Conduit" at https://github.com/users/Vaalley/projects/3 (draft items, one per ticket, titled `NN — <title>`). When a ticket's state changes locally, sync its board Status: unblocked → `Ready`, claimed → `In progress`, resolved/done → `Done`. IDs for `gh project item-edit`: project `PVT_kwHOA6M0Es4BeufK`, status field `PVTSSF_lAHOA6M0Es4BeufKzhZGiwo`, options Backlog `f75ad846`, Ready `e18bf179`, In progress `47fc9ee4`, In review `aba860b9`, Done `98236657`. Requires `gh` auth with the `project` scope (account Blazzike has write access). Items also carry the Iteration field (`PVTIF_lAHOA6M0Es4BeufKzhZGjIQ`, 14-day cycles) — when creating or rolling items, assign the current iteration (list iteration ids via the GraphQL `ProjectV2IterationField` configuration).
 
 ## Conventions
 
