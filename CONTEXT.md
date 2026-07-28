@@ -21,6 +21,10 @@ The per-World record of where a player last stood, restored when they Travel bac
 **Region**:
 A player-owned protected cuboid in a World's dimension, with members, flags, and optional sub-regions. Protection applies to player actions and (since the port) environmental damage.
 
+**Admin**:
+A player with vanilla server operator status. The port keeps no separate admin flag; vanilla /op and /deop are the management commands.
+_Avoid_: isAdmin (the Portal's stored flag)
+
 **Intent Parity**:
 The port's fidelity policy: reproduce what the Portal's code plainly meant, not its bugs. Message formats and deliberate behaviours are identical; outright bugs are fixed; every deviation is listed in the spec's deviation register.
 _Avoid_: bug-for-bug parity

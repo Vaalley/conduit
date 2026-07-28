@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-See `../spec.md` (User Stories 28–32, 37; deviation register 2, 3, 5) and the RegionFeature section of `docs/research/portal-feature-inventory.md` — it lists every validation, message, and flag name exactly. Admin flag comes from the store (ticket 03). Flag *enforcement* beyond storage is tickets 13–15.
+See `../spec.md` (User Stories 28–32, 37; deviation register 2, 3, 5) and the RegionFeature section of `docs/research/portal-feature-inventory.md` — it lists every validation, message, and flag name exactly. Admin means vanilla operator status (vanilla /op /deop; check permission level) — there is no mod-side admin flag. Flag *enforcement* beyond storage is tickets 13–15.
 
 - [ ] Region model (title, corners, world, members, flags, sub-regions, parent) persists in the legacy JSON format, including the omit-default-y conventions, read/write compatible with migrated data
 - [ ] Geometry: recursive deepest-match containment; full-intersection overlap detection (fixes corner-only); new regions span y −64..320 (fixes 255/15)

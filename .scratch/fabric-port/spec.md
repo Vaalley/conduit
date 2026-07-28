@@ -77,7 +77,7 @@ A single Fabric dedicated server (Minecraft 26.2) running one server-side Kotlin
 
 ### Admin
 
-41. As an admin, I want `/op <player>` and `/deop <player>` to set the mod's admin flag and real server operator status together, with the Portal's exact messages and gating — and no username backdoor.
+41. As a server operator, I want admin status to be vanilla operator status — managed with vanilla `/op` and `/deop`, no mod-side admin flag or custom wrappers — so that there is a single source of truth, and every admin-gated behaviour (region flag/bounds/locate, size-limit override, management bypass) keys off it.
 42. As the aliased players, I want DemonicNoodle and AlsoJames to still become travelcraft2012 and iElmo (name and UUID) at login, so that their identities and everything keyed to them survive.
 
 ### Migration and operations
@@ -99,7 +99,7 @@ A single Fabric dedicated server (Minecraft 26.2) running one server-side Kotlin
 - **Text**: a small Kotlin Paint-equivalent DSL over native text components, preserving the exact color vocabulary and the ERROR/SUCCESS/USAGE prefixes — the server's entire message design language.
 - **Persistence**: the Portal's flat-JSON formats are retained as the live store (per-player JSON with legacy fields preserved; legacy regions file format kept read/write compatible), behind a small store interface. World-name strings map old to new dimension ids. Server ops managed via the real ops list.
 - **Timing**: all gameplay timing (away timeouts, cooldowns, delays) is server-tick-based, never wall-clock.
-- **Identity**: login-time GameProfile swaps implement the two remaps. The username-based /op escalation is not ported.
+- **Identity**: login-time GameProfile swaps implement the two remaps. Admin status is vanilla operator status — the Portal's custom /op /deop wrappers, its stored admin flag, and the username-based escalation are all not ported; admin-gated features check vanilla permission level.
 - **Importer**: a Gradle-invocable one-shot tool within the mod codebase; offline-UUID computation ported solely for migration; world folders imported then upgraded by vanilla's own migration on first boot.
 - **Dev loop**: Loom dev dedicated server on JetBrains Runtime with enhanced class redefinition (and the mixin hotswap agent); Gradle configuration cache + K2 incremental compilation; secondary trio available in dev.
 
@@ -132,7 +132,7 @@ A single Fabric dedicated server (Minecraft 26.2) running one server-side Kotlin
 5. Malformed known commands get usage errors (previously fell through silently).
 6. Chat is signed; chat reporting becomes possible again (was stripped unsigned).
 7. Environmental region protection exists and the five inert flags work (were accepted-but-ignored).
-8. The iElmo /op backdoor is removed.
+8. The Portal's custom /op /deop commands (their messages, the stored admin flag, and the iElmo backdoor) are not ported — vanilla /op /deop and operator status are the single admin mechanism.
 9. Region entry/exit is detected on teleports and portal arrivals (was move-packet-only).
 10. A real name cache replaces the op-only uuid cache (member lists complete).
 11. Travel is near-instant (no 2 s disconnect delay) and cannot lose state to a stale sync.
