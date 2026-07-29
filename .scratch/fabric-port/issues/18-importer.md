@@ -4,15 +4,45 @@
 
 **Blocked by:** 03 (Persistence store), 04 (Worlds), 05 (Respawn), 12 (Region core), 16 (Admin + remaps).
 
-**Status:** ready-for-agent
+**Status:** done
 
 See `../spec.md` (User Stories 43–44, Implementation Decisions: Importer) and the persistence-layer + identity sections of `docs/research/portal-feature-inventory.md` for schemas, the offline-UUID scheme, and the remap table.
 
-- [ ] Both backend worlds import as the Primary and Secondary trios (nether/end included); vanilla's own upgrade handles the version jump on first boot
-- [ ] Playerdata re-keys offline UUIDs to Mojang UUIDs, honoring the two identity remaps
-- [ ] Each player's live state comes from their last World's playerdata; the other World's position, rotation, dimension, and respawn tags seed that World's Per-World Bucket
-- [ ] Portal player files import (notepad, lastServer becomes lastWorld) with unknown legacy fields — including the Portal's isAdmin — preserved untouched; the uuid cache seeds the name cache
-- [ ] Backend ops entries re-key to Mojang UUIDs and land in the real ops list (vanilla operator status is the only admin mechanism)
-- [ ] Regions import with world-name strings mapped to the new dimension identities
-- [ ] Re-running against an already-migrated save is refused safely (idempotent cutover rehearsal)
-- [ ] Unit tests against fixture files for every transform; a gametest boots the migrated save and spot-checks a player and a region
+- [x] Both backend worlds import as the Primary and Secondary trios (nether/end included); vanilla's own upgrade handles the version jump on first boot
+- [x] Playerdata re-keys offline UUIDs to Mojang UUIDs, honoring the two identity remaps
+- [x] Each player's live state comes from their last World's playerdata; the other World's position, rotation, dimension, and respawn tags seed that World's Per-World Bucket
+- [x] Portal player files import (notepad, lastServer becomes lastWorld) with unknown legacy fields — including the Portal's isAdmin — preserved untouched; the uuid cache seeds the name cache
+- [x] Backend ops entries re-key to Mojang UUIDs and land in the real ops list (vanilla operator status is the only admin mechanism)
+- [x] Regions import with world-name strings mapped to the new dimension identities
+- [x] Re-running against an already-migrated save is refused safely (idempotent cutover rehearsal)
+- [x] Unit tests against fixture files for every transform; a gametest boots the migrated save and spot-checks a player and a region
+
+## Comments
+
+Implemented in `eu.mctraveler.importer` (`src/main/kotlin/eu/mctraveler/importer/`). `./gradlew build` green twice in a row: 51 new unit tests (145 total) + 2 new headless gametests (104 total).
+
+**How it is invoked.** `./gradlew migrate --args="--portal <portal dir> --target <run dir>"`. The task lives in `gradle/migrate.gradle.kts` (applied from `build.gradle.kts` in one line, to keep that shared file quiet): a `JavaExec` on the mod's own runtime classpath running `ImporterMain`, which bootstraps the game (`SharedConstants.tryDetectVersion()` + `Bootstrap.bootStrap()` — verified to work outside Knot) and then runs `PortalImport`. Options: `--primary`/`--secondary` (backend server dirs, defaulted under `<portal>/minecraft-server/`), `--level-name`, `--identities`, `--skip-unidentified`. Full operator runbook, including what to copy where and how to verify, is `docs/migration.md`.
+
+**Shape.** Pure transforms with file I/O only in the orchestrator: `OfflineUuid` (`md5("OfflinePlayer:"+name)`, v3 — identical to vanilla's own `UUIDUtil.createOfflinePlayerUUID`, ported explicitly because it encodes what the *backends* did, not what this MC version does), `PlayerIdentities` (the offline↔Mojang bridge), `PlayerdataImport` (live re-point + bucket extraction), `RegionImport`, `OpsImport`. `PortalImport` reads/resolves/checks everything first, stages the whole output under `<target>/.mctraveler-import/`, and moves it into place last; any failure deletes the staging directory, so a refused or failed migration writes nothing.
+
+**Identity resolution is the cutover's one real risk.** Backend files are keyed by offline uuid; the merged server keys by Mojang uuid; the only Portal-side name source is `uuid-cache.json`, which the Portal filled *from `/op` alone* (inventory §7 oddity). Precedence: `IdentityRemaps.REMAPS` (aliases always win — the Portal keyed their data to the alias, so a real Mojang lookup of "travelcraft2012" would give the wrong uuid) → `--identities` → the Portal's cache. Saves that resolve to nobody stop the migration, listed by username where the backends' own `usercache.json` knows it, with instructions; `--skip-unidentified` is the deliberate opt-out. **Expect the first real run to stop here** and the operator to build an identities file from the Mojang API.
+
+**Target formats written** (all as decided by the earlier tickets, reusing their code rather than restating it): `mctraveler/players/<uuid>.json` is a *verbatim file copy* of the Portal record (the strongest possible form of "legacy fields untouched"), then read-modify-written through `JsonPlayerStore.setBucket`/`setLastWorld`; `lastServer` needs no translation because `PlayerStore.lastWorld` already reads that field, and it is only rewritten when it disagrees with the save we actually made live. `mctraveler/uuid-cache.json` via `NameCache.record`. `regions.json` via `RegionStore.serialize` after checking every world string against an inverse of `RegionWorlds.legacyName` (unit-tested to be byte-identical to the legacy file). `ops.json` in `ServerOpListEntry`'s format. `mctraveler/import.json` is the migration marker that makes a second run refuse.
+
+**MC 26.2 changed the save layout** — this was the biggest discovery. A 26.2 level is `world/dimensions/<ns>/<path>/{region,entities,poi,data}` for *every* dimension (no more level-root/`DIM-1`/`DIM1`), `world/players/{data,advancements,stats}`, and `world/data/<ns>/*.dat`. Vanilla migrates the old layout automatically: `net.minecraft.server.Main` runs `DataFixers.getFileFixer().fix(...)` on boot, gated on the level's DataVersion, and `PlayerStorageFileFix` + `DimensionStorageFileFix` do the relayout. So the importer deliberately hands the **Primary** level over *in the layout the backend wrote* (including writing merged playerdata to `world/playerdata/`, advancements to `world/advancements/`) and lets vanilla relay it out and DFU it on first boot — literally the ticket's "vanilla's own upgrade handles the version jump". **Secondary** is the exception: no vanilla fix knows about a second overworld, so its `region`/`entities`/`poi` are placed by hand at `DimensionType.getStorageFolder(<mctraveler:secondary…>, level)` (vanilla's own function, not a hardcoded path).
+
+**Deviations / decisions recorded here:**
+
+- **Advancements and statistics come from the live World only.** They are keyed by the same uuid as playerdata and would otherwise be dead files; two sets cannot merge into the one shared set ADR 0001 keeps. The other World's progress is dropped.
+- **Secondary's level-wide saved data is not imported** (`last/data/`): maps, in-progress raids, world border, force-loaded chunks, scoreboard objectives. Map ids are level-wide and cannot merge with Primary's without renumbering every map item, and the rest is transient; carrying them would mean reimplementing `DimensionStorageFileFix`'s per-file rename table by hand. Primary's `data/` carries over normally (vanilla relays it out).
+- **Secondary keeps Primary's seed.** Only one `level.dat` survives, and 26.2 derives all generation from the one world seed. Already-generated Secondary chunks come over intact; terrain generated past the current frontier will not match the old backend's. Inherent to ticket 04's topology, not fixable here — flagged for the community note at cutover.
+- **A player whose `lastServer` names a World they have no save in** is made live in the World they *do* have a save in, and `lastWorld` is rewritten to match, so login routing and the live save always agree.
+- **The name cache is seeded with every resolved identity**, not only the Portal's cache entries — one line beyond the acceptance wording, and exactly what deviation register 10 (a real name cache) wants at cutover.
+- **Pre-1.16 playerdata is refused, by player name** (its `Dimension` tag is an int, so the trio role cannot be read); the operator deletes the file or boots the old backend once. Both the 1.21.5+ `respawn` compound (`angle`) and the older flat `SpawnX`/`SpawnDimension` spelling *are* understood, because playerdata is only rewritten when a player logs in and old files linger.
+- **Bans and whitelists are not imported** (the Portal authenticated players itself).
+
+**Test layout.** `src/test/kotlin/eu/mctraveler/importer/PortalDeploymentFixture.kt` builds a miniature Portal deployment on disk — portal dir with `players/`, `uuid-cache.json`, `regions.json`, plus two backend server dirs with real gzip-NBT playerdata, ops, usercache and opaque chunk bytes — and `PortalImportTest` migrates it and asserts the whole acceptance list against the result. The transforms have their own unit tests with independently computed literals (the offline uuids were computed with `md5(1)`, not with this code). `MigrationGameTest` migrates a miniature deployment on the *running* server, drops the migrated playerdata and player record into the live run directory, logs the player in through the real login path (they arrive in Secondary at the imported position) and `/switch`es them (they arrive in Primary's nether at the Per-World Bucket the migration seeded); a second test resolves the migrated `regions.json` against the live `mctraveler:secondary_nether` dimension.
+
+**Limits of the gametest, for ticket 19.** A running server's chunk storage cannot be swapped underneath it, so no test here boots a save whose *world folders* came from a migration — the folder placement is covered by the unit tier and by reading vanilla's file-fixer table, not by execution. The gametest fixture's saves also claim the *current* data version, so vanilla's DFU is a no-op in it: the real version jump (1.21.10 → 26.2) is exercised only by the operator's rehearsal boot. Both are the reasons `docs/migration.md` makes the rehearsal boot and its verification list a required step.
+
+**Shared files:** `build.gradle.kts` +1 line (`apply(from = "gradle/migrate.gradle.kts")`), gametest `fabric.mod.json` +1 entrypoint line. `MCTraveler.kt` and `mctraveler.mixins.json` untouched — the importer is a tool, not a feature, and registers nothing.

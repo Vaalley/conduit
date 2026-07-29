@@ -125,6 +125,8 @@ tasks.named("runServer") {
     dependsOn(acceptDevServerEula)
 }
 
+apply(from = "gradle/migrate.gradle.kts") // the one-time Portal migration tool (docs/migration.md)
+
 // Hot-reload dev loop (docs/dev-loop.md): run with
 //   ./gradlew runServer -Pmctraveler.devJbr=<JetBrains Runtime home>
 // to boot the dev server on JBR with enhanced class redefinition + the mixin hotswap agent.
