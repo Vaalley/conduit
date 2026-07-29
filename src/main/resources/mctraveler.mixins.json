@@ -7,6 +7,9 @@
     "ExperienceOrbMixin",
     "MinecraftServerMixin",
     "ServerPlayerMixin",
+    "ServerPlayerRespawnMixin",
+    "NetherPortalBlockMixin",
+    "EndPortalBlockMixin",
     "ServerLoginPacketListenerImplMixin",
     "CommandsMixin",
     "ServerGamePacketListenerImplMixin"

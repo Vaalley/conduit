@@ -3,6 +3,8 @@ package eu.mctraveler.worlds
 import eu.mctraveler.MCTraveler
 import eu.mctraveler.persistence.PerWorldBucket
 import eu.mctraveler.persistence.PlayerStore
+import eu.mctraveler.persistence.RespawnPoint
+import net.minecraft.core.BlockPos
 import net.minecraft.core.registries.Registries
 import net.minecraft.resources.Identifier
 import net.minecraft.resources.ResourceKey
@@ -11,6 +13,9 @@ import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.levelgen.Heightmap
+import net.minecraft.world.level.portal.TeleportTransition
+import net.minecraft.world.level.storage.LevelData
+import net.minecraft.world.phys.Vec3
 
 /**
  * The Worlds service: the server's World topology and Travel between Worlds
@@ -31,11 +36,7 @@ class Worlds(private val server: MinecraftServer, private val players: PlayerSto
 
     /** Every World, in `/switch` cycle order. */
     val all: List<World> = listOf(
-        World("primary", "Primary", mapOf(
-            DimensionRole.OVERWORLD to Level.OVERWORLD,
-            DimensionRole.NETHER to Level.NETHER,
-            DimensionRole.END to Level.END,
-        )),
+        World("primary", "Primary", DimensionRole.entries.associateWith { it.vanilla }),
         World("secondary", "Secondary", mapOf(
             DimensionRole.OVERWORLD to dimensionKey("secondary"),
             DimensionRole.NETHER to dimensionKey("secondary_nether"),
@@ -50,6 +51,47 @@ class Worlds(private val server: MinecraftServer, private val players: PlayerSto
         all.firstOrNull { it.roleOf(dimension) != null }
 
     fun worldOf(player: ServerPlayer): World? = worldOf(player.level().dimension())
+
+    /** The role [dimension] plays in whichever World owns it, or null if no World does. */
+    fun roleOf(dimension: ResourceKey<Level>): DimensionRole? = worldOf(dimension)?.roleOf(dimension)
+
+    /**
+     * The dimension in [origin]'s own trio that plays the same role as
+     * [target] — how a portal leading to "the nether" stays inside the World
+     * the traveller set out from (spec story 23). [target] outside every trio,
+     * or an [origin] outside every trio, is left to vanilla.
+     */
+    fun withinTrioOf(origin: ResourceKey<Level>, target: ResourceKey<Level>): ResourceKey<Level> {
+        val world = worldOf(origin) ?: return target
+        val role = roleOf(target) ?: return target
+        return world.dimension(role)
+    }
+
+    /**
+     * Where a death in [world] sends [player] when their respawn point is not
+     * in that World — that World's own spawn (spec story 22). Built like
+     * vanilla's default respawn, so the placement search and the "no respawn
+     * block" signal [template] carries behave exactly as they do in Primary.
+     */
+    fun spawnTransition(
+        player: ServerPlayer,
+        world: World,
+        template: TeleportTransition,
+    ): TeleportTransition {
+        val level = level(world, DimensionRole.OVERWORLD)
+        val spawn = level.respawnData
+        return TeleportTransition(
+            level,
+            Vec3.atBottomCenterOf(player.adjustSpawnLocation(level, spawn.pos())),
+            Vec3.ZERO,
+            spawn.yaw(),
+            spawn.pitch(),
+            template.missingRespawnBlock(),
+            false,
+            emptySet(),
+            template.postTeleportTransition(),
+        )
+    }
 
     /**
      * Where `/switch` sends [player]: the next World in [all]'s cycle — the
@@ -76,7 +118,15 @@ class Worlds(private val server: MinecraftServer, private val players: PlayerSto
             players.setBucket(
                 player.uuid,
                 origin.id,
-                PerWorldBucket(role.id, player.x, player.y, player.z, player.yRot, player.xRot),
+                PerWorldBucket(
+                    role.id,
+                    player.x,
+                    player.y,
+                    player.z,
+                    player.yRot,
+                    player.xRot,
+                    respawnPointIn(player, origin),
+                ),
             )
         }
         place(player, destination)
@@ -100,17 +150,49 @@ class Worlds(private val server: MinecraftServer, private val players: PlayerSto
         players.setLastWorld(player.uuid, world.id)
     }
 
-    /** Puts [player] where [world] remembers them: their bucket, or the World's spawn on a first visit. */
+    /**
+     * Puts [player] where [world] remembers them: their bucket, or the World's
+     * spawn on a first visit. The bucket's respawn point becomes the live one,
+     * so the bed that counts is always the one standing in the World the player
+     * is actually in — a first visit means no bed yet, hence none.
+     */
     private fun place(player: ServerPlayer, world: World) {
         val bucket = players.bucket(player.uuid, world.id)
         if (bucket == null) {
             placeAtSpawn(player, world)
-            return
+        } else {
+            val role = checkNotNull(DimensionRole.fromId(bucket.dimension)) {
+                "player ${player.uuid} has a ${world.id} bucket with unknown dimension \"${bucket.dimension}\""
+            }
+            teleport(player, level(world, role), bucket.x, bucket.y, bucket.z, bucket.yaw, bucket.pitch)
         }
-        val role = checkNotNull(DimensionRole.fromId(bucket.dimension)) {
-            "player ${player.uuid} has a ${world.id} bucket with unknown dimension \"${bucket.dimension}\""
+        player.setRespawnPosition(respawnConfig(world, bucket?.respawn), false)
+    }
+
+    /** [player]'s live respawn point as [world] should remember it, or null if it is not in [world]. */
+    private fun respawnPointIn(player: ServerPlayer, world: World): RespawnPoint? {
+        val config = player.respawnConfig ?: return null
+        val data = config.respawnData()
+        val role = world.roleOf(data.dimension()) ?: return null
+        val pos = data.pos()
+        return RespawnPoint(role.id, pos.x, pos.y, pos.z, data.yaw(), data.pitch(), config.forced())
+    }
+
+    /** [point] as vanilla's live respawn config, resolved against [world]'s trio. */
+    private fun respawnConfig(world: World, point: RespawnPoint?): ServerPlayer.RespawnConfig? {
+        if (point == null) return null
+        val role = checkNotNull(DimensionRole.fromId(point.dimension)) {
+            "a ${world.id} respawn point has unknown dimension \"${point.dimension}\""
         }
-        teleport(player, level(world, role), bucket.x, bucket.y, bucket.z, bucket.yaw, bucket.pitch)
+        return ServerPlayer.RespawnConfig(
+            LevelData.RespawnData.of(
+                world.dimension(role),
+                BlockPos(point.x, point.y, point.z),
+                point.yaw,
+                point.pitch,
+            ),
+            point.forced,
+        )
     }
 
     /**

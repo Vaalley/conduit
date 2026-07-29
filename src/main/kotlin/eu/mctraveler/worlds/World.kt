@@ -8,12 +8,14 @@ import net.minecraft.world.level.Level
  * overworld/nether/end set, and player state that is per-World (the Per-World
  * Bucket) records dimensions by role so it is meaningful in any World.
  *
- * [id] is the persisted form (the bucket's `dimension` field).
+ * [id] is the persisted form (the bucket's `dimension` field). [vanilla] is the
+ * dimension Minecraft itself gives the role — Primary's trio, and the key
+ * vanilla's own hardcoded portal comparisons are written against.
  */
-enum class DimensionRole(val id: String) {
-    OVERWORLD("overworld"),
-    NETHER("nether"),
-    END("end");
+enum class DimensionRole(val id: String, val vanilla: ResourceKey<Level>) {
+    OVERWORLD("overworld", Level.OVERWORLD),
+    NETHER("nether", Level.NETHER),
+    END("end", Level.END);
 
     companion object {
         fun fromId(id: String): DimensionRole? = entries.firstOrNull { it.id == id }

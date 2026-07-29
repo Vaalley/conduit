@@ -137,6 +137,34 @@ class JsonPlayerStoreTest {
     }
 
     @Test
+    fun `a bucket carries no respawn point until one is stored`() {
+        store().setBucket(uuid, "primary", PerWorldBucket("overworld", 1.5, 2.0, 3.5, 0.0f, 0.0f))
+        assertNull(store().bucket(uuid, "primary")?.respawn)
+    }
+
+    @Test
+    fun `respawn points round-trip independently per World`() {
+        val store = store()
+        val primaryBed = RespawnPoint("overworld", 10, 64, -20, 90.0f, 0.0f, forced = false)
+        val secondaryAnchor = RespawnPoint("nether", -3, 40, 8, 180.0f, -12.5f, forced = true)
+        store.setBucket(uuid, "primary", bucketWith(primaryBed))
+        store.setBucket(uuid, "secondary", bucketWith(secondaryAnchor))
+        assertEquals(primaryBed, store.bucket(uuid, "primary")?.respawn)
+        assertEquals(secondaryAnchor, store.bucket(uuid, "secondary")?.respawn)
+    }
+
+    @Test
+    fun `a stored respawn point can be cleared again`() {
+        val store = store()
+        store.setBucket(uuid, "primary", bucketWith(RespawnPoint("end", 1, 2, 3, 0.0f, 0.0f, false)))
+        store.setBucket(uuid, "primary", bucketWith(null))
+        assertNull(store.bucket(uuid, "primary")?.respawn)
+    }
+
+    private fun bucketWith(respawn: RespawnPoint?) =
+        PerWorldBucket("overworld", 0.5, 70.0, 0.5, 0.0f, 0.0f, respawn)
+
+    @Test
     fun `rewriting one World's bucket leaves the other World's and legacy fields untouched`() {
         val file = dir.resolve("$uuid.json")
         // A record as a future version might write it: legacy economy data, a
