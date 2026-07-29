@@ -20,6 +20,17 @@ import net.minecraft.nbt.NbtIo
 import net.minecraft.world.level.dimension.DimensionType
 
 /** What to migrate, and where to. */
+/**
+ * How the worlds — the only large thing a migration handles — reach the new save.
+ *
+ * [COPY] is the safe default: the Portal's levels are left exactly as they were, so a
+ * failed or unwanted migration costs nothing, but the host needs free space for a second
+ * copy of every world. [MOVE] renames the chunk data into the new save instead: instant
+ * and free of extra space, at the price of the all-or-nothing guarantee — once the worlds
+ * have moved, the Portal's levels are no longer complete and only a backup can undo it.
+ */
+enum class WorldTransfer { COPY, MOVE }
+
 data class ImportPlan(
     /** The Portal's own working directory: `players/`, `uuid-cache.json`, `regions.json`. */
     val portalDir: Path,
@@ -35,6 +46,13 @@ data class ImportPlan(
     val identitiesFile: Path? = null,
     /** Leave saves whose player cannot be identified behind (reported) instead of refusing. */
     val skipUnidentified: Boolean = false,
+    /**
+     * How the bulk chunk data reaches the new save. [WorldTransfer.COPY] keeps the
+     * Portal's worlds intact and needs room for a second copy of them;
+     * [WorldTransfer.MOVE] renames them into place, which is instant and needs no
+     * extra space but leaves the Portal's levels incomplete. See [WorldTransfer].
+     */
+    val worldTransfer: WorldTransfer = WorldTransfer.COPY,
 )
 
 /**
@@ -89,6 +107,9 @@ class PortalImport(private val plan: ImportPlan) {
     private val staging: Path = plan.targetDir.resolve(STAGING_DIRECTORY)
     private val stagedLevel: Path = staging.resolve(plan.levelName)
 
+    /** True once chunk data has been moved out of the Portal's levels — see the failure path in [run]. */
+    private var worldsMoved = false
+
     private val backends: Map<WorldTrio, Path> = mapOf(
         WorldLayout.PRIMARY to backendLevel(plan.primaryServerDir, "world"),
         WorldLayout.SECONDARY to backendLevel(plan.secondaryServerDir, "last"),
@@ -116,13 +137,17 @@ class PortalImport(private val plan: ImportPlan) {
 
         Files.createDirectories(staging)
         try {
-            stageLevel()
+            // Copying leaves the sources untouched, so it can go first. Moving cannot be
+            // undone, so it goes last — everything that can still fail happens before the
+            // Portal's levels are disturbed.
+            if (plan.worldTransfer == WorldTransfer.COPY) stageLevel()
             val store = JsonPlayerStore(staging.resolve("$MOD_DIRECTORY/players"))
             val records = stagePlayerRecords()
             val buckets = stageSaves(saves, store)
             val names = stageNameCache(identities)
             regions?.let { Files.writeString(staging.resolve(REGIONS_FILE), it.text) }
             Files.writeString(staging.resolve(OPS_FILE), OpsImport.serialize(ops.entries))
+            if (plan.worldTransfer == WorldTransfer.MOVE) stageLevel()
             val report = ImportReport(
                 playersMigrated = saves.size,
                 bucketsSeeded = buckets,
@@ -137,6 +162,17 @@ class PortalImport(private val plan: ImportPlan) {
             commit()
             return report
         } catch (failure: Throwable) {
+            // Never delete staging once it holds moved worlds: it is then the only copy
+            // of chunk data the Portal no longer has.
+            if (worldsMoved) {
+                throw IllegalStateException(
+                    "the migration failed after the worlds were MOVED into $staging. " +
+                        "The Portal's levels are no longer complete, and $staging now holds " +
+                        "the only on-disk copy of that chunk data — do NOT delete it. " +
+                        "Move it back or restore from backup before retrying.",
+                    failure,
+                )
+            }
             deleteRecursively(staging)
             throw failure
         }
@@ -282,7 +318,7 @@ class PortalImport(private val plan: ImportPlan) {
     private fun stageLevel() {
         val primaryLevel = backends.getValue(WorldLayout.PRIMARY)
         check(Files.isDirectory(primaryLevel)) { "no Primary level directory at $primaryLevel" }
-        copyDirectory(
+        transferDirectory(
             primaryLevel,
             stagedLevel,
             skip = setOf(PLAYERDATA_DIRECTORY, ADVANCEMENTS_DIRECTORY, STATS_DIRECTORY, "session.lock"),
@@ -294,9 +330,44 @@ class PortalImport(private val plan: ImportPlan) {
             val to = DimensionType.getStorageFolder(WorldLayout.SECONDARY.dimension(role), stagedLevel)
             for (folder in CHUNK_DIRECTORIES) {
                 if (Files.isDirectory(from.resolve(folder))) {
-                    copyDirectory(from.resolve(folder), to.resolve(folder))
+                    transferDirectory(from.resolve(folder), to.resolve(folder))
                 }
             }
+        }
+    }
+
+    /**
+     * Copies or moves a tree according to [ImportPlan.worldTransfer]. A move renames whole
+     * top-level entries where the filesystem allows it — the cheap case this exists for —
+     * and falls back to a copy when the rename crosses devices.
+     */
+    private fun transferDirectory(from: Path, to: Path, skip: Set<String> = emptySet()) {
+        if (plan.worldTransfer == WorldTransfer.COPY) return copyDirectory(from, to, skip)
+        Files.createDirectories(to)
+        Files.newDirectoryStream(from).use { entries ->
+            for (entry in entries) {
+                if (entry.name in skip) continue
+                worldsMoved = true
+                try {
+                    Files.move(entry, to.resolve(entry.name))
+                } catch (crossDevice: java.nio.file.AtomicMoveNotSupportedException) {
+                    fallbackTransfer(entry, to.resolve(entry.name))
+                } catch (crossDevice: java.nio.file.FileSystemException) {
+                    fallbackTransfer(entry, to.resolve(entry.name))
+                }
+            }
+        }
+    }
+
+    /** A move the filesystem refused: copy the tree, then drop the source. */
+    private fun fallbackTransfer(from: Path, to: Path) {
+        if (Files.isDirectory(from)) {
+            copyDirectory(from, to)
+            deleteRecursively(from)
+        } else {
+            Files.createDirectories(to.parent)
+            Files.copy(from, to)
+            Files.deleteIfExists(from)
         }
     }
 

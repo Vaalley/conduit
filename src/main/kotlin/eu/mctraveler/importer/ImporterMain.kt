@@ -78,6 +78,11 @@ object ImporterMain {
             levelName = options["level-name"] ?: "world",
             identitiesFile = options["identities"]?.let(Path::of),
             skipUnidentified = options.containsKey("skip-unidentified"),
+            worldTransfer = when (val mode = options["worlds"] ?: "copy") {
+                "copy" -> WorldTransfer.COPY
+                "move" -> WorldTransfer.MOVE
+                else -> throw IllegalArgumentException("--worlds must be \"copy\" or \"move\", got \"$mode\"")
+            },
         )
     }
 

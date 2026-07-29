@@ -124,6 +124,35 @@ class PortalImportTest {
     }
 
     @Test
+    fun `moving the worlds lands the same save and leaves the backend levels emptied`() {
+        val plan = portal.plan(target).copy(worldTransfer = WorldTransfer.MOVE)
+        val primaryRegion = plan.primaryServerDir.resolve("world/region/r.0.0.mca")
+        val secondaryRegion = plan.secondaryServerDir.resolve("last/region/r.0.0.mca")
+        assertTrue(Files.exists(primaryRegion), "the fixture should start with Primary chunk data")
+
+        migrate(plan)
+
+        // Same destination as a copy — this is the space-free path to the same save.
+        assertEquals("chunk bytes of primary/", Files.readString(target.resolve("world/region/r.0.0.mca")))
+        assertEquals(
+            "chunk bytes of secondary/",
+            Files.readString(target.resolve("world/dimensions/mctraveler/secondary/region/r.0.0.mca")),
+        )
+        // ...and the chunk data is gone from the Portal, which is the trade being made.
+        assertFalse(Files.exists(primaryRegion), "Primary's chunk data should have moved, not copied")
+        assertFalse(Files.exists(secondaryRegion), "Secondary's chunk data should have moved, not copied")
+    }
+
+    @Test
+    fun `a copy migration leaves the Portal's worlds untouched`() {
+        val primaryRegion = portal.plan(target).primaryServerDir.resolve("world/region/r.0.0.mca")
+
+        migrate()
+
+        assertTrue(Files.exists(primaryRegion), "a copy must not disturb the Portal's levels")
+    }
+
+    @Test
     fun `an aliased player's save is re-keyed to the identity they play as`() {
         portal.playerdata("primary", "travelcraft2012")
 
