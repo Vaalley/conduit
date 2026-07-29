@@ -251,7 +251,9 @@ class PortalImport(private val plan: ImportPlan) {
     private fun collectSaves(identities: PlayerIdentities): List<PlayerSaves> {
         val portalRecords: PlayerStore = JsonPlayerStore(plan.portalDir.resolve(PLAYERS_DIRECTORY))
         return backendSaves.mapNotNull { (offlineUuid, saves) ->
-            val identity = identities[offlineUuid] ?: return@mapNotNull null
+            val identity = identities[offlineUuid]
+                ?: alreadyMojangKeyed(offlineUuid)
+                ?: return@mapNotNull null
             // The World they were last on holds their live state; where the
             // Portal has no answer (or no save there), the save we do have is
             // the live one — a player is only ever in one World at a time.
@@ -266,11 +268,32 @@ class PortalImport(private val plan: ImportPlan) {
         }
     }
 
+    /**
+     * A save whose file is *already* named after a real Mojang uuid needs no
+     * identification: the merged server keys by exactly that uuid, so the save is
+     * carried across as itself.
+     *
+     * Real production data (MCTraveler, July 2026) turned this up: the Primary
+     * backend held 2,700 version-4-keyed saves beside 11,825 offline-keyed ones —
+     * the offline-mode assumption held for most of the proxy era's files but not
+     * all of them. Version is the reliable discriminator, since an offline uuid is
+     * md5-derived (version 3) and a Mojang uuid is random (version 4). Treating a
+     * version-4 file as an unresolvable offline uuid would have discarded every one
+     * of those players' inventories.
+     *
+     * The username is only needed for the name cache, so a Portal record's absence
+     * is not fatal here; [nameFor] fills it in when the Portal knows it.
+     */
+    private fun alreadyMojangKeyed(uuid: UUID): PlayerIdentity? {
+        if (uuid.version() == OFFLINE_UUID_VERSION) return null
+        return PlayerIdentity(name = portalUuidCache[uuid] ?: uuid.toString(), uuid = uuid, fileUuid = uuid)
+    }
+
     /** Backend saves that belong to nobody we can name a Mojang uuid for. */
     private fun unidentifiedSaves(identities: PlayerIdentities): List<String> {
         val known = backendUserCache()
         return backendSaves
-            .filterKeys { identities[it] == null }
+            .filterKeys { identities[it] == null && it.version() == OFFLINE_UUID_VERSION }
             .flatMap { (offlineUuid, saves) ->
                 val name = known[offlineUuid] ?: "unknown player"
                 saves.map { "$name ($offlineUuid, ${it.world.id})" }
@@ -413,7 +436,7 @@ class PortalImport(private val plan: ImportPlan) {
 
     /** A per-player side file (advancements, statistics) of the live save, re-keyed. */
     private fun copyPlayerFile(levelDir: Path, directory: String, identity: PlayerIdentity) {
-        val from = levelDir.resolve("$directory/${identity.offlineUuid}.json")
+        val from = levelDir.resolve("$directory/${identity.fileUuid}.json")
         if (Files.notExists(from)) return
         val to = stagedLevel.resolve("$directory/${identity.uuid}.json")
         Files.createDirectories(to.parent)
@@ -519,6 +542,9 @@ class PortalImport(private val plan: ImportPlan) {
         const val USER_CACHE_FILE = "usercache.json"
         const val PLAYERDATA_DIRECTORY = "playerdata"
         const val PLAYERDATA_SUFFIX = ".dat"
+
+        /** Version 3 — md5-derived, i.e. an offline-mode uuid. A Mojang uuid is version 4. */
+        const val OFFLINE_UUID_VERSION = 3
         const val ADVANCEMENTS_DIRECTORY = "advancements"
         const val STATS_DIRECTORY = "stats"
         val CHUNK_DIRECTORIES = listOf("region", "entities", "poi")

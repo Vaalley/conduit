@@ -102,6 +102,31 @@ class PortalDeploymentFixture(val root: Path) {
         NbtIo.writeCompressed(tag, file)
     }
 
+    /**
+     * A backend save already keyed by a real (version-4) Mojang uuid rather than an
+     * offline hash, with its advancements and stats beside it — the shape the live
+     * MCTraveler backends turned out to hold thousands of.
+     */
+    fun mojangKeyedPlayerdata(world: String, uuid: UUID, pos: Triple<Double, Double, Double>) {
+        val tag = CompoundTag().apply {
+            putString("Dimension", "minecraft:overworld")
+            put("Pos", ListTag().apply {
+                add(DoubleTag.valueOf(pos.first))
+                add(DoubleTag.valueOf(pos.second))
+                add(DoubleTag.valueOf(pos.third))
+            })
+            put("Rotation", ListTag().apply {
+                add(FloatTag.valueOf(0f))
+                add(FloatTag.valueOf(0f))
+            })
+        }
+        val file = level(world).resolve("playerdata/$uuid.dat")
+        Files.createDirectories(file.parent)
+        NbtIo.writeCompressed(tag, file)
+        write(level(world).resolve("advancements/$uuid.json"), """{"mojang-keyed":true}""")
+        write(level(world).resolve("stats/$uuid.json"), """{"stats":{}}""")
+    }
+
     fun advancements(world: String, name: String, json: String) =
         write(level(world).resolve("advancements/${OfflineUuid.of(name)}.json"), json)
 

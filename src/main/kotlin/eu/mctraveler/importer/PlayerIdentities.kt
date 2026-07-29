@@ -9,10 +9,13 @@ data class PlayerIdentity(
     val name: String,
     /** The Mojang UUID the merged server keys everything by. */
     val uuid: UUID,
-) {
-    /** The UUID the offline-mode backends keyed their files by. */
-    val offlineUuid: UUID = OfflineUuid.of(name)
-}
+    /**
+     * The UUID the backend's own files are named after: the offline hash of [name]
+     * for everything the offline-mode backends wrote, but the Mojang UUID itself for
+     * saves already keyed by it (production held both — see `alreadyMojangKeyed`).
+     */
+    val fileUuid: UUID = OfflineUuid.of(name),
+)
 
 /**
  * Who is who, across the Portal's two identity spaces.
@@ -37,7 +40,7 @@ data class PlayerIdentity(
  */
 class PlayerIdentities private constructor(private val identities: Map<String, PlayerIdentity>) {
 
-    private val byOfflineUuid: Map<UUID, PlayerIdentity> = identities.values.associateBy { it.offlineUuid }
+    private val byOfflineUuid: Map<UUID, PlayerIdentity> = identities.values.associateBy { it.fileUuid }
 
     /** Every identity, in resolution order. */
     val all: Collection<PlayerIdentity> = identities.values

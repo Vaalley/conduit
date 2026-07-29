@@ -124,6 +124,25 @@ class PortalImportTest {
     }
 
     @Test
+    fun `a save already keyed by a Mojang uuid is carried across as itself`() {
+        // Production reality: the live backends held thousands of version-4-keyed saves
+        // beside the offline-keyed ones. They need no re-keying — and must not be
+        // mistaken for offline uuids nobody can name, which would abandon them.
+        val stranger = UUID.fromString("9e1cb3a6-4c2f-4a41-8f2e-51d0b0a4c7e3")
+        portal.mojangKeyedPlayerdata("primary", stranger, Triple(77.5, 71.0, -12.5))
+
+        val report = migrate()
+
+        assertTrue(report.unidentifiedSaves.none { stranger.toString() in it }, "should not be reported as unknown")
+        val save = playerdata(stranger)
+        assertEquals(77.5, save.getList("Pos").get().getDouble(0).get(), "the inventory-bearing save came across")
+        assertTrue(
+            Files.exists(target.resolve("world/advancements/$stranger.json")),
+            "advancements beside a Mojang-keyed save use the same uuid",
+        )
+    }
+
+    @Test
     fun `moving the worlds lands the same save and leaves the backend levels emptied`() {
         val plan = portal.plan(target).copy(worldTransfer = WorldTransfer.MOVE)
         val primaryRegion = plan.primaryServerDir.resolve("world/region/r.0.0.mca")
