@@ -1,5 +1,6 @@
 package eu.mctraveler
 
+import eu.mctraveler.chat.ChatFeature
 import eu.mctraveler.chat.PrivateMessages
 import eu.mctraveler.persistence.PersistenceService
 import eu.mctraveler.tablist.TabListFeature
@@ -32,6 +33,7 @@ object MCTraveler : ModInitializer {
     override fun onInitialize() {
         TabListFeature.register()
         PrivateMessages.register()
+        ChatFeature.register()
 
 
         initialized = true
