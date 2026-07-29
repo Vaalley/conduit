@@ -44,14 +44,16 @@ class RegionService(private val file: Path) {
     /**
      * The deepest region containing the block position in the given World
      * (legacy world string), or null — sub-regions win over their parents.
+     *
+     * Environmental protection (ticket 15) asks this from block ticks and
+     * explosion maths, so it walks the roots rather than filtering them into a
+     * new list: a server with no regions pays one empty-list check, and one
+     * with regions pays a scan and no allocation.
      */
     fun regionAt(world: String, x: Int, y: Int, z: Int): Region? {
-        var candidates: List<Region> = roots.filter { it.world == world }
-        var found: Region? = null
+        var found: Region = roots.firstOrNull { it.world == world && it.contains(x, y, z) } ?: return null
         while (true) {
-            val match = candidates.firstOrNull { it.contains(x, y, z) } ?: return found
-            found = match
-            candidates = match.subRegions
+            found = found.subRegions.firstOrNull { it.contains(x, y, z) } ?: return found
         }
     }
 

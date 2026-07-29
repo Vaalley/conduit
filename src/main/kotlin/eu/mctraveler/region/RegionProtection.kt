@@ -2,9 +2,11 @@ package eu.mctraveler.region
 
 import eu.mctraveler.text.Paint
 import java.util.UUID
+import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
 import net.fabricmc.fabric.api.event.player.AttackBlockCallback
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback
+import net.fabricmc.fabric.api.event.player.BlockEvents
 import net.fabricmc.fabric.api.event.player.ItemEvents
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents
 import net.fabricmc.fabric.api.event.player.UseEntityCallback
@@ -12,14 +14,28 @@ import net.fabricmc.fabric.api.event.player.UseItemCallback
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents
 import net.minecraft.core.BlockPos
 import net.minecraft.server.level.ServerPlayer
+import net.minecraft.tags.DamageTypeTags
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
 import net.minecraft.world.level.Level
+import net.minecraft.world.level.block.ButtonBlock
+import net.minecraft.world.level.block.DoorBlock
+import net.minecraft.world.level.block.FenceGateBlock
+import net.minecraft.world.level.block.LeverBlock
+import net.minecraft.world.level.block.TrapDoorBlock
+import net.minecraft.world.level.block.state.BlockState
 
 /**
  * What a region stops a player doing: digging, building, editing signs, taking
  * from containers, using items, and harming what lives inside (spec User
- * Stories 34 and 38; inventory §2.8's protection hooks).
+ * Stories 34 and 38; inventory §2.8's protection hooks) — and, where a region
+ * asks for it, working its doors, its switches, and the ground under a fall
+ * (spec User Story 36's three `DISABLE_` flags).
+ *
+ * What a region stops the *world* doing — explosions, fire, pistons, creatures
+ * — is [RegionEnvironment]. The line between them is whether anyone is asking:
+ * everything here has a player to refuse and answers with the Portal's one
+ * message; nothing there does, and all of it is silent.
  *
  * Enforcement is server-side cancellation of the action itself. The Portal
  * could only drop the client's packets and dress the player in a fake
@@ -41,6 +57,9 @@ object RegionProtection {
     private const val ENABLE_PUBLIC_CONTAINERS = "ENABLE_PUBLIC_CONTAINERS"
     private const val ENABLE_PUBLIC_VILLAGER_TRADING = "ENABLE_PUBLIC_VILLAGER_TRADING"
     private const val DISABLE_ANIMAL_PROTECTION = "DISABLE_ANIMAL_PROTECTION"
+    private const val DISABLE_PLAYER_FALL_DAMAGE = "DISABLE_PLAYER_FALL_DAMAGE"
+    private const val DISABLE_PUBLIC_REDSTONE_TRIGGERS = "DISABLE_PUBLIC_REDSTONE_TRIGGERS"
+    private const val DISABLE_GATES = "DISABLE_GATES"
 
     /** The region each player was standing in when they opened their container. */
     private val containerRegions = HashMap<UUID, Region>()
@@ -74,8 +93,8 @@ object RegionProtection {
         // block's own right-click behaviour (opening a chest, a door, a
         // button) is a separate step in vanilla and is deliberately left
         // alone — the container rule below governs what may then be taken, and
-        // ticket 15's DISABLE_GATES / DISABLE_PUBLIC_REDSTONE_TRIGGERS are the
-        // flags that close the rest.
+        // DISABLE_GATES / DISABLE_PUBLIC_REDSTONE_TRIGGERS are the flags that
+        // close the rest.
         ItemEvents.USE_ON.register { context ->
             val player = context.player
             // This event's "not my business" answer is null, not PASS.
@@ -84,6 +103,26 @@ object RegionProtection {
             } else {
                 null
             }
+        }
+
+        // ---- the block's own right-click behaviour ----
+        // Ticket 14 left this open on purpose (see the class docs on
+        // ItemEvents.USE_ON): these two flags are what a region owner turns on
+        // to close it, one for the doors and one for the switches.
+        BlockEvents.USE_WITHOUT_ITEM.register { state, level, pos, player, _ ->
+            // Another event whose "not my business" answer is null, not PASS.
+            if (player is ServerPlayer && !allowsBlockUse(player, level, pos, state)) {
+                InteractionResult.FAIL
+            } else {
+                null
+            }
+        }
+
+        // ---- fall damage ----
+        ServerLivingEntityEvents.ALLOW_DAMAGE.register { entity, source, _ ->
+            entity !is ServerPlayer ||
+                !source.`is`(DamageTypeTags.IS_FALL) ||
+                allowsFallDamage(entity)
         }
 
         // ---- item use ----
@@ -154,6 +193,60 @@ object RegionProtection {
         val region = containerRegions[player.uuid] ?: return true
         if (canModifyRegion(player, region) || ENABLE_PUBLIC_CONTAINERS in region.flags) return true
         return refuse(player, region)
+    }
+
+    /**
+     * Whether [player] may work the block at [pos] the way it is meant to be
+     * worked — open the door, press the button, pull the lever. Only two kinds
+     * of block can refuse, and only when their region asks them to:
+     * `DISABLE_GATES` closes the doors, gates and trapdoors,
+     * `DISABLE_PUBLIC_REDSTONE_TRIGGERS` the buttons and levers. Both are
+     * restrictions on non-members alone (residents, and anyone at all in a
+     * `PUBLIC` region, are unaffected), and a false answer has already said so.
+     */
+    private fun allowsBlockUse(player: ServerPlayer, level: Level, pos: BlockPos, state: BlockState): Boolean {
+        val flag = restrictingFlagFor(state) ?: return true
+        val region = regionRefusing(player, level, pos, flag) ?: return true
+        return refuse(player, region)
+    }
+
+    /**
+     * Whether [player] may set off the pressure plate at [pos] —
+     * `DISABLE_PUBLIC_REDSTONE_TRIGGERS` again, since a plate is a trigger a
+     * stranger works with their feet.
+     *
+     * Silent, unlike its right-clicked cousins: standing is not an attempt, and
+     * a plate is asked this on every tick a foot is on it.
+     */
+    @JvmStatic
+    fun allowsPressurePlate(player: ServerPlayer, level: Level, pos: BlockPos): Boolean =
+        regionRefusing(player, level, pos, DISABLE_PUBLIC_REDSTONE_TRIGGERS) == null
+
+    /** Which flag, if any, can take this block's own behaviour away from a stranger. */
+    private fun restrictingFlagFor(state: BlockState): String? = when (state.block) {
+        is DoorBlock, is FenceGateBlock, is TrapDoorBlock -> DISABLE_GATES
+        is ButtonBlock, is LeverBlock -> DISABLE_PUBLIC_REDSTONE_TRIGGERS
+        else -> null
+    }
+
+    /**
+     * The region at [pos] that refuses [player] because it flies [flag], or
+     * null — no region, a member, or the flag is off.
+     */
+    private fun regionRefusing(player: ServerPlayer, level: Level, pos: BlockPos, flag: String): Region? {
+        val region = RegionsFeature.regionAt(level, pos) ?: return null
+        if (canModifyRegion(player, region)) return null
+        return if (flag in region.flags) region else null
+    }
+
+    /**
+     * Whether a fall may hurt [player] where they are standing —
+     * `DISABLE_PLAYER_FALL_DAMAGE` catches everyone inside the region, member
+     * or not, because it is the ground that is soft.
+     */
+    private fun allowsFallDamage(player: ServerPlayer): Boolean {
+        val region = RegionTracker.regionOf(player) ?: return true
+        return DISABLE_PLAYER_FALL_DAMAGE !in region.flags
     }
 
     private fun allowsItemUse(player: ServerPlayer): Boolean {

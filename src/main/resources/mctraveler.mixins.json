@@ -15,7 +15,14 @@
     "ServerGamePacketListenerImplMixin",
     "RegionSignEditMixin",
     "RegionContainerSessionMixin",
-    "RegionContainerClickMixin"
+    "RegionContainerClickMixin",
+    "RegionExplosionMixin",
+    "RegionFireMixin",
+    "RegionPistonMixin",
+    "RegionMobGriefingMixin",
+    "RegionEndermanTakeMixin",
+    "RegionEndermanPlaceMixin",
+    "RegionPressurePlateMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -546,13 +546,6 @@ private val CHEST_AT = BlockPos(1, 2, 3)
 /** Where the sign tests put their sign. */
 private val SIGN_AT = BlockPos(3, 2, 1)
 
-/** The Portal's one refusal, naming the region that turned the player away. */
-private fun protectedBy(title: String): Component =
-    Paint.error("This area is protected by ", Paint.red(title))
-
-private fun MessageCapturingPlayer.wasRefusedBy(title: String): Boolean =
-    messages.any { it == protectedBy(title) }
-
 /** Breaks [at] the way a finished dig does. */
 private fun MessageCapturingPlayer.digs(helper: GameTestHelper, at: BlockPos = STONE_AT): Boolean =
     gameMode.destroyBlock(helper.absolutePos(at))
