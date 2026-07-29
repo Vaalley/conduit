@@ -141,5 +141,8 @@ A single Fabric dedicated server (Minecraft 26.2) running one server-side Kotlin
 14. Player skins/identity need no offline-UUID surgery (single online-mode server).
 15. The text DSL keeps a nested part's own style when collapsing single-part content (the Portal's NBT path overwrote the child's color with the parent's; its legacy-string path kept it — the legacy behaviour is the plain intent).
 16. The usage helper renders as a styled component — aqua+bold "USAGE", then gray content, structurally parallel to ERROR/SUCCESS — instead of the Portal's raw legacy `§b§lUSAGE §7` string; nested styling inside usage content is preserved rather than stripped.
+17. The server list advertises the real max-players (Portal hardcoded 20 — operators set `max-players=20` for capacity parity), and the real version/protocol (Portal claimed "MCTraveler Proxy" / protocol 773).
+18. The server-list sample honors vanilla's per-player allow-server-listings opt-out and `hide-online-players` (the Portal always listed real names).
+19. A real server icon works via the standard mechanism (the Portal's favicon was a broken placeholder).
 
 Flag semantics for the five newly-real flags are the port's proposal (names + pre-proxy convention); if lore says otherwise, adjust at implementation with a note here. The shared player state decision (ADR 0001) means cross-World item transfer is now possible — communicate to the community at cutover alongside the chat-signing change.
