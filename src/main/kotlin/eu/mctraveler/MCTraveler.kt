@@ -1,5 +1,6 @@
 package eu.mctraveler
 
+import eu.mctraveler.away.AwayFeature
 import eu.mctraveler.chat.ChatFeature
 import eu.mctraveler.chat.PrivateMessages
 import eu.mctraveler.persistence.PersistenceService
@@ -34,6 +35,7 @@ object MCTraveler : ModInitializer {
         TabListFeature.register()
         PrivateMessages.register()
         ChatFeature.register()
+        AwayFeature.register()
 
 
         initialized = true

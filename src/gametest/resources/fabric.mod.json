@@ -14,7 +14,8 @@
       "eu.mctraveler.gametest.TabListGameTest",
       "eu.mctraveler.gametest.IdentityRemapGameTest",
       "eu.mctraveler.gametest.PrivateMessagesGameTest",
-      "eu.mctraveler.gametest.ChatGameTest"
+      "eu.mctraveler.gametest.ChatGameTest",
+      "eu.mctraveler.gametest.AwayGameTest"
     ],
     "server": [
       {

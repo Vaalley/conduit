@@ -8,7 +8,7 @@
 
 Work from the per-feature inventory in `docs/research/portal-feature-inventory.md` against `../spec.md`'s deviation register.
 
-Known audit leads carried forward from ticket reviews: (1) MOTD gametests assert description text but not styling at the server seam, and no gametest sees a real name+uuid in the sample (mock players default `allowsListing=false`) — add coverage or justify; (2) no test serves an actual `server-icon.png` end-to-end.
+Known audit leads carried forward from ticket reviews: (0) three independent fake-player gametest harnesses accumulated (FakePlayer from ticket 07, TestPlayer from 06, AwayTestPlayer from 08) — consolidate into one; (1) MOTD gametests assert description text but not styling at the server seam, and no gametest sees a real name+uuid in the sample (mock players default `allowsListing=false`) — add coverage or justify; (2) no test serves an actual `server-icon.png` end-to-end.
 
 - [ ] Every behaviour in the inventory's per-feature sections maps to a passing gametest/unit test or a deviation-register entry; gaps get tests written in this ticket
 - [ ] The deviation register is verified complete and updated with anything discovered during implementation (e.g. the away-cooldown simplification)
