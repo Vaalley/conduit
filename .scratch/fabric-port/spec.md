@@ -145,4 +145,60 @@ A single Fabric dedicated server (Minecraft 26.2) running one server-side Kotlin
 18. The server-list sample honors vanilla's per-player allow-server-listings opt-out and `hide-online-players` (the Portal always listed real names).
 19. A real server icon works via the standard mechanism (the Portal's favicon was a broken placeholder).
 
-Flag semantics for the five newly-real flags are the port's proposal (names + pre-proxy convention); if lore says otherwise, adjust at implementation with a note here. The shared player state decision (ADR 0001) means cross-World item transfer is now possible — communicate to the community at cutover alongside the chat-signing change.
+Entries 1–19 keep their numbers permanently — ticket comments cite them. Entries 20+ were consolidated from ticket `## Comments` by the parity audit (ticket 19); each was decided while implementing the feature it belongs to.
+
+**Chat, messaging, away**
+
+20. Emote lines (`/shrug`, `/tableflip`) are server-authored and therefore unsigned, so an emote itself is not chat-reportable even though ordinary chat is (entry 6).
+21. A reply partner who disconnects and returns is reachable again; the Portal held a stale session object and answered "no longer online" forever after a partner rejoined.
+22. Vanilla `/msg`, `/tell` and `/w` are removed and replaced rather than shadowed, so vanilla's selector and whisper behaviour cannot leak through; console senders get Brigadier's player-required error (the Portal had no console concept).
+23. Within the 3-second return window `/away` always answers the cooldown error; the Portal's silent-at-exactly-3.0s rounding artifact is not reproduced. Remaining seconds render as the Portal's JS template did (whole values drop the decimal).
+
+**Regions — commands and storage**
+
+24. `/rg start`'s "Position not available yet, please move first" error no longer exists: the Portal needed a client move packet before it knew a position, and the server always has one.
+25. Overlap detection (entry 3) is parent-aware — a prospective parent is not an overlap — with the consequence that a sub-region may now exactly cover its parent's footprint, a shape the Portal's corner test happened to refuse.
+26. Malformed `/rg` invocations answer USAGE before admin gating, so a non-admin typing a bare admin subcommand sees usage rather than the permission error.
+27. An unreadable `regions.json` fails server start instead of continuing with zero regions (whose next save would have wiped the file) — the repo's persistence rule: never overwrite what could not be read.
+28. `/rg remove` echoes the target name as typed while matching case-insensitively, exactly as the Portal did.
+
+**Regions — scoreboard**
+
+29. `NO_SCOREBOARD` now clears an existing sidebar on entry; the Portal only skipped *showing* one, so walking in from an ordinary neighbour left the previous board on screen, retitled with the quiet region's members.
+30. Toggling a flag takes effect immediately for everyone standing in the region rather than on their next entry.
+31. Membership changes redraw the whole sidebar instead of the Portal's three-packet patch, which re-sent the added member at score 0 — colliding with the first member's score and leaving row order to the client.
+32. The text DSL gained `strikethrough`; the Portal lacked the decoration and hand-built the sidebar's separator as raw NBT.
+
+**Regions — protection**
+
+33. "Block place" means an item applied to a block, not every right-click. The Portal's hook was the raw `use_item_on` packet, which also carries opening a chest and pressing a button; ported literally, `ENABLE_PUBLIC_CONTAINERS` would be unreachable and `DISABLE_GATES` / `DISABLE_PUBLIC_REDSTONE_TRIGGERS` would have nothing to disable. The block's own right-click behaviour is governed by the container rule and those two flags instead.
+34. "Holding an item" is the acting hand's item; the Portal could only see the selected hotbar slot because a proxy cannot see inventories.
+35. Attacks are refused for every entity in a region you cannot modify, not only animals — the Portal's rule made no distinction either; only the flag's name mentions animals.
+36. Without the Portal's fake adventure gamemode (a proxy illusion, out of scope), a stranger sees the break animation play and the block reappear rather than the client refusing first.
+37. Blast damage to players and entities is untouched — only a region's *blocks* are shielded from explosions.
+38. The piston rule is "same region as the piston": every block a piston would take, land on or destroy must belong to the piston's own region or to nobody, so a region's own redstone works and a resident may still push onto unclaimed ground.
+39. Pressure plates refuse silently (they are asked every tick a foot is on them); every right-clicked trigger and gate carries the exact Portal refusal.
+40. A thrown projectile counts as whoever threw it, so a resident's splash water bottle can still douse a fire in their own region.
+41. A block change with no entity behind it is the world's own physics and is never refused.
+42. Environmental flags are read off the deepest region, like every other flag, so a sub-region's `ENABLE_EXPLOSIONS` applies to its footprint and not its parent's. A wind charge cannot trigger blocks inside a protected region (triggering rides the same exploded-positions list), and an iron door in a `DISABLE_GATES` region answers with the refusal even though a bare hand could not have opened it.
+43. Fluid flow is out of scope: inventory §7 lists fluids alongside explosion/fire/piston/mob, but story 35 does not, so lava and water spreading into a region are untouched.
+
+**Worlds and travel**
+
+44. Secondary's End runs the end-credits sequence like Primary's, which required translating the dimension check that gates it.
+
+**Notepad**
+
+45. The notepad session also cancels on dropping the book, offhand-swapping it, dying, logging out and server stop — guards the Portal did not need, because its book was a client-side illusion and this one is a real server item that must never escape.
+
+**Migration** (see `docs/migration.md`)
+
+46. Advancements and statistics import from the player's live World only; two sets cannot merge into the one shared set ADR 0001 keeps.
+47. Secondary's level-wide saved data (maps, raids, world border, force-loaded chunks) is not imported — map ids are level-wide and cannot merge with Primary's without renumbering every map item.
+48. Secondary inherits Primary's world seed: existing Secondary chunks import intact, but terrain generated past the current frontier will seam. Inherent to one server holding both Worlds.
+49. Bans and whitelists are not imported (the Portal did its own authentication), and pre-1.16 playerdata is refused by player name rather than guessed at.
+50. A player whose `lastServer` names a World they have no save in is made live in the World they do have, with `lastWorld` rewritten to match.
+51. The name cache is seeded with every identity the migration resolved, not only the Portal's cache entries — the cutover form of entry 10.
+52. The two aliased players (entry 8's remaps) render with default skins: a signed texture set would not validate against the aliased UUID, and the Portal's offline-mode backends never had their textures either.
+
+Flag semantics for the five newly-real flags are the port's proposal (names + pre-proxy convention); if lore says otherwise, adjust with a note here. The shared player state decision (ADR 0001) means cross-World item transfer is now possible — communicate to the community at cutover alongside the chat-signing change (entry 6) and the seam note (entry 48).
