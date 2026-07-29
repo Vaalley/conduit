@@ -6,24 +6,27 @@ import com.mojang.brigadier.arguments.IntegerArgumentType
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.builder.LiteralArgumentBuilder
 import com.mojang.brigadier.context.CommandContext
-import eu.mctraveler.MCTraveler
+import com.mojang.brigadier.suggestion.SuggestionProvider
 import eu.mctraveler.text.Paint
 import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.floor
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
+import net.minecraft.commands.SharedSuggestionProvider
 import net.minecraft.network.chat.Component
 import net.minecraft.server.level.ServerPlayer
 
 /**
- * The `/region` + `/rg` command family — the Portal's region lifecycle and
- * admin commands, message-for-message (RegionFeature.ts; §2.8 of the feature
- * inventory). Membership (`add`/`remove`) is ticket 13.
+ * The `/region` + `/rg` command family — the Portal's region lifecycle,
+ * membership and admin commands, message-for-message (RegionFeature.ts; §2.8
+ * of the feature inventory).
  *
  * Where the Portal read a region or position it had tracked from move packets,
  * these handlers read the player's live server-side state — same meaning,
- * never stale. Malformed invocations get USAGE messages (deviation 5).
+ * never stale. Commands that change what a region's sidebar says tell
+ * [RegionTracker] to redraw it for everyone standing inside. Malformed
+ * invocations get USAGE messages (deviation 5).
  */
 object RegionCommands {
 
@@ -51,6 +54,7 @@ object RegionCommands {
     private val NAME_REGEX = Regex("^[a-zA-Z0-9!_'?()#:,.+&@*\\- ]{3,30}$")
 
     private const val MAX_AREA = 5000
+    private const val MAX_MEMBERS = 99
     private const val MIN_Y = -64
     private const val MAX_Y = 320
     private const val MIN_Y_SPAN = 16
@@ -66,6 +70,27 @@ object RegionCommands {
         Paint.gray(" - "), Paint.white("/rg flag [flag]"), "\n",
         Paint.gray(" - "), Paint.white("/rg locate <name>"),
     )
+
+    /** Tab-completes online player names, like the Portal's onlinePlayer parser. */
+    private val onlinePlayerNames = SuggestionProvider<CommandSourceStack> { context, builder ->
+        SharedSuggestionProvider.suggest(context.source.onlinePlayerNames, builder)
+    }
+
+    /**
+     * Tab-completes the members of the region the sender is standing in, by
+     * the prefix they have typed — `/rg remove`'s helper for names that are
+     * often not online (and so never in the vanilla player suggestions).
+     */
+    private val regionMemberNames = SuggestionProvider<CommandSourceStack> { context, builder ->
+        val typed = builder.remaining.lowercase()
+        val player = context.source.player
+        val region = player?.let(RegionTracker::regionOf)
+        region?.members
+            ?.mapNotNull { RegionsFeature.usernameFor(context.source.server, it) }
+            ?.filter { it.lowercase().startsWith(typed) }
+            ?.forEach(builder::suggest)
+        builder.buildFuture()
+    }
 
     fun register(dispatcher: CommandDispatcher<CommandSourceStack>) {
         dispatcher.register(tree("region"))
@@ -86,6 +111,24 @@ object RegionCommands {
                     .then(
                         Commands.argument("name", StringArgumentType.greedyString())
                             .executes { ctx -> reply(ctx) { rename(it, StringArgumentType.getString(ctx, "name")) } },
+                    ),
+            )
+            .then(
+                Commands.literal("add")
+                    .executes { ctx -> reply(ctx) { Paint.usage("/$alias add <player>") } }
+                    .then(
+                        Commands.argument("player", StringArgumentType.word())
+                            .suggests(onlinePlayerNames)
+                            .executes { ctx -> reply(ctx) { addMember(it, StringArgumentType.getString(ctx, "player")) } },
+                    ),
+            )
+            .then(
+                Commands.literal("remove")
+                    .executes { ctx -> reply(ctx) { Paint.usage("/$alias remove <player>") } }
+                    .then(
+                        Commands.argument("player", StringArgumentType.word())
+                            .suggests(regionMemberNames)
+                            .executes { ctx -> reply(ctx) { removeMember(it, StringArgumentType.getString(ctx, "player")) } },
                     ),
             )
             .then(Commands.literal("delete").executes { ctx -> reply(ctx) { delete(it) } })
@@ -233,6 +276,9 @@ object RegionCommands {
         region.members.add(player.uuid)
         service.add(region, parent)
         startMarkers.remove(player.uuid)
+        // The creator is standing in it: their sidebar comes up at once, rather
+        // than on the next tick's sweep.
+        RegionTracker.refresh(player)
 
         return Paint.success(
             "Region ", Paint.green(title),
@@ -241,7 +287,7 @@ object RegionCommands {
     }
 
     private fun rename(player: ServerPlayer, name: String): Component {
-        val region = regionAround(player)
+        val region = RegionTracker.regionOf(player)
             ?: return Paint.error("You must stand in the region you want to rename")
         if (!region.isResident(player.uuid) && !RegionsFeature.isAdmin(player)) {
             return Paint.error("You are not a member of this region")
@@ -252,11 +298,12 @@ object RegionCommands {
         val oldTitle = region.title
         region.title = name
         RegionsFeature.requireService().save()
+        RegionTracker.redraw(player.level().server, region)
         return Paint.success("Renamed ", Paint.green(oldTitle), " to ", Paint.green(name))
     }
 
     private fun delete(player: ServerPlayer): Component {
-        val region = regionAround(player)
+        val region = RegionTracker.regionOf(player)
             ?: return Paint.error("You must stand in the region you want to delete")
         if (!region.isResident(player.uuid) && !RegionsFeature.isAdmin(player)) {
             return Paint.error("You are not a member of this region")
@@ -265,8 +312,61 @@ object RegionCommands {
             return Paint.error("You must use ", Paint.red("/embassy delete"), " to delete an embassy")
         }
         val title = region.title
+        RegionTracker.clear(player.level().server, region)
         RegionsFeature.requireService().remove(region)
         return Paint.success("Deleted region ", Paint.green(title))
+    }
+
+    // ---- membership commands ----
+
+    private fun addMember(player: ServerPlayer, targetName: String): Component {
+        // The Portal resolved the online-player argument before the command
+        // body ran, so an unknown target is answered ahead of every guard.
+        val server = player.level().server
+        val target = server.playerList.getPlayerByName(targetName)
+            ?: return Paint.gray("Player ", Paint.red(targetName), " not found or is offline")
+        val region = RegionTracker.regionOf(player)
+            ?: return Paint.error("You must stand in the region you want to add a resident to")
+        if (region.members.size >= MAX_MEMBERS) {
+            return Paint.error("Regions may only have $MAX_MEMBERS members")
+        }
+        // Residents and admins may add — and so may a resident of the region
+        // one level up, who is landlord to this sub-region.
+        if (!region.isResident(player.uuid) &&
+            !RegionsFeature.isAdmin(player) &&
+            region.parent?.isResident(player.uuid) != true
+        ) {
+            return Paint.error("You are not a member of this region")
+        }
+        val name = target.gameProfile.name
+        if (region.isResident(target.uuid)) {
+            return Paint.error(Paint.red(name), " is already a member of ", Paint.red(region.title))
+        }
+        region.members.add(target.uuid)
+        RegionsFeature.requireService().save()
+        RegionTracker.redraw(server, region)
+        return Paint.success(Paint.green(name), " has been added to ", Paint.green(region.title))
+    }
+
+    private fun removeMember(player: ServerPlayer, targetName: String): Component {
+        val region = RegionTracker.regionOf(player)
+            ?: return Paint.error("You must stand in the region you want to remove a resident from")
+        if (!region.isResident(player.uuid) && !RegionsFeature.isAdmin(player)) {
+            return Paint.error("You are not a member of this region")
+        }
+        // Members are named, not picked from the online players: the target is
+        // whichever member's name matches what was typed, in any casing.
+        val server = player.level().server
+        val target = region.members.firstOrNull {
+            RegionsFeature.usernameFor(server, it).equals(targetName, ignoreCase = true)
+        } ?: return Paint.error(Paint.red(targetName), " is not a member of ", Paint.red(region.title))
+        if (region.members.size == 1) {
+            return Paint.error(Paint.red(targetName), " is the only member of ", Paint.red(region.title))
+        }
+        region.members.remove(target)
+        RegionsFeature.requireService().save()
+        RegionTracker.redraw(server, region)
+        return Paint.success(Paint.green(targetName), " has been removed from ", Paint.green(region.title))
     }
 
     // ---- admin commands ----
@@ -278,7 +378,7 @@ object RegionCommands {
 
     private fun toggleFlag(player: ServerPlayer, rawFlag: String): Component {
         adminGate(player)?.let { return it }
-        val region = regionAround(player)
+        val region = RegionTracker.regionOf(player)
             ?: return Paint.error("You must stand in the region you want to toggle a flag on")
         val flag = rawFlag.uppercase()
         if (flag !in VALID_FLAGS) {
@@ -290,12 +390,16 @@ object RegionCommands {
         val added = region.flags.add(flag)
         if (!added) region.flags.remove(flag)
         RegionsFeature.requireService().save()
+        // NO_SCOREBOARD decides whether the sidebar is drawn at all, so a
+        // toggle takes effect on the occupants now rather than next time they
+        // walk in (the Portal left the stale board up).
+        RegionTracker.redraw(player.level().server, region)
         return Paint.success("Flag ", Paint.green(flag), if (added) " added" else " removed")
     }
 
     private fun listFlags(player: ServerPlayer): Component {
         adminGate(player)?.let { return it }
-        val region = regionAround(player)
+        val region = RegionTracker.regionOf(player)
             ?: return Paint.error("You must stand in a region to view flags")
         // Enabled flags in green then disabled in red, each group in the
         // canonical order, comma-separated on a gray line.
@@ -311,7 +415,7 @@ object RegionCommands {
 
     private fun setBounds(player: ServerPlayer, rawMinY: Int, rawMaxY: Int): Component {
         adminGate(player)?.let { return it }
-        val region = regionAround(player)
+        val region = RegionTracker.regionOf(player)
             ?: return Paint.error("You must stand in the region you want to set bounds for")
         val minY = minOf(rawMinY, rawMaxY)
         val maxY = maxOf(rawMinY, rawMaxY)
@@ -332,7 +436,7 @@ object RegionCommands {
 
     private fun showBounds(player: ServerPlayer): Component {
         adminGate(player)?.let { return it }
-        val region = regionAround(player)
+        val region = RegionTracker.regionOf(player)
             ?: return Paint.error("You must stand in a region to view bounds")
         return Paint(
             Paint.green(region.title),
@@ -343,9 +447,8 @@ object RegionCommands {
     private fun locate(player: ServerPlayer, query: String): Component? {
         adminGate(player)?.let { return it }
         val server = player.level().server
-        val nameCache = MCTraveler.persistence?.names
         val found = RegionsFeature.requireService().search(query) { uuid ->
-            server.playerList.getPlayer(uuid)?.gameProfile?.name ?: nameCache?.usernameFor(uuid)
+            RegionsFeature.usernameFor(server, uuid)
         }
         if (found.isEmpty()) {
             return Paint.error("No regions found matching \"$query\"")
@@ -374,20 +477,6 @@ object RegionCommands {
     }
 
     // ---- shared lookups ----
-
-    /**
-     * The region the player is standing in — computed from their live
-     * position, where the Portal used the region tracked from move packets.
-     */
-    private fun regionAround(player: ServerPlayer): Region? {
-        val pos = player.position()
-        return RegionsFeature.requireService().regionAt(
-            legacyWorldOf(player),
-            floorInt(pos.x),
-            floorInt(pos.y),
-            floorInt(pos.z),
-        )
-    }
 
     private fun legacyWorldOf(player: ServerPlayer): String =
         RegionWorlds.legacyName(player.level().dimension())

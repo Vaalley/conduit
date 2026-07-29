@@ -40,6 +40,13 @@ class Paint private constructor(private val style: Style) {
     val italic: Paint get() = Paint(style.withItalic(true))
     val underline: Paint get() = Paint(style.withUnderlined(true))
 
+    /**
+     * Struck through. Beyond the Portal's Paint vocabulary, which had no
+     * strikethrough — its one struck-through string (the region sidebar's
+     * separator line) was hand-built as raw NBT instead.
+     */
+    val strikethrough: Paint get() = Paint(style.withStrikethrough(true))
+
     /** Builds a component carrying this chain's style over the given content. */
     operator fun invoke(vararg content: Any?): MutableComponent {
         val parts = content.mapNotNull(::toPart)
@@ -70,6 +77,7 @@ class Paint private constructor(private val style: Style) {
         val bold: Paint get() = plain.bold
         val italic: Paint get() = plain.italic
         val underline: Paint get() = plain.underline
+        val strikethrough: Paint get() = plain.strikethrough
 
         /** Unstyled composition: `Paint("Hello ", name)`. */
         operator fun invoke(vararg content: Any?): MutableComponent = plain(*content)

@@ -20,7 +20,9 @@
       "eu.mctraveler.gametest.WorldsGameTest",
       "eu.mctraveler.gametest.RespawnAndPortalsGameTest",
       "eu.mctraveler.gametest.RegionCommandGameTest",
-      "eu.mctraveler.gametest.RegionAdminCommandGameTest"
+      "eu.mctraveler.gametest.RegionAdminCommandGameTest",
+      "eu.mctraveler.gametest.RegionMembershipGameTest",
+      "eu.mctraveler.gametest.RegionScoreboardGameTest"
     ],
     "server": [
       {

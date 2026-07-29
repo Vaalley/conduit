@@ -1,6 +1,5 @@
 package eu.mctraveler.gametest
 
-import eu.mctraveler.region.Region
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.text.Paint
 import kotlin.math.floor
@@ -511,24 +510,4 @@ class RegionCommandGameTest {
         "Region ", Paint.green(title),
         " created!\n\nYou can now rename the region:\n", Paint.green("/rg rename <name>"),
     )
-
-    /**
-     * Creates a region through the real commands, corner [from] to corner [to]
-     * (structure-relative x/z), and returns it.
-     */
-    private fun createRegion(
-        helper: GameTestHelper,
-        player: MessageCapturingPlayer,
-        from: Pair<Double, Double>,
-        to: Pair<Double, Double>,
-    ): Region {
-        player.standAt(helper, from.first, 1.0, from.second)
-        player.runCommand("rg start")
-        player.standAt(helper, to.first, 1.0, to.second)
-        player.runCommand("rg end")
-        val service = RegionsFeature.requireService()
-        return checkNotNull(
-            service.regionAt("world", floor(player.x).toInt(), 1, floor(player.z).toInt()),
-        ) { "region creation for ${player.gameProfile.name} did not take" }
-    }
 }

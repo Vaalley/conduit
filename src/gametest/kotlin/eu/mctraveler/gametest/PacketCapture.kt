@@ -24,10 +24,15 @@ object PacketCapture {
     /**
      * Drains and returns every packet sent to [player] since the last drain, with bundles
      * unwrapped. Non-packet outbound messages (channel reconfiguration tasks) are skipped.
+     *
+     * Packets written during the current tick are still sitting in the channel's write
+     * buffer — the server flushes once per tick — so the channel is flushed first, making
+     * a drain immediately after an action see what that action sent.
      */
     fun drain(player: ServerPlayer): List<Packet<*>> {
         val connection = connectionField.get(player.connection) as Connection
         val channel = channelField.get(connection) as EmbeddedChannel
+        channel.flush()
         return buildList {
             while (true) {
                 when (val message = channel.readOutbound<Any>() ?: break) {
