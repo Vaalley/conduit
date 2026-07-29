@@ -4,7 +4,8 @@
   "package": "eu.mctraveler.mixin",
   "compatibilityLevel": "JAVA_25",
   "mixins": [
-    "ExperienceOrbMixin"
+    "ExperienceOrbMixin",
+    "MinecraftServerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

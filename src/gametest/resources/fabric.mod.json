@@ -9,7 +9,8 @@
     "fabric-gametest": [
       "eu.mctraveler.gametest.ScaffoldGameTest",
       "eu.mctraveler.gametest.PersistenceGameTest",
-      "eu.mctraveler.gametest.XpOrbMergeGameTest"
+      "eu.mctraveler.gametest.XpOrbMergeGameTest",
+      "eu.mctraveler.gametest.MotdGameTest"
     ],
     "server": [
       {
