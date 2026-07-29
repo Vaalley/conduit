@@ -33,17 +33,21 @@ class MotdGameTest {
         val player = helper.makeMockServerPlayerInLevel()
         // The status response is rebuilt on a wall-clock cadence (~5 s of ticking);
         // wait for the refresh that includes the freshly-joined player.
+        // Other gametests may field their own fake players on this shared server,
+        // so assert the invariant (advertised state tracks the live roster), not
+        // an absolute count.
         helper.succeedWhen {
             val players = checkNotNull(server.status).players().orElseThrow()
-            helper.assertValueEqual(players.online(), 1, "advertised online count")
-            // The mock joins with allow-server-listings off (the vanilla client-info
-            // default), so the sample carries the anonymous entry — the sample tracks
-            // the live roster while honoring the player's listing opt-out.
-            helper.assertValueEqual(
-                players.sample(),
-                listOf(MinecraftServer.ANONYMOUS_PLAYER_PROFILE),
-                "player sample",
-            )
+            val live = server.playerList.playerCount
+            check(live >= 1) { "our mock player should be online" }
+            helper.assertValueEqual(players.online(), live, "advertised online count")
+            // Mocks join with allow-server-listings off (the vanilla client-info
+            // default), so every sampled entry is the anonymous profile — the sample
+            // tracks the first 12 of the live roster while honoring the opt-out.
+            helper.assertValueEqual(players.sample().size, minOf(live, 12), "sample size")
+            check(players.sample().all { it == MinecraftServer.ANONYMOUS_PLAYER_PROFILE }) {
+                "non-listing players must appear as the anonymous entry"
+            }
             server.playerList.remove(player)
         }
     }
