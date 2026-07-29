@@ -6,7 +6,8 @@
   "mixins": [
     "ExperienceOrbMixin",
     "MinecraftServerMixin",
-    "ServerPlayerMixin"
+    "ServerPlayerMixin",
+    "ServerLoginPacketListenerImplMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -11,7 +11,8 @@
       "eu.mctraveler.gametest.PersistenceGameTest",
       "eu.mctraveler.gametest.XpOrbMergeGameTest",
       "eu.mctraveler.gametest.MotdGameTest",
-      "eu.mctraveler.gametest.TabListGameTest"
+      "eu.mctraveler.gametest.TabListGameTest",
+      "eu.mctraveler.gametest.IdentityRemapGameTest"
     ],
     "server": [
       {
