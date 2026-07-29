@@ -1,6 +1,7 @@
 package eu.mctraveler
 
 import eu.mctraveler.persistence.PersistenceService
+import eu.mctraveler.tablist.TabListFeature
 import net.fabricmc.api.ModInitializer
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents
@@ -28,6 +29,8 @@ object MCTraveler : ModInitializer {
         private set
 
     override fun onInitialize() {
+        TabListFeature.register()
+
         initialized = true
         ServerLifecycleEvents.SERVER_STARTING.register { server ->
             persistence = PersistenceService(server.serverDirectory.resolve("mctraveler"))

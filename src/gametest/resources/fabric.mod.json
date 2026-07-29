@@ -10,7 +10,8 @@
       "eu.mctraveler.gametest.ScaffoldGameTest",
       "eu.mctraveler.gametest.PersistenceGameTest",
       "eu.mctraveler.gametest.XpOrbMergeGameTest",
-      "eu.mctraveler.gametest.MotdGameTest"
+      "eu.mctraveler.gametest.MotdGameTest",
+      "eu.mctraveler.gametest.TabListGameTest"
     ],
     "server": [
       {
