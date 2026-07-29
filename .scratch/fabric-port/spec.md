@@ -202,3 +202,29 @@ Entries 1–19 keep their numbers permanently — ticket comments cite them. Ent
 52. The two aliased players (entry 8's remaps) render with default skins: a signed texture set would not validate against the aliased UUID, and the Portal's offline-mode backends never had their textures either.
 
 Flag semantics for the five newly-real flags are the port's proposal (names + pre-proxy convention); if lore says otherwise, adjust with a note here. The shared player state decision (ADR 0001) means cross-World item transfer is now possible — communicate to the community at cutover alongside the chat-signing change (entry 6) and the seam note (entry 48).
+
+## Parity audit (ticket 19)
+
+**Suite**: 202 headless gametests + 145 unit tests, green in one `./gradlew build`. `./gradlew prodServer` boots the built jar on the real Fabric dedicated-server launcher and asserts all six dimensions are live — `minecraft:overworld/the_nether/the_end` and `mctraveler:secondary/_nether/_end`. Gametests run on vanilla's `GameTestServer`, which needs a mixin to see datapack dimensions at all, so the production boot is the only place "both Worlds genuinely ship" can be proven.
+
+**Coverage by feature** (Portal feature → gametests that pin it): Motd → MotdGameTest (2, now including live styling); Away → AwayGameTest (11); Chat/join/leave/death/emotes → ChatGameTest (6); private messages → PrivateMessagesGameTest (13); Switch + Worlds + Position Memory → WorldsGameTest (5); respawn + portal routing → RespawnAndPortalsGameTest (6); TabList → TabListGameTest (4, cross-World now using the real Secondary World); Notepad → NotepadGameTest (10); Regions → RegionCommandGameTest (25), RegionAdminCommandGameTest (13), RegionMembershipGameTest (18), RegionScoreboardGameTest (11), RegionProtectionGameTest (26), RegionEnvironmentGameTest (24), RegionFlagGameTest (19); TravelPatch identity → IdentityRemapGameTest (3); persistence → PersistenceGameTest (1) + JsonPlayerStoreTest/NameCacheTest (23 unit); migration → MigrationGameTest (2) + 51 importer unit tests; orb merging → XpOrbMergeGameTest (1); command/text framework → PaintTest (23), RegionServiceTest (22), TabListFeatureTest (6), MotdTest (7). CoreFeature, the Portal's module/hook framework, and its four dead API-only modules have no port surface by ADR 0002.
+
+**Deviations**: 52 register entries above. Every behaviour in the inventory is either pinned by a named test or retired by an entry.
+
+**Verified by inspection, not by test** (stated plainly rather than counted as coverage):
+- That each named griefer (ravager, wither, villager, zombie, rabbit) reaches `Level.destroyBlock` carrying itself — read at each call site; the gametest drives that seam with a real ravager.
+- Region behaviour in non-overworld dimensions — every gametest runs in the gametest overworld; the World-string mapping is `RegionWorlds`' single seam, unit-tested.
+- Downstream state keying to a remapped identity — vanilla builds it all from the one field the mixin swaps.
+- Respawn *anchors* (stored and handled identically to beds; only beds are gametested).
+- IntelliJ-side hotswap (the JVM/agent wiring is machine-verified; the interactive reload is not).
+
+**Known gaps, deliberately left** (each cheap to fix later, none affecting today's Portal parity since the Portal protected none of it): sheep cropping grass and silverfish *infesting* stone change blocks with no entity attached and slip the creature rule; buttons pressed by arrows bypass `DISABLE_PUBLIC_REDSTONE_TRIGGERS`; tripwire is outside the trigger vocabulary; fluid flow into a region is untouched (inventory §7 lists it, story 35 does not). The `/switch` failure branch is implemented with the Portal's wording but not gametested — a healthy server offers no way to make Travel fail. The end-to-end server-icon path is vanilla's own and is covered only as pass-through at the unit tier.
+
+**Test-harness debt**: five fake-player harnesses coexist (`FakePlayer`, `TestPlayer`, `AwayTestPlayer`, `MessageCapturingPlayer`, `TestPlayers`) plus two text-run flatteners (`runsOf`/`Run` and `Component.textRuns()`/`TextRun`) — an artifact of parallel implementation. Consolidating them touches every gametest file, so it is left as follow-up work rather than risking the suite at the close of the port.
+
+**Cutover checklist** (runbook: `docs/migration.md`):
+1. Build the identities file first — the importer will stop on the first real run, because the Portal's uuid cache was only ever filled by `/op` and most players have no Mojang uuid on file.
+2. Rehearse the migration; it stages everything and refuses a second run against an already-migrated save.
+3. First boot after import is slower and required: vanilla's own file fixer relays out the save layout and runs the version upgrade.
+4. Set `max-players=20` to advertise today's capacity (entry 17).
+5. Tell the community three things: items and XP now move between Worlds (ADR 0001), chat is reportable again (entry 6), and new terrain past Secondary's current frontier will seam (entry 48).
