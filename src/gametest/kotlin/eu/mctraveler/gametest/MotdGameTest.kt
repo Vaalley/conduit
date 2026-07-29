@@ -20,6 +20,24 @@ class MotdGameTest {
         val server = helper.level.server
         val status = checkNotNull(server.status) { "the server has not built a status response" }
         helper.assertValueEqual(status.description().string, expectedMotd, "server-list MOTD")
+
+        // Styling is the other half of the MOTD's identity, and until now it was only
+        // pinned at the unit tier — assert it on what the real server advertises.
+        val runs = status.description().textRuns()
+        // The address is three runs, because MCTraveler is bolded inside it.
+        val green = runs.filter { it.color == "green" }
+        check(green.joinToString("") { it.text }.contains("play.MCTraveler.eu")) {
+            "the play-address line is not green on the live status: $runs"
+        }
+        check(green.any { it.text == "MCTraveler" && it.bold }) {
+            "MCTraveler is not bold on the live status: $runs"
+        }
+        check(
+            runs.any {
+                it.color == "gray" && it.text.contains("Celebrating 13 years of vanilla survival")
+            },
+        ) { "the anniversary line is not gray on the live status: $runs" }
+
         val players = status.players().orElseThrow {
             AssertionError("the status response carries no player info")
         }

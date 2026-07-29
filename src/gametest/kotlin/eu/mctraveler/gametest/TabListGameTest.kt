@@ -1,5 +1,7 @@
 package eu.mctraveler.gametest
 
+import eu.mctraveler.worlds.DimensionRole
+import eu.mctraveler.worlds.WorldsFeature
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.ChatFormatting
 import net.minecraft.gametest.framework.GameTestHelper
@@ -10,7 +12,6 @@ import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket
 import net.minecraft.network.protocol.game.ClientboundTabListPacket
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.server.network.ServerCommonPacketListenerImpl
-import net.minecraft.world.level.Level
 
 /**
  * The unified tab list (spec stories 6-8): the Portal's exact header and footer with the
@@ -78,10 +79,15 @@ class TabListGameTest {
         val viewer = helper.makeMockServerPlayerInLevel()
         val traveler = helper.makeMockServerPlayerInLevel()
 
-        val nether = server.getLevel(Level.NETHER)
-            ?: throw AssertionError("the test server has no nether dimension")
-        traveler.teleportTo(nether, 0.5, 128.0, 0.5, emptySet(), 0f, 0f, true)
-        check(traveler.level() === nether) { "the traveler did not change dimension" }
+        // The real Secondary World, not a stand-in: this test predates ticket 04's
+        // topology and used the vanilla nether until the Worlds service existed.
+        val secondary = checkNotNull(WorldsFeature.worlds) {
+            "the Worlds service did not come up with the test server"
+        }.all.single { it.id == "secondary" }
+        val destination = server.getLevel(secondary.dimension(DimensionRole.OVERWORLD))
+            ?: throw AssertionError("Secondary's overworld is not loaded on the test server")
+        traveler.teleportTo(destination, 0.5, 128.0, 0.5, emptySet(), 0f, 0f, true)
+        check(traveler.level() === destination) { "the traveler did not reach Secondary" }
 
         PacketCapture.drain(viewer)
         helper.runAfterDelay(30) {
