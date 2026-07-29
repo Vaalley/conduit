@@ -15,7 +15,6 @@
       }
     ]
   },
-  "mixins": ["mctraveler.mixins.json"],
   "depends": {
     "fabricloader": ">=${loader_version}",
     "fabric-api": "*",
