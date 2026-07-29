@@ -7,11 +7,13 @@ import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.network.Connection
 import net.minecraft.network.chat.Component
 import net.minecraft.network.protocol.PacketFlow
+import net.minecraft.network.protocol.game.ServerboundPlayerLoadedPacket
 import net.minecraft.server.MinecraftServer
 import net.minecraft.server.level.ClientInformation
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.server.network.CommonListenerCookie
+import net.minecraft.world.level.GameType
 import net.minecraft.world.phys.Vec3
 
 /**
@@ -50,6 +52,14 @@ class MessageCapturingPlayer(
             val connection = Connection(PacketFlow.SERVERBOUND)
             EmbeddedChannel(connection)
             server.playerList.placeNewPlayer(connection, player, cookie)
+            // Ack the world load as a real client does; until then the server
+            // treats the session as still loading and ignores the interaction
+            // packets protection gametests drive.
+            player.connection.handleAcceptPlayerLoad(ServerboundPlayerLoadedPacket())
+            // MCTraveler is a survival server; the gametest server's default is
+            // creative, which quietly changes what items and blocks do (nothing
+            // is consumed, buckets are not filled, every block breaks at once).
+            player.setGameMode(GameType.SURVIVAL)
             return player
         }
     }

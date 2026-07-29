@@ -12,7 +12,10 @@
     "EndPortalBlockMixin",
     "ServerLoginPacketListenerImplMixin",
     "CommandsMixin",
-    "ServerGamePacketListenerImplMixin"
+    "ServerGamePacketListenerImplMixin",
+    "RegionSignEditMixin",
+    "RegionContainerSessionMixin",
+    "RegionContainerClickMixin"
   ],
   "injectors": {
     "defaultRequire": 1

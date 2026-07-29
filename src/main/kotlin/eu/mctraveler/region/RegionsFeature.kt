@@ -5,16 +5,17 @@ import java.util.UUID
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents
+import net.minecraft.core.BlockPos
 import net.minecraft.server.MinecraftServer
 import net.minecraft.server.level.ServerPlayer
+import net.minecraft.world.level.Level
 
 /**
  * Wiring for the Region service: brings the service up with the server
- * (regions live in `regions.json` in the run directory, the Portal's path)
- * and registers the `/region` + `/rg` commands.
- *
- * Later region tickets (membership/scoreboard, protection) build on
- * [service] and [isAdmin].
+ * (regions live in `regions.json` in the run directory, the Portal's path),
+ * registers the `/region` + `/rg` commands, and starts the current-region
+ * tracking ([RegionTracker]) and protection ([RegionProtection]) that hang
+ * off it.
  */
 object RegionsFeature {
 
@@ -45,6 +46,14 @@ object RegionsFeature {
         server.playerList.getPlayer(uuid)?.gameProfile?.name
             ?: MCTraveler.persistence?.names?.usernameFor(uuid)
 
+    /**
+     * The deepest region covering [pos] in [level], or null — the block-shaped
+     * lookup protection is decided by ([RegionTracker.regionOf] is the
+     * player-shaped one). Null before the service is up.
+     */
+    fun regionAt(level: Level, pos: BlockPos): Region? =
+        service?.regionAt(RegionWorlds.legacyName(level.dimension()), pos.x, pos.y, pos.z)
+
     fun register() {
         ServerLifecycleEvents.SERVER_STARTING.register { server ->
             service = RegionService(server.serverDirectory.resolve("regions.json"))
@@ -53,6 +62,7 @@ object RegionsFeature {
             RegionCommands.register(dispatcher)
         }
         RegionTracker.register()
+        RegionProtection.register()
         // The Portal kept start markers per connection; dropping them on
         // disconnect preserves that lifetime.
         ServerPlayConnectionEvents.DISCONNECT.register { handler, _ ->

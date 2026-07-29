@@ -23,7 +23,8 @@
       "eu.mctraveler.gametest.RegionAdminCommandGameTest",
       "eu.mctraveler.gametest.RegionMembershipGameTest",
       "eu.mctraveler.gametest.RegionScoreboardGameTest",
-      "eu.mctraveler.gametest.MigrationGameTest"
+      "eu.mctraveler.gametest.MigrationGameTest",
+      "eu.mctraveler.gametest.RegionProtectionGameTest"
     ],
     "server": [
       {
