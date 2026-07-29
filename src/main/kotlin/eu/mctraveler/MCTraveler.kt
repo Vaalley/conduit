@@ -1,5 +1,6 @@
 package eu.mctraveler
 
+import eu.mctraveler.chat.PrivateMessages
 import eu.mctraveler.persistence.PersistenceService
 import eu.mctraveler.tablist.TabListFeature
 import net.fabricmc.api.ModInitializer
@@ -30,6 +31,8 @@ object MCTraveler : ModInitializer {
 
     override fun onInitialize() {
         TabListFeature.register()
+        PrivateMessages.register()
+
 
         initialized = true
         ServerLifecycleEvents.SERVER_STARTING.register { server ->
