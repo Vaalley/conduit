@@ -5,6 +5,7 @@ import eu.mctraveler.chat.ChatFeature
 import eu.mctraveler.chat.PrivateMessages
 import eu.mctraveler.notepad.NotepadFeature
 import eu.mctraveler.persistence.PersistenceService
+import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.tablist.TabListFeature
 import net.fabricmc.api.ModInitializer
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
@@ -51,6 +52,7 @@ object MCTraveler : ModInitializer {
         }
         NotepadFeature.register()
         eu.mctraveler.worlds.WorldsFeature.register()
+        RegionsFeature.register()
         LOGGER.info("MCTraveler initialized")
     }
 }

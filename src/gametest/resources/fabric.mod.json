@@ -17,12 +17,18 @@
       "eu.mctraveler.gametest.ChatGameTest",
       "eu.mctraveler.gametest.AwayGameTest",
       "eu.mctraveler.gametest.NotepadGameTest",
-      "eu.mctraveler.gametest.WorldsGameTest"
+      "eu.mctraveler.gametest.WorldsGameTest",
+      "eu.mctraveler.gametest.RegionCommandGameTest",
+      "eu.mctraveler.gametest.RegionAdminCommandGameTest"
     ],
     "server": [
       {
         "adapter": "kotlin",
         "value": "eu.mctraveler.gametest.SmokeHook"
+      },
+      {
+        "adapter": "kotlin",
+        "value": "eu.mctraveler.gametest.GameTestJanitor"
       }
     ]
   },
