@@ -333,13 +333,84 @@ class PortalImportTest {
     }
 
     @Test
-    fun `unidentified saves can be left behind deliberately`() {
+    fun `a save nobody can identify is quarantined for its owner to claim at login`() {
+        portal.playerdata("primary", "Stranger", pos = Triple(8.5, 65.0, 9.5))
+        portal.advancements("primary", "Stranger", """{"minecraft:story/root":{"done":true}}""")
+        portal.stats("primary", "Stranger", """{"stats":{"minecraft:custom":{}}}""")
+        portal.userCache("Stranger")
+
+        val report = migrate(portal.plan(target).copy(skipUnidentified = true))
+
+        assertEquals(1, report.quarantinedSaves)
+        assertEquals(listOf("Stranger (${OfflineUuid.of("Stranger")}, primary)"), report.unidentifiedSaves)
+        assertTrue(Files.exists(quarantined("primary", "$stranger.dat")), "the save itself was not quarantined")
+        assertEquals(
+            """{"minecraft:story/root":{"done":true}}""",
+            Files.readString(quarantined("primary", "advancements/$stranger.json")),
+        )
+        assertTrue(Files.exists(quarantined("primary", "stats/$stranger.json")), "the stats sidecar")
+        // Not in the level: vanilla must never walk a save keyed to nobody it knows.
+        assertFalse(Files.exists(target.resolve("world/playerdata/$stranger.dat")))
+        // ...and a copy migration still leaves the Portal's own tree complete.
+        assertTrue(Files.exists(portal.primaryServerDir.resolve("world/playerdata/$stranger.dat")))
+    }
+
+    @Test
+    fun `a quarantined player keeps one save per World they played in`() {
+        portal.playerdata("primary", "Stranger")
+        portal.playerdata("secondary", "Stranger")
+        portal.userCache("Stranger")
+
+        val report = migrate(portal.plan(target).copy(skipUnidentified = true))
+
+        assertEquals(2, report.quarantinedSaves)
+        assertTrue(Files.exists(quarantined("primary", "$stranger.dat")))
+        assertTrue(Files.exists(quarantined("secondary", "$stranger.dat")))
+    }
+
+    @Test
+    fun `moving a migration takes the quarantined saves out of the backend too`() {
+        portal.playerdata("primary", "Stranger")
+        portal.advancements("primary", "Stranger", """{}""")
+        portal.userCache("Stranger")
+        val backendSave = portal.primaryServerDir.resolve("world/playerdata/$stranger.dat")
+
+        migrate(portal.plan(target).copy(skipUnidentified = true, worldTransfer = WorldTransfer.MOVE))
+
+        assertTrue(Files.exists(quarantined("primary", "$stranger.dat")))
+        assertFalse(Files.exists(backendSave), "a move must not leave a second copy behind")
+        assertFalse(Files.exists(portal.primaryServerDir.resolve("world/advancements/$stranger.json")))
+    }
+
+    @Test
+    fun `the report counts quarantined saves instead of reporting them left behind`() {
         portal.playerdata("primary", "Stranger")
         portal.userCache("Stranger")
 
         val report = migrate(portal.plan(target).copy(skipUnidentified = true))
 
-        assertEquals(listOf("Stranger (${OfflineUuid.of("Stranger")}, primary)"), report.unidentifiedSaves)
-        assertTrue(Files.exists(target.resolve("world")))
+        assertTrue(
+            report.lines().any { it == "quarantined saves      : 1" },
+            "no quarantine line in the report: ${report.lines()}",
+        )
+        assertTrue(
+            report.lines().none { it.startsWith("LEFT BEHIND save") },
+            "a quarantined save is not left behind: ${report.lines()}",
+        )
     }
+
+    @Test
+    fun `an operator nobody can identify is still reported as left behind`() {
+        portal.ops("Notch", "Ghost")
+
+        val report = migrate(portal.plan(target).copy(skipUnidentified = true))
+
+        assertEquals(listOf("Ghost"), report.unidentifiedOperators)
+        assertTrue(report.lines().any { it == "LEFT BEHIND operator   : Ghost" }, "${report.lines()}")
+    }
+
+    private val stranger: UUID get() = OfflineUuid.of("Stranger")
+
+    private fun quarantined(world: String, name: String): Path =
+        target.resolve("mctraveler/orphaned-saves/$world/$name")
 }

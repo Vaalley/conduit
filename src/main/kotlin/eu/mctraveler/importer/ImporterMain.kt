@@ -21,7 +21,9 @@ object ImporterMain {
           --secondary <dir>    the Secondary backend's server directory [default: <portal>/minecraft-server/secondary]
           --level-name <name>  the level directory to write             [default: world]
           --identities <file>  JSON of "username": "<mojang uuid>" for players the Portal's cache never saw
-          --skip-unidentified  leave saves whose player cannot be identified behind, instead of refusing
+          --skip-unidentified  quarantine saves whose player cannot be identified (claimed at their
+                               owner's next login) instead of refusing to migrate
+          --worlds copy|move   how the chunk data and quarantined saves reach the new save [default: copy]
     """.trimIndent()
 
     @JvmStatic
@@ -53,8 +55,16 @@ object ImporterMain {
             val report = PortalImport(plan).run()
             println("Migrated ${plan.portalDir} into ${plan.targetDir}:")
             report.lines().forEach { println("  $it") }
-            if (report.unidentifiedSaves.isNotEmpty() || report.unidentifiedOperators.isNotEmpty()) {
-                println("\nSome data was deliberately left behind — see the lines above.")
+            if (report.quarantinedSaves > 0) {
+                println(
+                    "\n${report.quarantinedSaves} save(s) went into " +
+                        "mctraveler/${SaveQuarantine.DIRECTORY}/ because nobody could be named for them. " +
+                        "Each is claimed automatically the first time its owner logs in — watch the log " +
+                        "for \"orphaned-save claim\" lines, and for any claim that could not be made.",
+                )
+            }
+            if (report.unidentifiedOperators.isNotEmpty()) {
+                println("\nSome operators were deliberately left behind — see the lines above.")
             }
         } catch (refusal: MigrationRefused) {
             System.err.println("Migration refused, nothing was written: ${refusal.message}")

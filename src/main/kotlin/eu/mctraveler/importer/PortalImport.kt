@@ -70,18 +70,27 @@ data class ImportReport(
     val namesCached: Int,
     val operators: Int,
     val regions: Int,
+    /** Save files parked in the [SaveQuarantine] for their owner to claim at login. */
+    val quarantinedSaves: Int,
+    /** Who the quarantine holds, named where a backend's profile cache still knows them. */
     val unidentifiedSaves: List<String>,
     val unidentifiedOperators: List<String>,
 ) {
+    /**
+     * Quarantined saves are counted, not listed: on the real deployment there
+     * are thousands of them and nothing is asked of the operator — their owners
+     * claim them by logging in. What is genuinely unmigratable — an operator no
+     * identity answers for — is still named line by line.
+     */
     fun lines(): List<String> = listOf(
         "players migrated       : $playersMigrated",
         "per-World buckets      : $bucketsSeeded",
+        "quarantined saves      : $quarantinedSaves",
         "Portal player records  : $playerRecords",
         "name cache entries     : $namesCached",
         "operators              : $operators",
         "regions                : $regions",
-    ) + unidentifiedSaves.map { "LEFT BEHIND save       : $it" } +
-        unidentifiedOperators.map { "LEFT BEHIND operator   : $it" }
+    ) + unidentifiedOperators.map { "LEFT BEHIND operator   : $it" }
 }
 
 /**
@@ -107,16 +116,16 @@ class PortalImport(private val plan: ImportPlan) {
     private val staging: Path = plan.targetDir.resolve(STAGING_DIRECTORY)
     private val stagedLevel: Path = staging.resolve(plan.levelName)
 
-    /** True once chunk data has been moved out of the Portal's levels — see the failure path in [run]. */
-    private var worldsMoved = false
+    /** True once bulk data has been moved out of the Portal's tree — see the failure path in [run]. */
+    private var portalDataMoved = false
 
     private val backends: Map<WorldTrio, Path> = mapOf(
         WorldLayout.PRIMARY to backendLevel(plan.primaryServerDir, "world"),
         WorldLayout.SECONDARY to backendLevel(plan.secondaryServerDir, "last"),
     )
 
-    /** One backend's save for one player. */
-    private data class BackendSave(val world: WorldTrio, val levelDir: Path, val file: Path)
+    /** One backend's save for one player, under the uuid its own file is named after. */
+    private data class BackendSave(val world: WorldTrio, val levelDir: Path, val uuid: UUID, val file: Path)
 
     /** A player's two saves, sorted into the live one and the one that becomes a bucket. */
     private data class PlayerSaves(
@@ -130,24 +139,25 @@ class PortalImport(private val plan: ImportPlan) {
 
         val identities = resolveIdentities()
         val saves = collectSaves(identities)
-        val unidentifiedSaves = unidentifiedSaves(identities)
+        val orphans = orphanedSaves(identities)
         val ops = OpsImport.rekey(backendOps(), identities)
         val regions = readRegions()
-        refuseIfUnidentified(unidentifiedSaves, ops.unresolved)
+        refuseIfUnidentified(describe(orphans), ops.unresolved)
 
         Files.createDirectories(staging)
         try {
             // Copying leaves the sources untouched, so it can go first. Moving cannot be
             // undone, so it goes last — everything that can still fail happens before the
-            // Portal's levels are disturbed.
-            if (plan.worldTransfer == WorldTransfer.COPY) stageLevel()
+            // Portal's own files are disturbed.
+            var quarantined = 0
+            if (plan.worldTransfer == WorldTransfer.COPY) quarantined = stageBulk(orphans)
             val store = JsonPlayerStore(staging.resolve("$MOD_DIRECTORY/players"))
             val records = stagePlayerRecords()
             val buckets = stageSaves(saves, store)
             val names = stageNameCache(identities)
             regions?.let { Files.writeString(staging.resolve(REGIONS_FILE), it.text) }
             Files.writeString(staging.resolve(OPS_FILE), OpsImport.serialize(ops.entries))
-            if (plan.worldTransfer == WorldTransfer.MOVE) stageLevel()
+            if (plan.worldTransfer == WorldTransfer.MOVE) quarantined = stageBulk(orphans)
             val report = ImportReport(
                 playersMigrated = saves.size,
                 bucketsSeeded = buckets,
@@ -155,20 +165,22 @@ class PortalImport(private val plan: ImportPlan) {
                 namesCached = names,
                 operators = ops.entries.size,
                 regions = regions?.count ?: 0,
-                unidentifiedSaves = unidentifiedSaves,
+                quarantinedSaves = quarantined,
+                unidentifiedSaves = describe(orphans),
                 unidentifiedOperators = ops.unresolved,
             )
             writeMarker(report)
             commit()
             return report
         } catch (failure: Throwable) {
-            // Never delete staging once it holds moved worlds: it is then the only copy
-            // of chunk data the Portal no longer has.
-            if (worldsMoved) {
+            // Never delete staging once it holds moved data: it is then the only copy of
+            // chunk data and quarantined saves the Portal no longer has.
+            if (portalDataMoved) {
                 throw IllegalStateException(
                     "the migration failed after the worlds were MOVED into $staging. " +
                         "The Portal's levels are no longer complete, and $staging now holds " +
-                        "the only on-disk copy of that chunk data — do NOT delete it. " +
+                        "the only on-disk copy of that chunk data (and of any quarantined " +
+                        "player saves) — do NOT delete it. " +
                         "Move it back or restore from backup before retrying.",
                     failure,
                 )
@@ -204,7 +216,10 @@ class PortalImport(private val plan: ImportPlan) {
                 prefix = "cannot identify every player the Portal's data mentions:\n  ",
                 separator = "\n  ",
                 postfix = "\nGive --identities a file of \"username\": \"<mojang uuid>\" entries for them, " +
-                    "or pass --skip-unidentified to leave their data behind deliberately.",
+                    "or pass --skip-unidentified to quarantine their saves instead — a quarantined save " +
+                    "is claimed by its owner the first time they log in, which is how the names nobody " +
+                    "has on file finally resolve. Operators cannot be quarantined: an op list is read " +
+                    "before anyone connects, so an operator no identity answers for is simply dropped.",
             ),
         )
     }
@@ -241,7 +256,7 @@ class PortalImport(private val plan: ImportPlan) {
             Files.newDirectoryStream(directory, "*$PLAYERDATA_SUFFIX").use { files ->
                 for (file in files) {
                     val uuid = UUID.fromString(file.name.removeSuffix(PLAYERDATA_SUFFIX))
-                    saves.getOrPut(uuid) { mutableListOf() }.add(BackendSave(world, levelDir, file))
+                    saves.getOrPut(uuid) { mutableListOf() }.add(BackendSave(world, levelDir, uuid, file))
                 }
             }
         }
@@ -289,15 +304,26 @@ class PortalImport(private val plan: ImportPlan) {
         return PlayerIdentity(name = portalUuidCache[uuid] ?: uuid.toString(), uuid = uuid, fileUuid = uuid)
     }
 
-    /** Backend saves that belong to nobody we can name a Mojang uuid for. */
-    private fun unidentifiedSaves(identities: PlayerIdentities): List<String> {
-        val known = backendUserCache()
-        return backendSaves
+    /**
+     * Backend saves that belong to nobody we can name a Mojang uuid for — the
+     * ones the migration quarantines for their owner to claim at login.
+     *
+     * Only offline-keyed files can land here: a version-4 name is already the
+     * uuid the merged server keys by, and [alreadyMojangKeyed] resolves those.
+     */
+    private fun orphanedSaves(identities: PlayerIdentities): List<BackendSave> =
+        backendSaves
             .filterKeys { identities[it] == null && it.version() == OFFLINE_UUID_VERSION }
-            .flatMap { (offlineUuid, saves) ->
-                val name = known[offlineUuid] ?: "unknown player"
-                saves.map { "$name ($offlineUuid, ${it.world.id})" }
-            }
+            .values
+            .flatten()
+
+    /** [orphans] as the operator reads them: named where a backend's own profile cache still knows them. */
+    private fun describe(orphans: List<BackendSave>): List<String> {
+        if (orphans.isEmpty()) return emptyList()
+        val known = backendUserCache()
+        return orphans.map { save ->
+            "${known[save.uuid] ?: "unknown player"} (${save.uuid}, ${save.world.id})"
+        }
     }
 
     /** offline uuid → username, as the backends' own profile caches remember them. */
@@ -333,6 +359,20 @@ class PortalImport(private val plan: ImportPlan) {
     // ---- staging ------------------------------------------------------------
 
     /**
+     * Everything that travels from the Portal by copy or by move, per
+     * [ImportPlan.worldTransfer]: the levels, and the quarantine. Returns the
+     * number of quarantined save files.
+     *
+     * This is the one phase that can disturb the Portal's own files, which is
+     * why [run] calls it first under [WorldTransfer.COPY] and last under
+     * [WorldTransfer.MOVE].
+     */
+    private fun stageBulk(orphans: List<BackendSave>): Int {
+        stageLevel()
+        return stageQuarantine(orphans)
+    }
+
+    /**
      * The Primary level as its own server wrote it — the version jump is the
      * new server's job — plus Secondary's chunk data in the dimension folders
      * the merged server reads its extra dimensions from. The per-player trees
@@ -360,6 +400,33 @@ class PortalImport(private val plan: ImportPlan) {
     }
 
     /**
+     * The saves nobody could be identified from, parked in the [SaveQuarantine] with their
+     * advancements and statistics, keyed by the offline uuid their files already carry —
+     * the only handle their owner's username will hash to at login. Both Worlds' sidecars
+     * come along: which World is the live one depends on a Portal record we cannot read
+     * without the Mojang uuid we do not have yet, so that choice belongs to the claim.
+     */
+    private fun stageQuarantine(orphans: List<BackendSave>): Int {
+        val quarantine = SaveQuarantine.under(staging.resolve(MOD_DIRECTORY))
+        for (save in orphans) {
+            transferFile(save.file, quarantine.save(save.world.id, save.uuid))
+            transferSidecar(
+                save.levelDir.resolve("$ADVANCEMENTS_DIRECTORY/${save.uuid}.json"),
+                quarantine.advancements(save.world.id, save.uuid),
+            )
+            transferSidecar(
+                save.levelDir.resolve("$STATS_DIRECTORY/${save.uuid}.json"),
+                quarantine.stats(save.world.id, save.uuid),
+            )
+        }
+        return orphans.size
+    }
+
+    private fun transferSidecar(from: Path, to: Path) {
+        if (Files.exists(from)) transferFile(from, to)
+    }
+
+    /**
      * Copies or moves a tree according to [ImportPlan.worldTransfer]. A move renames whole
      * top-level entries where the filesystem allows it — the cheap case this exists for —
      * and falls back to a copy when the rename crosses devices.
@@ -370,7 +437,7 @@ class PortalImport(private val plan: ImportPlan) {
         Files.newDirectoryStream(from).use { entries ->
             for (entry in entries) {
                 if (entry.name in skip) continue
-                worldsMoved = true
+                portalDataMoved = true
                 try {
                     Files.move(entry, to.resolve(entry.name))
                 } catch (crossDevice: java.nio.file.AtomicMoveNotSupportedException) {
@@ -379,6 +446,17 @@ class PortalImport(private val plan: ImportPlan) {
                     fallbackTransfer(entry, to.resolve(entry.name))
                 }
             }
+        }
+    }
+
+    /** One file copied or moved according to [ImportPlan.worldTransfer]. */
+    private fun transferFile(from: Path, to: Path) {
+        Files.createDirectories(to.parent)
+        if (plan.worldTransfer == WorldTransfer.COPY) {
+            Files.copy(from, to)
+        } else {
+            portalDataMoved = true
+            Files.move(from, to)
         }
     }
 
