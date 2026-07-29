@@ -29,4 +29,13 @@ interface PlayerStore {
     fun notepadPages(uuid: UUID): List<String>?
 
     fun setNotepadPages(uuid: UUID, pages: List<String>)
+
+    /**
+     * The player's Per-World Bucket for [world] (`"primary"`/`"secondary"`),
+     * or null if they have never left that World — the Worlds service reads
+     * null as "first visit: use the World's spawn".
+     */
+    fun bucket(uuid: UUID, world: String): PerWorldBucket?
+
+    fun setBucket(uuid: UUID, world: String, bucket: PerWorldBucket)
 }

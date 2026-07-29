@@ -16,7 +16,8 @@
       "eu.mctraveler.gametest.PrivateMessagesGameTest",
       "eu.mctraveler.gametest.ChatGameTest",
       "eu.mctraveler.gametest.AwayGameTest",
-      "eu.mctraveler.gametest.NotepadGameTest"
+      "eu.mctraveler.gametest.NotepadGameTest",
+      "eu.mctraveler.gametest.WorldsGameTest"
     ],
     "server": [
       {
@@ -25,6 +26,7 @@
       }
     ]
   },
+  "mixins": ["mctraveler-test.mixins.json"],
   "depends": {
     "mctraveler": "*"
   }

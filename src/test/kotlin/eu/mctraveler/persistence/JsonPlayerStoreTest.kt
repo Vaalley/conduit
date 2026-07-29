@@ -121,6 +121,51 @@ class JsonPlayerStoreTest {
     }
 
     @Test
+    fun `a player who never visited a World has no bucket there`() {
+        assertNull(store().bucket(uuid, "secondary"))
+    }
+
+    @Test
+    fun `Per-World Buckets round-trip independently per World`() {
+        val store = store()
+        val primary = PerWorldBucket("nether", 100.5, 64.0, -20.5, 90.0f, -10.5f)
+        val secondary = PerWorldBucket("overworld", -3.25, 70.0, 8.0, 0.0f, 0.0f)
+        store.setBucket(uuid, "primary", primary)
+        store.setBucket(uuid, "secondary", secondary)
+        assertEquals(primary, store.bucket(uuid, "primary"))
+        assertEquals(secondary, store.bucket(uuid, "secondary"))
+    }
+
+    @Test
+    fun `rewriting one World's bucket leaves the other World's and legacy fields untouched`() {
+        val file = dir.resolve("$uuid.json")
+        // A record as a future version might write it: legacy economy data, a
+        // bucket field carrying keys this version doesn't know (ticket 05's
+        // respawn), and predecessor-era number formatting throughout.
+        Files.writeString(
+            file,
+            """{"balance":1234.50,"worlds":{"secondary":{"dimension":"end",""" +
+                """"x":1.0,"y":2.0,"z":3.0,"yaw":0.0,"pitch":0.0,"futureRespawn":{"x":1}}},""" +
+                """"lastServer":"secondary"}""",
+        )
+        store().setBucket(uuid, "primary", PerWorldBucket("overworld", 0.5, 80.0, 0.5, 180.0f, 0.0f))
+        val written = Files.readString(file)
+        // The other World's bucket slice (unknown keys and all) and the legacy
+        // fields ride through byte-for-byte; only the primary bucket is new.
+        assert(
+            written.contains(
+                """"secondary":{"dimension":"end","x":1.0,"y":2.0,"z":3.0,""" +
+                    """"yaw":0.0,"pitch":0.0,"futureRespawn":{"x":1}}""",
+            ),
+        ) { "secondary bucket was not preserved verbatim: $written" }
+        assert(written.contains(""""balance":1234.50""")) { "legacy field disturbed: $written" }
+        assertEquals(
+            PerWorldBucket("overworld", 0.5, 80.0, 0.5, 180.0f, 0.0f),
+            store().bucket(uuid, "primary"),
+        )
+    }
+
+    @Test
     fun `a file that cannot be parsed is never overwritten`() {
         val file = dir.resolve("$uuid.json")
         Files.writeString(file, """{"balance":12.3""") // truncated write, e.g. a past crash

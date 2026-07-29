@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "eu.mctraveler.gametest.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "mixins": [
+    "GameTestServerDatapackDimensionsMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

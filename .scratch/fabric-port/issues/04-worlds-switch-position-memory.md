@@ -4,13 +4,28 @@
 
 **Blocked by:** 01 (Scaffold), 02 (Text DSL), 03 (Persistence store).
 
-**Status:** ready-for-agent
+**Status:** done
 
 See `../spec.md` (Implementation Decisions: Worlds, Per-World Bucket), ADR 0001, and the topology section of `docs/research/portal-feature-inventory.md`. Worlds service is built N-capable; the product ships with Primary (the vanilla trio) and Secondary.
 
-- [ ] Secondary trio (overworld-like, nether, end) registered via static datapack dimensions shipped in the mod jar
-- [ ] `/switch` toggles the player's World with the exact "Switching to Primary/Secondary..." message and a failure message on error; Travel is near-instant
-- [ ] Position Memory (position, rotation, dimension-within-trio) is saved on leaving a World and restored on return; first visit lands at the destination World's spawn
-- [ ] Inventory, XP, health, hunger, ender chest, advancements, stats ride with the player unchanged across Travel
-- [ ] Logging out and back in returns the player to the World and position they left; brand-new players start in Primary
-- [ ] Gametests: switch both directions with message assertions, position-memory restore, login routing, shared-inventory invariant
+- [x] Secondary trio (overworld-like, nether, end) registered via static datapack dimensions shipped in the mod jar
+- [x] `/switch` toggles the player's World with the exact "Switching to Primary/Secondary..." message and a failure message on error; Travel is near-instant
+- [x] Position Memory (position, rotation, dimension-within-trio) is saved on leaving a World and restored on return; first visit lands at the destination World's spawn
+- [x] Inventory, XP, health, hunger, ender chest, advancements, stats ride with the player unchanged across Travel
+- [x] Logging out and back in returns the player to the World and position they left; brand-new players start in Primary
+- [x] Gametests: switch both directions with message assertions, position-memory restore, login routing, shared-inventory invariant
+
+## Comments
+
+Key decisions, for later tickets (05 respawn/portals, 12 regions, 18 importer):
+
+- **Dimension ids** (datapack JSONs in the mod jar, `src/main/resources/data/mctraveler/dimension/`): Secondary's trio is `mctraveler:secondary` (dimension type `minecraft:overworld`, overworld noise settings + multi-noise overworld preset — generation-identical to the vanilla overworld, same world seed), `mctraveler:secondary_nether` (`minecraft:the_nether` type, nether noise + preset) and `mctraveler:secondary_end` (`minecraft:the_end` type, end noise + end biome source). Primary is the vanilla `minecraft:overworld`/`the_nether`/`the_end`. Region files (12) and the importer's world-name mapping (18) should use these ids.
+- **Worlds service surface** (`eu.mctraveler.worlds`): `Worlds` reachable via `WorldsFeature.worlds` (created at SERVER_STARTING, after `MCTraveler.persistence`). `World` has `id` ("primary"/"secondary" — the Portal's `lastServer` values), `displayName` ("Primary"/"Secondary"), `dimension(role)`, `roleOf(dimension)`; `DimensionRole` is OVERWORLD/NETHER/END. `Worlds.worldOf(dimension|player)` answers "which World am I in" (null outside every trio) — ticket 05's portal routing should resolve targets with `world.dimension(NETHER/END)` of the *current* World, and its respawn logic extends the same Per-World Bucket.
+- **Per-World Bucket storage**: a mod-owned `worlds` field in the existing `players/<uuid>.json`, one object per World id: `"worlds":{"primary":{"dimension":"nether","x":…,"y":…,"z":…,"yaw":…,"pitch":…}}`. `dimension` is the trio-relative role id (`"overworld"|"nether"|"end"`), not a full dimension id, so buckets survive dimension renames and one schema serves every World. Typed surface: `PlayerStore.bucket(uuid, world)` / `setBucket(uuid, world, PerWorldBucket)` (`eu.mctraveler.persistence.PerWorldBucket`). Written through `PortalJson` raw slices: legacy fields and *other* Worlds' bucket slices (including keys a newer version adds — e.g. ticket 05's respawn point) ride through byte-for-byte; only the written World's slice is re-encoded. Ticket 05 should add its respawn fields to `PerWorldBucket` + the encoder/decoder; ticket 18 writes buckets via the same store API.
+- **Bucket lifecycle**: saved only when *leaving* a World via Travel (vanilla playerdata already persists the live position for logout/login); restored on arrival; missing bucket = first visit → destination World's spawn (shared spawn x/z, destination terrain's surface Y via heightmap — the level data, including spawn coords, is shared across dimensions, so Y must come from the destination's own terrain).
+- **Teleport approach**: vanilla `ServerPlayer.teleportTo(level, x, y, z, relatives, yaw, pitch, false)` — the `FabricDimensions.teleport` helper no longer exists on 26.2. Single-tick, no delay (deviation register 11 already covers near-instant Travel).
+- **Login routing**: vanilla restores dimension+position from playerdata (26.2 does this in the configuration phase's `PrepareSpawnTask`, *not* in `placeNewPlayer`); the JOIN hook only covers a lastWorld/actual-World mismatch (post-import data) by restoring the lastWorld bucket without overwriting the origin bucket, and records `lastServer` on every login and switch.
+- **Test-harness mixin (gametest source set only, never shipped)**: vanilla's `GameTestServer` bakes its world against an *empty* level-stem registry, silently dropping all datapack dimensions — `GameTestServerDatapackDimensionsMixin` (`@WrapOperation` on `WorldDimensions.bake` inside `lambda$create$1`) swaps in the datapack registry so the test server matches a dedicated server. The synthetic lambda name must be re-checked on Minecraft upgrades. This required a `"mixins"` key in the gametest `fabric.mod.json` (beyond the agreed entrypoint one-liners — flagged for merge attention).
+- **Gametest infra for later tickets**: `TestPlayers.login/logout` runs the real placement/disconnect paths (including playerdata load, mimicking `PrepareSpawnTask`) with a `CapturingPlayer` that records system messages; `Component.textRuns()` flattens messages to (text, color, bold) runs for exact Portal-wording assertions.
+- **Known gap**: the `/switch` failure branch (`ERROR Failed to switch server: <error>`, Portal wording) is implemented but not gametested — a healthy server offers no way to make Travel fail without injecting broken state. The message shape itself is Paint's `error()` (unit-covered in ticket 02).
+- MCTraveler.kt got exactly one registration line (`eu.mctraveler.worlds.WorldsFeature.register()`, fully qualified to stay a single line); the gametest `fabric.mod.json` got one entrypoint line plus the `mixins` key noted above.

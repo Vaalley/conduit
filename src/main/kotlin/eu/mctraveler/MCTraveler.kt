@@ -50,6 +50,7 @@ object MCTraveler : ModInitializer {
             checkNotNull(persistence).names.record(player.uuid, player.gameProfile.name)
         }
         NotepadFeature.register()
+        eu.mctraveler.worlds.WorldsFeature.register()
         LOGGER.info("MCTraveler initialized")
     }
 }
