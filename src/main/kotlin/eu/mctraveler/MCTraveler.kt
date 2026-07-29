@@ -3,6 +3,7 @@ package eu.mctraveler
 import eu.mctraveler.away.AwayFeature
 import eu.mctraveler.chat.ChatFeature
 import eu.mctraveler.chat.PrivateMessages
+import eu.mctraveler.notepad.NotepadFeature
 import eu.mctraveler.persistence.PersistenceService
 import eu.mctraveler.tablist.TabListFeature
 import net.fabricmc.api.ModInitializer
@@ -48,6 +49,7 @@ object MCTraveler : ModInitializer {
             val player = handler.player
             checkNotNull(persistence).names.record(player.uuid, player.gameProfile.name)
         }
+        NotepadFeature.register()
         LOGGER.info("MCTraveler initialized")
     }
 }
