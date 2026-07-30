@@ -294,23 +294,43 @@ class PortalImport(private val plan: ImportPlan) {
     /** Files in a `playerdata/` directory whose name is not a uuid — left where they are. */
     private val unnamedFiles = mutableListOf<String>()
 
+    /**
+     * Every save the migration can place, one entry per *player*.
+     *
+     * Grouping is by the Mojang uuid a file resolves to, not by the file's own name,
+     * because one player can own several files: someone who played both before and
+     * after the backends went offline-mode has a Mojang-keyed save *and* an
+     * offline-keyed one, and both are them. Keying by filename would migrate them
+     * twice — which the live cutover surfaced as two saves racing for the same
+     * destination.
+     *
+     * Within a World the newest file wins: two saves for one player in one World are
+     * the same character at two points in time, and the later one is where they left
+     * off. Across Worlds the pair is still live-save plus Per-World Bucket.
+     */
     private fun collectSaves(identities: PlayerIdentities): List<PlayerSaves> {
         val portalRecords: PlayerStore = JsonPlayerStore(plan.portalDir.resolve(PLAYERS_DIRECTORY))
-        return backendSaves.mapNotNull { (offlineUuid, saves) ->
-            val identity = identities[offlineUuid]
-                ?: alreadyMojangKeyed(offlineUuid)
-                ?: return@mapNotNull null
-            // The World they were last on holds their live state; where the
-            // Portal has no answer (or no save there), the save we do have is
-            // the live one — a player is only ever in one World at a time.
+        val byPlayer = LinkedHashMap<UUID, MutableList<Pair<PlayerIdentity, BackendSave>>>()
+        for ((fileUuid, saves) in backendSaves) {
+            val identity = identities[fileUuid] ?: alreadyMojangKeyed(fileUuid) ?: continue
+            for (save in saves) byPlayer.getOrPut(identity.uuid) { mutableListOf() } += identity to save
+        }
+
+        return byPlayer.map { (_, found) ->
+            // Prefer an identity that carries a real username over one named after a
+            // uuid, so the name cache learns something useful.
+            val identity = found.map { it.first }.minByOrNull { it.name.length } ?: found.first().first
+            val saves = found.map { it.second }
             val lastWorld = portalRecords.lastWorld(identity.uuid)
             val preferred = lastWorld?.let {
                 checkNotNull(WorldLayout.byId(it)) {
                     "${identity.name} has an unknown lastServer \"$it\" in their Portal record"
                 }
             } ?: WorldLayout.PRIMARY
-            val live = saves.firstOrNull { it.world == preferred } ?: saves.first()
-            PlayerSaves(identity, live, saves.firstOrNull { it != live })
+            val newestPerWorld = saves.groupBy { it.world }
+                .mapValues { (_, world) -> world.maxBy { Files.getLastModifiedTime(it.file).toMillis() } }
+            val live = newestPerWorld[preferred] ?: newestPerWorld.values.first()
+            PlayerSaves(identity, live, newestPerWorld.values.firstOrNull { it !== live })
         }
     }
 

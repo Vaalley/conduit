@@ -163,6 +163,26 @@ class PortalImportTest {
     }
 
     @Test
+    fun `one player with both an offline and a Mojang keyed save migrates once`() {
+        // Someone who played before and after the backends went offline-mode owns two
+        // files in one World. They are one person, and the newer file is where they
+        // left off — the live cutover hit this as two saves racing for one destination.
+        val old = portal.plan(target).primaryServerDir.resolve("world/playerdata/${OfflineUuid.of("Wanderer")}.dat")
+        portal.mojangKeyedPlayerdata("primary", wanderer, Triple(999.5, 80.0, 999.5))
+        val newer = portal.plan(target).primaryServerDir.resolve("world/playerdata/$wanderer.dat")
+        Files.setLastModifiedTime(old, java.nio.file.attribute.FileTime.fromMillis(1_000_000))
+        Files.setLastModifiedTime(newer, java.nio.file.attribute.FileTime.fromMillis(2_000_000))
+
+        val report = migrate()
+
+        assertEquals(2, report.playersMigrated, "Wanderer and Notch — Wanderer counted once, not twice")
+        // Wanderer's Portal record says Secondary, so Secondary is still live; the
+        // Primary pair collapses to the newer file for the bucket.
+        assertEquals(500.5, playerdata(wanderer).getList("Pos").get().getDouble(0).get())
+        assertEquals(999.5, players().bucket(wanderer, "primary")!!.x, "the newer Primary save seeds the bucket")
+    }
+
+    @Test
     fun `a playerdata file that is not named after a uuid is ignored, not fatal`() {
         // The live deployment held 93 files named `<uuid>-<digits>.dat`. Whatever wrote
         // them, they key to nobody — and a cutover must not be stopped by strays the
