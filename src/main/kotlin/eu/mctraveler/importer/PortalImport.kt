@@ -72,6 +72,8 @@ data class ImportReport(
     val regions: Int,
     /** Save files parked in the [SaveQuarantine] for their owner to claim at login. */
     val quarantinedSaves: Int,
+    /** Files in a backend `playerdata/` directory whose name is not a uuid; left untouched. */
+    val unnamedFiles: List<String> = emptyList(),
     /** Who the quarantine holds, named where a backend's profile cache still knows them. */
     val unidentifiedSaves: List<String>,
     val unidentifiedOperators: List<String>,
@@ -90,7 +92,9 @@ data class ImportReport(
         "name cache entries     : $namesCached",
         "operators              : $operators",
         "regions                : $regions",
-    ) + unidentifiedOperators.map { "LEFT BEHIND operator   : $it" }
+        "ignored non-uuid files : ${unnamedFiles.size}",
+    ) + unidentifiedOperators.map { "LEFT BEHIND operator   : $it" } +
+        unnamedFiles.take(5).map { "ignored file           : $it" }
 }
 
 /**
@@ -169,6 +173,7 @@ class PortalImport(private val plan: ImportPlan) {
                 operators = ops.entries.size,
                 regions = regions?.count ?: 0,
                 quarantinedSaves = quarantined,
+                unnamedFiles = unnamedFiles.toList(),
                 unidentifiedSaves = orphanNames,
                 unidentifiedOperators = ops.unresolved,
             )
@@ -255,7 +260,16 @@ class PortalImport(private val plan: ImportPlan) {
         }
     }
 
-    /** Every backend save, keyed by the offline uuid its file is named after. */
+    /**
+     * Every backend save, keyed by the uuid its file is named after.
+     *
+     * A `playerdata/` directory is not guaranteed to hold only `<uuid>.dat`: the live
+     * MCTraveler deployment had 93 files named `<uuid>-<digits>.dat`, all but one of
+     * them belonging to a single player. Whatever wrote them, they are not saves this
+     * server can key to anybody, so a name that is not exactly a uuid is skipped and
+     * counted rather than crashing the migration — the alternative is a cutover that
+     * refuses to start over stray files nobody can act on.
+     */
     private val backendSaves: Map<UUID, List<BackendSave>> by lazy {
         val saves = LinkedHashMap<UUID, MutableList<BackendSave>>()
         for ((world, levelDir) in backends) {
@@ -263,13 +277,22 @@ class PortalImport(private val plan: ImportPlan) {
             if (Files.notExists(directory)) continue
             Files.newDirectoryStream(directory, "*$PLAYERDATA_SUFFIX").use { files ->
                 for (file in files) {
-                    val uuid = UUID.fromString(file.name.removeSuffix(PLAYERDATA_SUFFIX))
+                    val uuid = runCatching {
+                        UUID.fromString(file.name.removeSuffix(PLAYERDATA_SUFFIX))
+                    }.getOrNull()
+                    if (uuid == null) {
+                        unnamedFiles += "${file.name} (${world.id})"
+                        continue
+                    }
                     saves.getOrPut(uuid) { mutableListOf() }.add(BackendSave(world, levelDir, uuid, file))
                 }
             }
         }
         saves
     }
+
+    /** Files in a `playerdata/` directory whose name is not a uuid — left where they are. */
+    private val unnamedFiles = mutableListOf<String>()
 
     private fun collectSaves(identities: PlayerIdentities): List<PlayerSaves> {
         val portalRecords: PlayerStore = JsonPlayerStore(plan.portalDir.resolve(PLAYERS_DIRECTORY))

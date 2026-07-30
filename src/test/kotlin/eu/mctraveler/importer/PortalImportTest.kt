@@ -163,6 +163,23 @@ class PortalImportTest {
     }
 
     @Test
+    fun `a playerdata file that is not named after a uuid is ignored, not fatal`() {
+        // The live deployment held 93 files named `<uuid>-<digits>.dat`. Whatever wrote
+        // them, they key to nobody — and a cutover must not be stopped by strays the
+        // operator cannot act on.
+        val stray = portal.plan(target).primaryServerDir
+            .resolve("world/playerdata/1cf923d4-18fa-4b80-a0bc-38f248831894-1115360035497270329.dat")
+        Files.createDirectories(stray.parent)
+        Files.writeString(stray, "not a save this server can key to anybody")
+
+        val report = migrate()
+
+        assertEquals(1, report.unnamedFiles.size, "the stray should be reported, once")
+        assertTrue(report.unnamedFiles.single().startsWith("1cf923d4"), "reported by name")
+        assertTrue(Files.exists(stray), "a file we cannot key is left exactly where it was")
+    }
+
+    @Test
     fun `a copy migration leaves the Portal's worlds untouched`() {
         val primaryRegion = portal.plan(target).primaryServerDir.resolve("world/region/r.0.0.mca")
 
