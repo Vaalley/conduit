@@ -2,6 +2,8 @@ package eu.mctraveler.identity
 
 import com.mojang.authlib.GameProfile
 import java.util.UUID
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.apache.logging.log4j.Level
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.core.LogEvent
@@ -34,6 +36,31 @@ class IdentityRemapsTest {
     }
 
     @Test
+    fun `the authenticated profile's properties ride across the remap`() {
+        val authenticated = GameProfile(UUID.randomUUID(), "AlsoJames", signedTextures("payload"))
+
+        val remapped = IdentityRemaps.remap(authenticated)
+
+        val textures = remapped.properties()["textures"].single()
+        assertEquals("payload", textures.value())
+        assertEquals("mojang-signature", textures.signature())
+    }
+
+    @Test
+    fun `both alias uuids are recognised as aliased, and nobody else is`() {
+        assertTrue(IdentityRemaps.isAliased(UUID.fromString("461789c5-4501-48a0-b47d-7574c9a7b9ec")))
+        assertTrue(IdentityRemaps.isAliased(UUID.fromString("be9482bb-6bcd-4df3-9cf4-9f1fb61c5e93")))
+        assertFalse(IdentityRemaps.isAliased(UUID.randomUUID()))
+    }
+
+    @Test
+    fun `the uuid a remapped player authenticated with is not itself aliased`() {
+        val authenticated = UUID.fromString("e4140f3f-1111-2222-3333-444455556666")
+        assertFalse(IdentityRemaps.isAliased(authenticated))
+        assertTrue(IdentityRemaps.isAliased(IdentityRemaps.remap(GameProfile(authenticated, "AlsoJames")).id()))
+    }
+
+    @Test
     fun `every other profile passes through untouched`() {
         val profile = GameProfile(UUID.randomUUID(), "Notch")
         assertEquals(profile, IdentityRemaps.remap(profile))
@@ -57,6 +84,14 @@ class IdentityRemapsTest {
     fun `a pass-through logs nothing`() {
         val messages = captureModLog { IdentityRemaps.remap(GameProfile(UUID.randomUUID(), "Notch")) }
         assertEquals(emptyList<String>(), messages)
+    }
+
+    /** A property map holding one Mojang-signed `textures` property, as an authenticated profile carries. */
+    private fun signedTextures(value: String): com.mojang.authlib.properties.PropertyMap {
+        val properties = com.google.common.collect.LinkedHashMultimap
+            .create<String, com.mojang.authlib.properties.Property>()
+        properties.put("textures", com.mojang.authlib.properties.Property("textures", value, "mojang-signature"))
+        return com.mojang.authlib.properties.PropertyMap(properties)
     }
 
     /** Runs [block] with a capturing appender on the mod's logger; returns the formatted messages. */
