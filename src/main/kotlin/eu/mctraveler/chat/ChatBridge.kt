@@ -3,6 +3,7 @@ package eu.mctraveler.chat
 import java.util.concurrent.ConcurrentLinkedDeque
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents
 import net.minecraft.network.chat.Component
+import net.minecraft.network.chat.PlayerChatMessage
 
 /**
  * Captures in-game chat lines so the Observer Discord bot can poll them and
@@ -23,7 +24,8 @@ object ChatBridge {
 
 	fun register() {
 		ServerMessageEvents.CHAT_MESSAGE.register { message, sender, _ ->
-			val content = sanitize(message.content)
+			val playerMessage = message as? PlayerChatMessage ?: return@register
+			val content = sanitize(playerMessage.decoratedContent())
 			if (content.isNotEmpty()) {
 				record(sender.gameProfile.name, content)
 			}
