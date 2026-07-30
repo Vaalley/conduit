@@ -400,6 +400,16 @@ class PortalImportTest {
     }
 
     @Test
+    fun `a migration with nobody to quarantine leaves no quarantine directory behind`() {
+        // What makes the claim cost a fresh server nothing: with no quarantine
+        // directory, a login's whole involvement is one failed lookup.
+        val report = migrate()
+
+        assertEquals(0, report.quarantinedSaves)
+        assertFalse(Files.exists(target.resolve("mctraveler/orphaned-saves")))
+    }
+
+    @Test
     fun `an operator nobody can identify is still reported as left behind`() {
         portal.ops("Notch", "Ghost")
 

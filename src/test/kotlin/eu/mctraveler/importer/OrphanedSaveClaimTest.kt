@@ -202,10 +202,32 @@ class OrphanedSaveClaimTest {
 
         val outcome = claim()
 
-        assertTrue(outcome is ClaimOutcome.Failed, "expected a failed claim, got $outcome")
+        assertTrue(
+            outcome is ClaimOutcome.Failed && !outcome.anythingWritten,
+            "expected a failure with nothing written, got $outcome",
+        )
         assertTrue(Files.exists(quarantine.save("primary", aliceOffline)), "the quarantine must survive")
         assertFalse(Files.exists(saves.resolve("$alice.dat")), "nothing may be half-written")
         assertNull(players.lastWorld(alice))
+    }
+
+    @Test
+    fun `a claim that fails part-way through writing says so`() {
+        // Something already in the live World's place — the one state that stops a
+        // claim after it has begun. The audit line must not claim otherwise.
+        quarantined("primary")
+        write(quarantine.advancements("primary", aliceOffline), "{}")
+        write(advancements.resolve("$alice.json"), "somebody else's progress")
+
+        val outcome = claim()
+
+        assertTrue(
+            outcome is ClaimOutcome.Failed && outcome.anythingWritten,
+            "expected a failure that admits it wrote, got $outcome",
+        )
+        assertEquals("somebody else's progress", Files.readString(advancements.resolve("$alice.json")))
+        assertTrue(Files.exists(quarantine.save("primary", aliceOffline)), "the quarantine must survive")
+        assertFalse(Files.exists(saves.resolve("$alice.dat")), "the live save is written last, so not at all")
     }
 
     /** A Portal-era backend save for [username], already in the quarantine under [world]. */

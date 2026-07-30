@@ -1,5 +1,6 @@
 package eu.mctraveler.importer
 
+import eu.mctraveler.persistence.PerWorldBucket
 import eu.mctraveler.persistence.PlayerStore
 import java.nio.file.Files
 import java.nio.file.Path
@@ -40,12 +41,21 @@ sealed interface ClaimOutcome {
     ) : ClaimOutcome
 
     /**
-     * A quarantined save could not be claimed. Nothing was written, and the
-     * quarantine is intact — but this needs an operator, because once the player
-     * plays and gets a save of their own the guard will (correctly) refuse
-     * forever after.
+     * A quarantined save could not be claimed. Either way this needs an operator,
+     * because once the player plays and gets a save of their own the guard will
+     * (correctly) refuse the claim forever after.
+     *
+     * [anythingWritten] separates the two very different states an operator can
+     * be in: false means the claim failed while working itself out, so the
+     * quarantine is whole and a retry is free; true means it failed part-way
+     * through writing, and what landed has to be looked at.
      */
-    data class Failed(val username: String, val uuid: UUID, val reason: String) : ClaimOutcome
+    data class Failed(
+        val username: String,
+        val uuid: UUID,
+        val reason: String,
+        val anythingWritten: Boolean,
+    ) : ClaimOutcome
 }
 
 /**
@@ -84,7 +94,7 @@ sealed interface ClaimOutcome {
 class OrphanedSaveClaim(
     private val quarantine: SaveQuarantine,
     /** Vanilla's own player-save directory — where `PlayerDataStorage` will look. */
-    private val saves: Path,
+    private val playerdata: Path,
     private val advancements: Path,
     private val stats: Path,
     private val players: PlayerStore,
@@ -104,54 +114,77 @@ class OrphanedSaveClaim(
         val quarantined = WorldLayout.all.filter { Files.isRegularFile(quarantine.save(it.id, offlineUuid)) }
         if (quarantined.isEmpty()) return ClaimOutcome.NoOrphan
         if (hasSave(uuid)) return ClaimOutcome.AlreadyLive(username, uuid)
-        return try {
-            perform(uuid, username, offlineUuid, quarantined)
+
+        // Two phases, and the difference between their failures is the whole
+        // reason they are separate: the claim is worked out in full before a byte
+        // is written, so a save this server cannot place fails while the
+        // quarantine is still whole — and a failure during the writes has to say
+        // so, because an audit line claiming nothing was written when something
+        // was is worse than no line at all.
+        val prepared = try {
+            prepare(uuid, offlineUuid, quarantined)
         } catch (failure: Exception) {
-            ClaimOutcome.Failed(username, uuid, failure.message ?: failure.toString())
+            return ClaimOutcome.Failed(username, uuid, reason(failure), anythingWritten = false)
+        }
+        return try {
+            perform(uuid, offlineUuid, prepared)
+            ClaimOutcome.Claimed(
+                username = username,
+                uuid = uuid,
+                liveWorld = prepared.live.id,
+                bucketWorld = prepared.bucket?.first?.id,
+                dataVersion = prepared.dataVersion,
+            )
+        } catch (failure: Exception) {
+            ClaimOutcome.Failed(username, uuid, reason(failure), anythingWritten = true)
         }
     }
 
-    private fun perform(
-        uuid: UUID,
-        username: String,
-        offlineUuid: UUID,
-        quarantined: List<WorldTrio>,
-    ): ClaimOutcome {
+    /** A claim worked out in full, with nothing written yet. */
+    private class PreparedClaim(
+        val quarantined: List<WorldTrio>,
+        val live: WorldTrio,
+        val liveSave: CompoundTag,
+        val dataVersion: Int,
+        val bucket: Pair<WorldTrio, PerWorldBucket>?,
+    )
+
+    private fun prepare(uuid: UUID, offlineUuid: UUID, quarantined: List<WorldTrio>): PreparedClaim {
         val live = liveWorld(uuid, quarantined)
         val other = quarantined.firstOrNull { it != live }
-
-        // Read and transform everything before a byte is written: a save this
-        // server cannot place must fail while the quarantine is still whole.
         val liveTag = read(quarantine.save(live.id, offlineUuid))
-        val liveSave = PlayerdataImport.live(liveTag, live)
-        val bucket = other?.let { it to PlayerdataImport.bucket(read(quarantine.save(it.id, offlineUuid))) }
+        return PreparedClaim(
+            quarantined = quarantined,
+            live = live,
+            liveSave = PlayerdataImport.live(liveTag, live),
+            dataVersion = NbtUtils.getDataVersion(liveTag, UNKNOWN_DATA_VERSION),
+            bucket = other?.let { it to PlayerdataImport.bucket(read(quarantine.save(it.id, offlineUuid))) },
+        )
+    }
 
+    private fun perform(uuid: UUID, offlineUuid: UUID, claim: PreparedClaim) {
         // Written in recovery order. Everything a repeated claim would simply
         // redo goes first; the live save goes last, because it is the file the
         // guard keys on and therefore the point of no return. Interrupted before
         // it, the next login claims again from an untouched quarantine;
         // interrupted after it, the next login is refused by the guard and the
         // leftover quarantine files are an operator's cleanup, not a data loss.
-        bucket?.let { (world, seeded) -> players.setBucket(uuid, world.id, seeded) }
-        if (players.lastWorld(uuid) != live.id) players.setLastWorld(uuid, live.id)
-        takeSidecar(quarantine.advancements(live.id, offlineUuid), advancements.resolve("$uuid.json"))
-        takeSidecar(quarantine.stats(live.id, offlineUuid), stats.resolve("$uuid.json"))
-        Files.createDirectories(saves)
-        NbtIo.writeCompressed(liveSave, saves.resolve("$uuid$SAVE_SUFFIX"))
+        claim.bucket?.let { (world, seeded) -> players.setBucket(uuid, world.id, seeded) }
+        if (players.lastWorld(uuid) != claim.live.id) players.setLastWorld(uuid, claim.live.id)
+        takeSidecar(quarantine.advancements(claim.live.id, offlineUuid), advancements.resolve("$uuid.json"))
+        takeSidecar(quarantine.stats(claim.live.id, offlineUuid), stats.resolve("$uuid.json"))
+        Files.createDirectories(playerdata)
+        NbtIo.writeCompressed(claim.liveSave, playerdata.resolve("$uuid$SAVE_SUFFIX"))
 
         // The other World's advancements and statistics are dropped here, as
         // they are for every migrated player: two sets cannot merge into the one
         // shared set ADR 0001 keeps (spec deviation register 46).
-        quarantined.forEach { world -> quarantine.filesOf(world.id, offlineUuid).forEach(Files::deleteIfExists) }
-
-        return ClaimOutcome.Claimed(
-            username = username,
-            uuid = uuid,
-            liveWorld = live.id,
-            bucketWorld = bucket?.first?.id,
-            dataVersion = NbtUtils.getDataVersion(liveTag, 0),
-        )
+        claim.quarantined.forEach { world ->
+            quarantine.filesOf(world.id, offlineUuid).forEach(Files::deleteIfExists)
+        }
     }
+
+    private fun reason(failure: Exception): String = failure.message ?: failure.toString()
 
     /**
      * Which World's save becomes the live one, by the migration's own rule: the
@@ -171,13 +204,16 @@ class OrphanedSaveClaim(
      * player whose data must not be replaced.
      */
     private fun hasSave(uuid: UUID): Boolean =
-        Files.exists(saves.resolve("$uuid$SAVE_SUFFIX")) || Files.exists(saves.resolve("$uuid$BACKUP_SUFFIX"))
+        Files.exists(playerdata.resolve("$uuid$SAVE_SUFFIX")) ||
+            Files.exists(playerdata.resolve("$uuid$BACKUP_SUFFIX"))
 
     /** One per-player side file, moved out of the quarantine — never over an existing one. */
     private fun takeSidecar(from: Path, to: Path) {
         if (Files.notExists(from)) return
-        require(Files.notExists(to)) {
-            "$to already exists for a player with no save of their own — refusing to overwrite it"
+        if (Files.exists(to)) {
+            throw IllegalStateException(
+                "$to already exists for a player with no save of their own — refusing to overwrite it",
+            )
         }
         Files.createDirectories(to.parent)
         Files.move(from, to)
@@ -185,10 +221,13 @@ class OrphanedSaveClaim(
 
     private fun read(save: Path): CompoundTag = NbtIo.readCompressed(save, NbtAccounter.unlimitedHeap())
 
-    private companion object {
-        const val SAVE_SUFFIX = ".dat"
+    companion object {
+        /** What [ClaimOutcome.Claimed.dataVersion] reads when the save carries none at all. */
+        const val UNKNOWN_DATA_VERSION = 0
+
+        private const val SAVE_SUFFIX = ".dat"
 
         /** Vanilla's own backup of a player save, which `PlayerDataStorage.load` falls back to. */
-        const val BACKUP_SUFFIX = ".dat_old"
+        private const val BACKUP_SUFFIX = ".dat_old"
     }
 }

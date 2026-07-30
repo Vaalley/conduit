@@ -29,8 +29,7 @@ object OrphanedSaveClaimFeature {
      * The live claim, or null before the first server start (and in the importer
      * tool, which registers nothing) — the mixin is then inert.
      */
-    var claim: OrphanedSaveClaim? = null
-        private set
+    private var claim: OrphanedSaveClaim? = null
 
     fun register() {
         ServerLifecycleEvents.SERVER_STARTING.register { server ->
@@ -39,7 +38,7 @@ object OrphanedSaveClaimFeature {
                 quarantine = SaveQuarantine.under(persistence.root),
                 // Vanilla's own directories for the three per-player files, so a
                 // claim writes exactly where the login path reads.
-                saves = server.getWorldPath(LevelResource.PLAYER_DATA_DIR),
+                playerdata = server.getWorldPath(LevelResource.PLAYER_DATA_DIR),
                 advancements = server.getWorldPath(LevelResource.PLAYER_ADVANCEMENTS_DIR),
                 stats = server.getWorldPath(LevelResource.PLAYER_STATS_DIR),
                 players = persistence.players,
@@ -67,7 +66,11 @@ object OrphanedSaveClaimFeature {
                 outcome.uuid,
                 outcome.liveWorld,
                 outcome.bucketWorld?.let { "Per-World Bucket seeded for $it" } ?: "no save in the other World",
-                outcome.dataVersion,
+                if (outcome.dataVersion == OrphanedSaveClaim.UNKNOWN_DATA_VERSION) {
+                    "absent"
+                } else {
+                    outcome.dataVersion
+                },
             )
             is ClaimOutcome.AlreadyLive -> MCTraveler.LOGGER.warn(
                 "orphaned-save claim: skipped for {} ({}) — they already have a save on this server, so the " +
@@ -77,12 +80,16 @@ object OrphanedSaveClaimFeature {
                 outcome.uuid,
             )
             is ClaimOutcome.Failed -> MCTraveler.LOGGER.error(
-                "orphaned-save claim: FAILED for {} ({}): {}. Nothing was written and the quarantine is " +
-                    "intact — but once they play and get a save of their own the claim will be refused " +
-                    "for good, so resolve this first.",
+                "orphaned-save claim: FAILED for {} ({}): {}. {} Once they play and get a save of their " +
+                    "own the claim will be refused for good, so resolve this first.",
                 outcome.username,
                 outcome.uuid,
                 outcome.reason,
+                if (outcome.anythingWritten) {
+                    "It failed part-way through writing, so check what landed before retrying."
+                } else {
+                    "Nothing was written and the quarantine is intact."
+                },
             )
         }
     }

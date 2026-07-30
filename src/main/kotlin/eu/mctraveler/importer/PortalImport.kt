@@ -140,9 +140,12 @@ class PortalImport(private val plan: ImportPlan) {
         val identities = resolveIdentities()
         val saves = collectSaves(identities)
         val orphans = orphanedSaves(identities)
+        // Described once: naming them re-reads both backends' profile caches, and on the
+        // real deployment the list is thousands long.
+        val orphanNames = describe(orphans)
         val ops = OpsImport.rekey(backendOps(), identities)
         val regions = readRegions()
-        refuseIfUnidentified(describe(orphans), ops.unresolved)
+        refuseIfUnidentified(orphanNames, ops.unresolved)
 
         Files.createDirectories(staging)
         try {
@@ -150,14 +153,14 @@ class PortalImport(private val plan: ImportPlan) {
             // undone, so it goes last — everything that can still fail happens before the
             // Portal's own files are disturbed.
             var quarantined = 0
-            if (plan.worldTransfer == WorldTransfer.COPY) quarantined = stageBulk(orphans)
+            if (plan.worldTransfer == WorldTransfer.COPY) quarantined = stageTransfers(orphans)
             val store = JsonPlayerStore(staging.resolve("$MOD_DIRECTORY/players"))
             val records = stagePlayerRecords()
             val buckets = stageSaves(saves, store)
             val names = stageNameCache(identities)
             regions?.let { Files.writeString(staging.resolve(REGIONS_FILE), it.text) }
             Files.writeString(staging.resolve(OPS_FILE), OpsImport.serialize(ops.entries))
-            if (plan.worldTransfer == WorldTransfer.MOVE) quarantined = stageBulk(orphans)
+            if (plan.worldTransfer == WorldTransfer.MOVE) quarantined = stageTransfers(orphans)
             val report = ImportReport(
                 playersMigrated = saves.size,
                 bucketsSeeded = buckets,
@@ -166,7 +169,7 @@ class PortalImport(private val plan: ImportPlan) {
                 operators = ops.entries.size,
                 regions = regions?.count ?: 0,
                 quarantinedSaves = quarantined,
-                unidentifiedSaves = describe(orphans),
+                unidentifiedSaves = orphanNames,
                 unidentifiedOperators = ops.unresolved,
             )
             writeMarker(report)
@@ -211,6 +214,12 @@ class PortalImport(private val plan: ImportPlan) {
 
     private fun refuseIfUnidentified(saves: List<String>, operators: List<String>) {
         if (plan.skipUnidentified || (saves.isEmpty() && operators.isEmpty())) return
+        val operatorNote = if (operators.isEmpty()) {
+            ""
+        } else {
+            " Operators cannot be quarantined, though: an op list is read before anyone connects, " +
+                "so an operator no identity answers for is simply dropped and has to be re-opped."
+        }
         throw MigrationRefused(
             (saves + operators.map { "operator $it" }).joinToString(
                 prefix = "cannot identify every player the Portal's data mentions:\n  ",
@@ -218,8 +227,7 @@ class PortalImport(private val plan: ImportPlan) {
                 postfix = "\nGive --identities a file of \"username\": \"<mojang uuid>\" entries for them, " +
                     "or pass --skip-unidentified to quarantine their saves instead — a quarantined save " +
                     "is claimed by its owner the first time they log in, which is how the names nobody " +
-                    "has on file finally resolve. Operators cannot be quarantined: an op list is read " +
-                    "before anyone connects, so an operator no identity answers for is simply dropped.",
+                    "has on file finally resolve.$operatorNote",
             ),
         )
     }
@@ -359,15 +367,13 @@ class PortalImport(private val plan: ImportPlan) {
     // ---- staging ------------------------------------------------------------
 
     /**
-     * Everything that travels from the Portal by copy or by move, per
-     * [ImportPlan.worldTransfer]: the levels, and the quarantine. Returns the
-     * number of quarantined save files.
-     *
-     * This is the one phase that can disturb the Portal's own files, which is
-     * why [run] calls it first under [WorldTransfer.COPY] and last under
-     * [WorldTransfer.MOVE].
+     * Everything that reaches the new save by copy or by move, per
+     * [ImportPlan.worldTransfer] — the levels and the quarantine — and so the one
+     * phase that can disturb the Portal's own files. That is why [run] calls it
+     * first under [WorldTransfer.COPY] and last under [WorldTransfer.MOVE].
+     * Returns the number of quarantined save files.
      */
-    private fun stageBulk(orphans: List<BackendSave>): Int {
+    private fun stageTransfers(orphans: List<BackendSave>): Int {
         stageLevel()
         return stageQuarantine(orphans)
     }
@@ -449,7 +455,11 @@ class PortalImport(private val plan: ImportPlan) {
         }
     }
 
-    /** One file copied or moved according to [ImportPlan.worldTransfer]. */
+    /**
+     * One file copied or moved according to [ImportPlan.worldTransfer]. Needs none of
+     * [transferDirectory]'s cross-device fallback: a plain `Files.move` of a *file* on the
+     * default provider degrades to copy-and-delete by itself — only a directory rename can't.
+     */
     private fun transferFile(from: Path, to: Path) {
         Files.createDirectories(to.parent)
         if (plan.worldTransfer == WorldTransfer.COPY) {
