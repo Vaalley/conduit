@@ -5,6 +5,7 @@ import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import eu.mctraveler.MCTraveler
 import eu.mctraveler.chat.ChatBridge
+import eu.mctraveler.chat.ChatMessage
 import eu.mctraveler.tablist.TabListFeature
 import eu.mctraveler.text.Paint
 import java.net.InetAddress
@@ -281,7 +282,7 @@ object HttpApi {
     }
 
     private data class ChatResponse(
-        val messages: List<ChatBridge.ChatMessage>,
+        val messages: List<ChatMessage>,
     )
 
     private data class StatusResponse(
