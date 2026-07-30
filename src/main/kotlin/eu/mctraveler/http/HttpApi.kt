@@ -4,6 +4,7 @@ import com.google.gson.Gson
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import eu.mctraveler.MCTraveler
+import eu.mctraveler.chat.ChatBridge
 import eu.mctraveler.tablist.TabListFeature
 import eu.mctraveler.text.Paint
 import java.net.InetAddress
@@ -21,8 +22,8 @@ import net.minecraft.server.MinecraftServer
 
 /**
  * A small authenticated HTTP interface that lets external tools (the Observer Discord bot)
- * read server state and send broadcasts. It runs on the loopback interface only and requires
- * a shared bearer token configured in `CONDUIT_HTTP_TOKEN`.
+ * read server state, send broadcasts, and poll recent in-game chat. It runs on the loopback
+ * interface only and requires a shared bearer token configured in `CONDUIT_HTTP_TOKEN`.
  */
 object HttpApi {
     private const val DEFAULT_PORT = 8080
@@ -69,6 +70,7 @@ object HttpApi {
             }
             server.createContext("/status") { exchange -> handleStatus(exchange, token) }
             server.createContext("/broadcast") { exchange -> handleBroadcast(exchange, token) }
+            server.createContext("/chat") { exchange -> handleChat(exchange, token) }
             server.executor = pool
             server.start()
             httpServer = server
@@ -255,6 +257,32 @@ object HttpApi {
         exchange.responseBody.use { it.write(bytes) }
         exchange.close()
     }
+
+    private fun handleChat(exchange: HttpExchange, token: String) {
+        if (exchange.requestMethod != "GET") {
+            sendResponse(exchange, 405, "Method not allowed")
+            return
+        }
+        if (!authenticate(exchange, token)) {
+            sendResponse(exchange, 401, "Unauthorized")
+            return
+        }
+
+        val since = exchange.requestURI.query
+            ?.split("&")
+            ?.asSequence()
+            ?.map { it.split("=", limit = 2) }
+            ?.find { it.size == 2 && it[0] == "since" }
+            ?.get(1)
+            ?.toLongOrNull() ?: 0L
+
+        val messages = ChatBridge.poll(since)
+        sendResponse(exchange, 200, gson.toJson(ChatResponse(messages)), "application/json; charset=UTF-8")
+    }
+
+    private data class ChatResponse(
+        val messages: List<ChatBridge.ChatMessage>,
+    )
 
     private data class StatusResponse(
         val online: Int,
