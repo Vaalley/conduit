@@ -14,6 +14,7 @@ already holds a migrated save, and writes nothing at all unless the whole migrat
 | Backend `playerdata/<offline uuid>.dat` | `world/playerdata/<mojang uuid>.dat` — the save from the World the player was last in |
 | The *other* backend's save | that World's Per-World Bucket in `mctraveler/players/<uuid>.json` |
 | Backend `advancements/`, `stats/` | the same, re-keyed — from the live World only |
+| Saves nobody could be named for | `mctraveler/orphaned-saves/<world-id>/` — claimed by their owner at login |
 | `players/<uuid>.json` | `mctraveler/players/<uuid>.json`, byte-for-byte (legacy fields included) |
 | `uuid-cache.json` | `mctraveler/uuid-cache.json`, plus every identity the migration resolved |
 | Both backends' `ops.json` | `ops.json`, re-keyed to Mojang UUIDs |
@@ -42,7 +43,8 @@ already holds a migrated save, and writes nothing at all unless the whole migrat
 | `--secondary <dir>` | the Secondary backend's server directory (default `<portal>/minecraft-server/secondary`) |
 | `--level-name <name>` | the level directory to write; must match the new server's `level-name` (default `world`) |
 | `--identities <file>` | usernames → Mojang UUIDs, for players the Portal's cache never saw |
-| `--skip-unidentified` | leave unidentifiable saves behind on purpose, instead of refusing |
+| `--skip-unidentified` | quarantine unidentifiable saves (claimed at their owner's next login) instead of refusing |
+| `--worlds copy\|move` | how chunk data and quarantined saves reach the new save (default `copy`) |
 
 ### Identities
 
@@ -70,9 +72,57 @@ write a file:
 { "Alice": "11111111-2222-4333-8444-555555555555", "Bob": "…" }
 ```
 
-then re-run with `--identities identities.json`. Only pass `--skip-unidentified` for players
-you have decided to leave behind — their inventory, position and advancements stay behind
-with them; they will log in as brand-new players.
+then re-run with `--identities identities.json`.
+
+Resolving every name is *not* expected, and on the real deployment not feasible — the Portal's
+cache covers a few hundred of roughly thirteen thousand offline-keyed saves. Pass
+`--skip-unidentified` for the rest: their saves are quarantined, and each is handed back
+automatically the first time its owner logs in. Use `--identities` for the players you want
+live from the first boot (operators especially: an op list is read before anyone can connect,
+so an operator no identity answers for is simply dropped and has to be re-`/op`ped).
+
+## The quarantine, and claiming at login
+
+A save nobody could be named for is parked under the mod's own directory, outside the level so
+no vanilla file walker ever sees it:
+
+```
+mctraveler/orphaned-saves/
+  primary/    <offline uuid>.dat  advancements/<offline uuid>.json  stats/<offline uuid>.json
+  secondary/  …
+```
+
+The file name is `md5("OfflinePlayer:" + username)` — the same hash the offline-mode backends
+used, and the only handle anyone will ever have on these files. When a player joins, the server
+hashes the username they authenticated with and, if the quarantine holds saves under it, does
+exactly what the migration would have done for them: their last World's save becomes their live
+playerdata, the other World's seeds that World's Per-World Bucket, the live World's advancements
+and statistics come across, and the quarantined files are removed. It happens before vanilla
+reads their save, so the player just arrives where the Portal left them — there is nothing for
+them to do and nothing for them to see.
+
+**A player who already has a save is never overwritten.** That is the rule everything else bends
+around: a username can be released and re-registered, so the hash is evidence of who a save
+probably belongs to, never proof, and a live player's own data always wins.
+
+Watch the log. Every claim writes one line, and so does every claim that could not be made:
+
+```
+[mctraveler] orphaned-save claim: Alice (…) claimed their Portal save — live World secondary,
+             Per-World Bucket seeded for primary, DataVersion 4536
+[mctraveler] orphaned-save claim: skipped for Bob (…) — they already have a save on this server…
+[mctraveler] orphaned-save claim: FAILED for Carol (…): …
+```
+
+A **FAILED** line is an action item, not a warning to file away: nothing was written and the
+quarantine is intact, but once that player plays and gets a save of their own the claim is
+refused for good. The usual cause is playerdata this server cannot place (see the pre-1.16 note
+below). A **skipped** line is worth a look too — it means a quarantined save is keyed to the name
+of somebody who already plays here.
+
+The quarantine only shrinks, never grows. Once the community has cycled through and the log has
+gone quiet, whatever is left belongs to players who never came back, and the directory can be
+archived and deleted.
 
 ## After it runs
 
@@ -90,6 +140,8 @@ The migration prints a summary. Then:
    - an operator from the old server has operator status (`/op` list, or just use an admin command);
    - a well-travelled player logs in to the World they left, at the position they left;
    - `/switch` puts them back where the other World remembers them;
+   - a player whose save was *quarantined* logs in and finds their inventory, XP and position —
+     look for their `orphaned-save claim` line in the log;
    - `/rg locate <something you know>` finds a region in the right World.
 
 ## Known limitations
@@ -110,6 +162,14 @@ Cutover facts to communicate, not bugs to fix:
   fresh if you want them.
 - **Playerdata that predates 1.16** (a player who has not logged in for years) names its
   dimension in the pre-1.16 form and is refused by name rather than guessed at. Delete the file
-  or boot the old backend once to upgrade it.
+  or boot the old backend once to upgrade it. A *quarantined* save in that state is refused the
+  same way, as a `FAILED` claim line when its owner logs in — so a scan of the quarantine before
+  cutover is time well spent.
+- **A username that changed hands claims the wrong save.** The offline hash of a name is all the
+  quarantine has to go on, so a player who registered a name a Portal-era player once used would
+  inherit that player's save. Nothing can distinguish them — the hash is one-way and no other
+  identity was ever recorded. The live-player guard bounds the damage (an established player is
+  never overwritten) and every claim is logged, which is how such a case would be spotted and
+  undone from backups.
 - **The aliased players have no skin.** Their profile carries the alias, and Mojang's textures
   do not sign for it — exactly as on the Portal.
