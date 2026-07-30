@@ -3,6 +3,7 @@ package eu.mctraveler
 import eu.mctraveler.away.AwayFeature
 import eu.mctraveler.chat.ChatFeature
 import eu.mctraveler.chat.PrivateMessages
+import eu.mctraveler.http.HttpApi
 import eu.mctraveler.notepad.NotepadFeature
 import eu.mctraveler.persistence.PersistenceService
 import eu.mctraveler.region.RegionsFeature
@@ -54,6 +55,7 @@ object MCTraveler : ModInitializer {
         eu.mctraveler.importer.OrphanedSaveClaimFeature.register()
         eu.mctraveler.worlds.WorldsFeature.register()
         RegionsFeature.register()
+        HttpApi.register()
         LOGGER.info("MCTraveler initialized")
     }
 }
