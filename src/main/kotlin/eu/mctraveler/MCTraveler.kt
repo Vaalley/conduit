@@ -1,6 +1,7 @@
 package eu.mctraveler
 
 import eu.mctraveler.away.AwayFeature
+import eu.mctraveler.chat.ChatBridge
 import eu.mctraveler.chat.ChatFeature
 import eu.mctraveler.chat.PrivateMessages
 import eu.mctraveler.http.HttpApi
@@ -38,6 +39,7 @@ object MCTraveler : ModInitializer {
         TabListFeature.register()
         PrivateMessages.register()
         ChatFeature.register()
+        ChatBridge.register()
         AwayFeature.register()
 
 
