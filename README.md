@@ -24,6 +24,18 @@ Conduit is a server-side Fabric mod for a community Minecraft survival server.
 By running the dev server you agree to the
 [Minecraft EULA](https://aka.ms/MinecraftEULA).
 
+## Deploying to Production
+
+To deploy updates to the dedicated server:
+
+```sh
+cd /root/mctraveler-fabric
+git pull
+./gradlew build
+cp build/libs/mctraveler-0.1.0.jar /root/mctraveler-server/mods/mctraveler-0.1.0.jar
+systemctl restart mctraveler
+```
+
 ## License
 
 See [LICENSE](LICENSE).
