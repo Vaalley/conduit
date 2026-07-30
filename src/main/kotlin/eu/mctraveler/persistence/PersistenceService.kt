@@ -10,9 +10,11 @@ import java.nio.file.Path
  * - `uuid-cache.json` — the uuid → username cache ([NameCache])
  *
  * Both files keep the Portal's formats, so the importer copies Portal data
- * into this layout as-is.
+ * into this layout as-is. [root] is public because the migration parks data of
+ * its own here — the orphaned-save quarantine — and one statement of where the
+ * mod's directory is beats two.
  */
-class PersistenceService(root: Path) {
+class PersistenceService(val root: Path) {
     val players: PlayerStore = JsonPlayerStore(root.resolve("players"))
     val names: NameCache = NameCache(root.resolve("uuid-cache.json"))
 }

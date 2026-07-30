@@ -51,6 +51,7 @@ object MCTraveler : ModInitializer {
             checkNotNull(persistence).names.record(player.uuid, player.gameProfile.name)
         }
         NotepadFeature.register()
+        eu.mctraveler.importer.OrphanedSaveClaimFeature.register()
         eu.mctraveler.worlds.WorldsFeature.register()
         RegionsFeature.register()
         LOGGER.info("MCTraveler initialized")
