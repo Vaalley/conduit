@@ -1,5 +1,6 @@
 package eu.mctraveler.importer
 
+import eu.mctraveler.worlds.DimensionRole
 import net.minecraft.SharedConstants
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.nbt.DoubleTag
@@ -8,7 +9,6 @@ import net.minecraft.nbt.ListTag
 import net.minecraft.server.Bootstrap
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
-import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 
@@ -163,16 +163,18 @@ class PlayerdataImportTest {
     }
 
     @Test
-    fun `playerdata from a dimension no World owns is refused rather than guessed at`() {
+    fun `playerdata from a dimension no World owns lands in the overworld`() {
+        // Changed deliberately when the live cutover met a save whose Dimension was
+        // the empty string: refusing is right for a rehearsal and wrong for a
+        // migration, where one unplaceable save would block every other player.
+        // Vanilla puts a player whose dimension it cannot honour in the overworld
+        // too, and the importer warns by name.
         val tag = playerdata(dimension = "someothermod:limbo")
 
-        val error = assertThrows(IllegalArgumentException::class.java) {
-            PlayerdataImport.bucket(tag)
-        }
-
+        assertEquals(DimensionRole.OVERWORLD.id, PlayerdataImport.bucket(tag).dimension)
         assertEquals(
-            "playerdata is in \"someothermod:limbo\", which is not part of a backend's trio",
-            error.message,
+            "minecraft:overworld",
+            PlayerdataImport.live(tag, WorldLayout.PRIMARY).getStringOr("Dimension", ""),
         )
     }
 }

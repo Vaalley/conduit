@@ -197,18 +197,18 @@ class OrphanedSaveClaimTest {
     }
 
     @Test
-    fun `a save this server cannot place fails the claim and leaves the quarantine whole`() {
+    fun `a save naming a dimension this server has never had is claimed into the overworld`() {
+        // Deliberate change from refusing (see PlayerdataImport.roleOf): a save the
+        // server cannot place is still that player's inventory, and the overworld is
+        // where vanilla puts anyone whose dimension it cannot honour. Refusing would
+        // strand them holding nothing.
         quarantined("primary", dimension = "aether:the_aether")
 
         val outcome = claim()
 
-        assertTrue(
-            outcome is ClaimOutcome.Failed && !outcome.anythingWritten,
-            "expected a failure with nothing written, got $outcome",
-        )
-        assertTrue(Files.exists(quarantine.save("primary", aliceOffline)), "the quarantine must survive")
-        assertFalse(Files.exists(saves.resolve("$alice.dat")), "nothing may be half-written")
-        assertNull(players.lastWorld(alice))
+        assertTrue(outcome is ClaimOutcome.Claimed, "expected the save to be claimed, got $outcome")
+        assertFalse(Files.exists(quarantine.save("primary", aliceOffline)), "the quarantine is consumed")
+        assertTrue(Files.exists(saves.resolve("$alice.dat")), "their save is now theirs")
     }
 
     @Test

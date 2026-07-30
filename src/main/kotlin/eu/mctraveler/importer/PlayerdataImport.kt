@@ -4,6 +4,7 @@ import eu.mctraveler.persistence.PerWorldBucket
 import eu.mctraveler.persistence.RespawnPoint
 import eu.mctraveler.worlds.DimensionRole
 import net.minecraft.nbt.CompoundTag
+import org.slf4j.LoggerFactory
 
 /**
  * The playerdata merge (spec User Story 43).
@@ -18,8 +19,8 @@ import net.minecraft.nbt.CompoundTag
  *
  * Both backends were vanilla servers, so both saves name the vanilla trio.
  * [live] re-points a save at the World it is becoming; [bucket] reads one as
- * Position Memory. Both refuse data they cannot place, rather than silently
- * moving a player somewhere they have never been.
+ * Position Memory. A save naming a dimension no backend trio owns is placed in
+ * the overworld and warned about — see [roleOf] for why that beats refusing.
  *
  * Save-format differences between the backends' version and the target
  * server's are vanilla's business — the tags touched here are only those that
@@ -28,6 +29,8 @@ import net.minecraft.nbt.CompoundTag
  * logged in for years, so both spellings are understood.
  */
 object PlayerdataImport {
+
+    private val LOGGER = LoggerFactory.getLogger("mctraveler-import")
 
     /**
      * [tag] as the merged save must key it for a player living in [world]:
@@ -100,10 +103,22 @@ object PlayerdataImport {
         )
     }
 
-    /** The trio role [dimensionId] plays on a backend; anything else is unplaceable. */
+    /**
+     * The trio role [dimensionId] plays on a backend.
+     *
+     * A save is not obliged to make sense: the live deployment held one whose
+     * `Dimension` was the empty string, and a 13-year-old world can also name a
+     * dimension a datapack has since removed. There is no answer for those, and
+     * refusing the whole cutover over one player is the wrong trade — the
+     * overworld is where vanilla itself puts a player whose dimension it cannot
+     * honour, so unplaceable saves land there and are named in the log.
+     */
     private fun roleOf(dimensionId: String): DimensionRole =
-        requireNotNull(WorldLayout.backendRole(dimensionId)) {
-            "playerdata is in \"$dimensionId\", which is not part of a backend's trio"
+        WorldLayout.backendRole(dimensionId) ?: DimensionRole.OVERWORLD.also {
+            LOGGER.warn(
+                "playerdata names dimension \"{}\", which is not part of a backend's trio — placing in the overworld",
+                dimensionId,
+            )
         }
 
     private fun missing(what: String) = IllegalArgumentException("playerdata is missing \"$what\"")
