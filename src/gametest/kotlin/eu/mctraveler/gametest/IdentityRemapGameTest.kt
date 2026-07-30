@@ -6,11 +6,17 @@ import com.mojang.authlib.properties.Property
 import com.mojang.authlib.properties.PropertyMap
 import java.util.UUID
 import net.fabricmc.fabric.api.gametest.v1.GameTest
+import net.minecraft.ChatFormatting
 import net.minecraft.core.UUIDUtil
+import net.minecraft.core.registries.Registries
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.network.Connection
+import net.minecraft.network.chat.ChatType
+import net.minecraft.network.chat.Component
 import net.minecraft.network.protocol.PacketFlow
 import net.minecraft.network.protocol.login.ServerboundHelloPacket
+import net.minecraft.resources.Identifier
+import net.minecraft.resources.ResourceKey
 import net.minecraft.server.network.ServerLoginPacketListenerImpl
 
 /**
@@ -20,11 +26,15 @@ import net.minecraft.server.network.ServerLoginPacketListenerImpl
  * profile it stores is the identity all downstream state keys to — the
  * ServerPlayer, its playerdata file, the tab list, and the mod's name cache.
  *
- * Each test drives a fresh listener through `handleHello` on the live server
- * (which is offline, so the hello resolves synchronously) and asserts the
+ * The login tests drive a fresh listener through `handleHello` on the live
+ * server (which is offline, so the hello resolves synchronously) and assert the
  * identity the listener ends up verifying. Fake gametest players are placed
  * directly into the world and never pass through login, so this listener-level
  * drive is the closest headless approximation of a real connection.
+ *
+ * The chat test comes at it from the other end: a test player joined *with* an
+ * alias uuid exercises the real chat listener, which is where ticket 21's
+ * secure-chat exemption lives.
  */
 class IdentityRemapGameTest {
 
@@ -76,6 +86,51 @@ class IdentityRemapGameTest {
             "textures signature",
         )
         helper.succeed()
+    }
+
+    /**
+     * The chat half of ticket 21, at the seam that decides whether anyone else
+     * sees the line. An aliased player can never sign a message — vanilla's
+     * client refuses to open a chat session for a uuid it did not authenticate
+     * with — and a client whose server enforces secure chat drops unsigned
+     * *player* chat unseen. So their line goes out as disguised chat, which no
+     * client validates, while everyone else keeps the signed player-chat path.
+     */
+    @GameTest
+    fun anAliasedPlayersChatReachesEveryoneAsDisguisedChat(helper: GameTestHelper) {
+        val server = helper.level.server
+        val observer = TestPlayer.join(server, "RemapObserver")
+        val aliased = TestPlayer.joinAs(server, GameProfile(ALIAS_UUID, "iElmo"))
+        val ordinary = TestPlayer.join(server, "RemapOrdinary")
+
+        helper.runAfterDelay(2) {
+            aliased.chat("aliased hello")
+            ordinary.chat("ordinary hello")
+        }
+        helper.succeedWhen {
+            val disguised = observer.disguisedChatPackets()
+                .firstOrNull { it.message().string == "aliased hello" }
+                ?: throw helper.assertionException("the aliased player's line did not reach the observer")
+            val bound = disguised.chatType()
+            if (bound.chatType().unwrapKey().orElse(null) != MCT_CHAT_TYPE) {
+                throw helper.assertionException("the aliased line was not bound to the mctraveler:chat type")
+            }
+            if (bound.name() != Component.literal("iElmo").withStyle(ChatFormatting.GREEN)) {
+                throw helper.assertionException("the aliased line's sender is not the plain green username")
+            }
+            if (observer.chatPackets().any { it.body().content() == "aliased hello" }) {
+                throw helper.assertionException(
+                    "the aliased line also went out as player chat, which an enforcing client drops unseen",
+                )
+            }
+            // The control: nothing changes for anyone else.
+            if (observer.chatPackets().none { it.body().content() == "ordinary hello" }) {
+                throw helper.assertionException("an ordinary player's chat left the signed player-chat path")
+            }
+            if (observer.disguisedChatPackets().any { it.message().string == "ordinary hello" }) {
+                throw helper.assertionException("an ordinary player's chat was disguised")
+            }
+        }
     }
 
     @GameTest
@@ -141,5 +196,14 @@ class IdentityRemapGameTest {
         val field = ServerLoginPacketListenerImpl::class.java.getDeclaredField("authenticatedProfile")
         field.isAccessible = true
         return checkNotNull(field.get(listener) as GameProfile?, missing)
+    }
+
+    private companion object {
+        /** AlsoJames's alias, stated from the spec rather than read off the implementation. */
+        val ALIAS_UUID: UUID = UUID.fromString("be9482bb-6bcd-4df3-9cf4-9f1fb61c5e93")
+
+        /** The chat type the mod ships in its datapack, stated independently of the implementation. */
+        val MCT_CHAT_TYPE: ResourceKey<ChatType> =
+            ResourceKey.create(Registries.CHAT_TYPE, Identifier.fromNamespaceAndPath("mctraveler", "chat"))
     }
 }

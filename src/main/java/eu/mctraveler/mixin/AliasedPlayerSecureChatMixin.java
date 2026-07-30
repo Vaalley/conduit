@@ -89,7 +89,7 @@ public abstract class AliasedPlayerSecureChatMixin {
      * account that owns an alias, whose client can sign — is left alone.
      */
     @Inject(method = "sendPlayerChatMessage", at = @At("HEAD"), cancellable = true)
-    private void mctraveler$sendAliasedChatUndisguised(
+    private void mctraveler$sendAliasedChatAsDisguised(
             PlayerChatMessage message, ChatType.Bound chatType, CallbackInfo ci) {
         if (!message.hasSignature() && IdentityRemaps.isAliased(message.sender())) {
             this.sendDisguisedChatMessage(message.decoratedContent(), chatType);

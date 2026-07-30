@@ -1,9 +1,10 @@
 package eu.mctraveler.identity
 
+import com.google.common.collect.LinkedHashMultimap
 import com.mojang.authlib.GameProfile
+import com.mojang.authlib.properties.Property as ProfileProperty
+import com.mojang.authlib.properties.PropertyMap
 import java.util.UUID
-import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertTrue
 import org.apache.logging.log4j.Level
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.core.LogEvent
@@ -12,6 +13,8 @@ import org.apache.logging.log4j.core.appender.AbstractAppender
 import org.apache.logging.log4j.core.config.Configurator
 import org.apache.logging.log4j.core.config.Property
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
@@ -55,7 +58,9 @@ class IdentityRemapsTest {
 
     @Test
     fun `the uuid a remapped player authenticated with is not itself aliased`() {
-        val authenticated = UUID.fromString("e4140f3f-1111-2222-3333-444455556666")
+        // The exemption keys off the uuid the ServerPlayer holds — the alias — never
+        // the Mojang account behind it, which nothing downstream of login ever sees.
+        val authenticated = UUID.randomUUID()
         assertFalse(IdentityRemaps.isAliased(authenticated))
         assertTrue(IdentityRemaps.isAliased(IdentityRemaps.remap(GameProfile(authenticated, "AlsoJames")).id()))
     }
@@ -87,11 +92,10 @@ class IdentityRemapsTest {
     }
 
     /** A property map holding one Mojang-signed `textures` property, as an authenticated profile carries. */
-    private fun signedTextures(value: String): com.mojang.authlib.properties.PropertyMap {
-        val properties = com.google.common.collect.LinkedHashMultimap
-            .create<String, com.mojang.authlib.properties.Property>()
-        properties.put("textures", com.mojang.authlib.properties.Property("textures", value, "mojang-signature"))
-        return com.mojang.authlib.properties.PropertyMap(properties)
+    private fun signedTextures(value: String): PropertyMap {
+        val properties = LinkedHashMultimap.create<String, ProfileProperty>()
+        properties.put("textures", ProfileProperty("textures", value, "mojang-signature"))
+        return PropertyMap(properties)
     }
 
     /** Runs [block] with a capturing appender on the mod's logger; returns the formatted messages. */

@@ -97,8 +97,15 @@ class TestPlayer private constructor(
 
     companion object {
         /** Joins a fresh player named [name] to the server through the real login path. */
-        fun join(server: MinecraftServer, name: String): TestPlayer {
-            val cookie = CommonListenerCookie.createInitial(GameProfile(UUID.randomUUID(), name), false)
+        fun join(server: MinecraftServer, name: String): TestPlayer =
+            joinAs(server, GameProfile(UUID.randomUUID(), name))
+
+        /**
+         * Joins [profile] through the real login path. Use when the identity itself
+         * is what the test is about — an aliased uuid, say — rather than just a name.
+         */
+        fun joinAs(server: MinecraftServer, profile: GameProfile): TestPlayer {
+            val cookie = CommonListenerCookie.createInitial(profile, false)
             val connection = Connection(PacketFlow.SERVERBOUND)
             val channel = EmbeddedChannel(connection)
             val player = ServerPlayer(server, server.overworld(), cookie.gameProfile(), cookie.clientInformation())
