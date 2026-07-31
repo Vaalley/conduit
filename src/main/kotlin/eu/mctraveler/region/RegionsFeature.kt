@@ -52,7 +52,29 @@ object RegionsFeature {
      * player-shaped one). Null before the service is up.
      */
     fun regionAt(level: Level, pos: BlockPos): Region? =
-        service?.regionAt(RegionWorlds.legacyName(level.dimension()), pos.x, pos.y, pos.z)
+        regionAt(RegionWorlds.legacyName(level.dimension()), pos.x, pos.y, pos.z)
+
+    /**
+     * The one region lookup, in the Portal's legacy world strings: the live
+     * tree's answer, then each guard's chance to change it.
+     *
+     * A guard is how a dimension can own ground the tree knows nothing about —
+     * the embassies void answers with its synthetic world region (ADR 0003),
+     * mirroring Nucleus's `getRegionAtGuards`. Guards are registered once at
+     * mod init and outlive the service, so a restart cannot lose them.
+     */
+    fun regionAt(world: String, x: Int, y: Int, z: Int): Region? {
+        var found = service?.regionAt(world, x, y, z)
+        for (guard in lookupGuards) found = guard(world, x, y, z, found)
+        return found
+    }
+
+    /** Adds a guard to every [regionAt] from now on. */
+    fun addLookupGuard(guard: (world: String, x: Int, y: Int, z: Int, found: Region?) -> Region?) {
+        lookupGuards.add(guard)
+    }
+
+    private val lookupGuards = mutableListOf<(String, Int, Int, Int, Region?) -> Region?>()
 
     fun register() {
         ServerLifecycleEvents.SERVER_STARTING.register { server ->

@@ -49,9 +49,8 @@ object RegionTracker {
 
     /** The region [player] is standing in right now, from their live position. */
     fun regionOf(player: ServerPlayer): Region? {
-        val service = RegionsFeature.service ?: return null
         val pos = player.position()
-        return service.regionAt(
+        return RegionsFeature.regionAt(
             RegionWorlds.legacyName(player.level().dimension()),
             floor(pos.x).toInt(),
             floor(pos.y).toInt(),

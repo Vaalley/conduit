@@ -232,8 +232,11 @@ object RegionCommands {
             )
         }
 
-        val startRegion = service.regionAt(world, floorInt(start.x), floorInt(start.y), floorInt(start.z))
-        val endRegion = service.regionAt(world, floorInt(end.x), floorInt(end.y), floorInt(end.z))
+        // Through the guarded lookup: the embassies void is a region a player
+        // is not a member of, so the parent checks below turn them away there
+        // exactly as Nucleus did.
+        val startRegion = RegionsFeature.regionAt(world, floorInt(start.x), floorInt(start.y), floorInt(start.z))
+        val endRegion = RegionsFeature.regionAt(world, floorInt(end.x), floorInt(end.y), floorInt(end.z))
         // Both corners inside the same existing region ⇒ creating a sub-region
         // of it; that region and its ancestors are containers, not overlaps.
         val parent = startRegion?.takeIf { it === endRegion }
