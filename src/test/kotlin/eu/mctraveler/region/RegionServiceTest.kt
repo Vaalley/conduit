@@ -1,5 +1,6 @@
 package eu.mctraveler.region
 
+import com.google.gson.JsonObject
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
@@ -156,6 +157,99 @@ class RegionServiceTest {
             }
         """.trimIndent()
         assertEquals(expected, Files.readString(file()))
+    }
+
+    // ---- metadata (deviation 6) ----
+
+    // The same schema with the one new optional key: an embassy region as
+    // /embassy create writes it. `metadata` sits after `flags`, and the two
+    // never meet `sub-regions` in practice — a region cannot be created inside
+    // an embassy, so an embassy never has one.
+    private val embassyFile = """
+        {
+          "regions": {
+            "0": {
+              "title": "Unnamed Embassy",
+              "start-x": 3,
+              "start-z": 3,
+              "end-x": 13,
+              "end-z": 13,
+              "world": "embassies",
+              "members": [
+                "11111111-1111-1111-1111-111111111111"
+              ],
+              "flags": [
+                "EMBASSY"
+              ],
+              "metadata": {
+                "embassy-destination": {
+                  "x": 123.5,
+                  "y": 64.0,
+                  "z": -87.25,
+                  "yaw": 90.0,
+                  "pitch": 0.0,
+                  "world": "world"
+                }
+              }
+            }
+          }
+        }
+    """.trimIndent()
+
+    @Test
+    fun `a region with no metadata writes no metadata key`() {
+        // The whole of deviation 6's promise: legacy entries are untouched.
+        val service = serviceWith(legacyFile)
+        assertTrue(service.roots.all { it.metadata.isEmpty() })
+        service.save()
+        assertEquals(legacyFile, Files.readString(file()))
+    }
+
+    @Test
+    fun `metadata loads as a json tree keyed in file order`() {
+        val embassy = serviceWith(embassyFile).roots.single()
+        val destination = embassy.metadata.getValue("embassy-destination").asJsonObject
+        assertEquals(123.5, destination.get("x").asDouble)
+        assertEquals(-87.25, destination.get("z").asDouble)
+        assertEquals(90.0f, destination.get("yaw").asFloat)
+        assertEquals("world", destination.get("world").asString)
+        assertEquals(
+            listOf("x", "y", "z", "yaw", "pitch", "world"),
+            destination.keySet().toList(),
+        )
+    }
+
+    @Test
+    fun `saving reproduces a metadata file byte for byte`() {
+        // Including the number literals: "64.0" must not come back as "64".
+        val service = serviceWith(embassyFile)
+        service.save()
+        assertEquals(embassyFile, Files.readString(file()))
+    }
+
+    @Test
+    fun `metadata built in memory writes the embassy-destination shape`() {
+        // Pins the bytes /embassy create produces — the format ticket 05's
+        // importer has to write for the twenty Nucleus-era embassies.
+        val service = service()
+        val region = Region(
+            title = "Unnamed Embassy",
+            world = "embassies",
+            startX = 3, startZ = 3, endX = 13, endZ = 13,
+        )
+        region.members.add(alice)
+        region.flags.add("EMBASSY")
+        region.metadata["embassy-destination"] = JsonObject().apply {
+            addProperty("x", 123.5)
+            addProperty("y", 64.0)
+            addProperty("z", -87.25)
+            addProperty("yaw", 90.0f)
+            addProperty("pitch", 0.0f)
+            addProperty("world", "world")
+        }
+        service.add(region, parent = null)
+
+        assertEquals(embassyFile, Files.readString(file()))
     }
 
     @Test

@@ -1,5 +1,6 @@
 package eu.mctraveler.region
 
+import com.google.gson.JsonElement
 import java.util.UUID
 
 /**
@@ -30,6 +31,19 @@ class Region(
     val members: LinkedHashSet<UUID> = LinkedHashSet()
     val flags: LinkedHashSet<String> = LinkedHashSet()
     val subRegions: MutableList<Region> = mutableListOf()
+
+    /**
+     * Free-form JSON a feature hangs off a region, stored under an optional
+     * `"metadata"` object (deviation 6) and written only when non-empty, so
+     * every region that has none is byte-identical to before it existed.
+     *
+     * The one key in use is `embassy-destination` (an object of `x`, `y`, `z`,
+     * `yaw`, `pitch` and a legacy `world` string) — where an embassy's anchor
+     * sends the player who stands on it.
+     *
+     * Insertion-ordered, because the file it round-trips through is.
+     */
+    val metadata: LinkedHashMap<String, JsonElement> = LinkedHashMap()
 
     /** The region this one nests inside, or null for a root region. */
     var parent: Region? = null
