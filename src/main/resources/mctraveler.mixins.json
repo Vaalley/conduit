@@ -24,7 +24,8 @@
     "RegionMobGriefingMixin",
     "RegionEndermanTakeMixin",
     "RegionEndermanPlaceMixin",
-    "RegionPressurePlateMixin"
+    "RegionPressurePlateMixin",
+    "EmbassyOriginMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -1,9 +1,11 @@
 package eu.mctraveler.gametest
 
 import eu.mctraveler.embassy.EmbassiesFeature
+import eu.mctraveler.embassy.EmbassyOrigins
 import eu.mctraveler.region.RegionsFeature
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.UUID
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.core.BlockPos
 import net.minecraft.gametest.framework.GameTestHelper
@@ -11,6 +13,7 @@ import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.attribute.EnvironmentAttributes
 import net.minecraft.world.entity.MobCategory
+import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.Blocks
 
 /**
@@ -173,6 +176,116 @@ class EmbassiesGameTest {
 
         player.hurtServer(helper.level, helper.level.damageSources().generic(), 5.0f)
         helper.assertValueEqual(player.health, 15.0f, "the player's health after ordinary damage outside embassies")
+        player.leave()
+        helper.succeed()
+    }
+
+    // ---- origins: the way in and the way out ----
+
+    @GameTest
+    fun fallingIntoTheVoidPutsThePlayerBackWhereTheyEnteredFrom(helper: GameTestHelper) {
+        val level = embassies(helper)
+        val player = MessageCapturingPlayer.join(helper, "T01Fall")
+        player.standAt(helper, 1.0, 1.0, 1.0)
+        player.setYRot(45.0f)
+        player.setXRot(10.0f)
+        val origin = player.position()
+
+        player.arriveIn(level, 1400.5, 1.0, 1400.5)
+        // Off the edge of a plot: nothing below -64 but the void.
+        player.setPos(1400.5, -70.0, 1400.5)
+        player.fallDistance = 50.0
+
+        helper.runAfterDelay(2) {
+            helper.assertValueEqual(
+                player.level().dimension(),
+                helper.level.dimension(),
+                "the dimension a fall into the void returns to",
+            )
+            helper.assertValueEqual(
+                listOf(player.x, player.y, player.z),
+                listOf(origin.x, origin.y, origin.z),
+                "where a fall into the void puts the player back",
+            )
+            helper.assertValueEqual(player.yRot to player.xRot, 45.0f to 10.0f, "the rotation restored by the return")
+            helper.assertValueEqual(player.fallDistance, 0.0, "the fall distance after the return")
+            player.leave()
+            helper.succeed()
+        }
+    }
+
+    @GameTest
+    fun aPlayerWithNoRecordedOriginIsLeftAloneInTheVoid(helper: GameTestHelper) {
+        val level = embassies(helper)
+        val player = MessageCapturingPlayer.join(helper, "T01FallLost")
+        player.arriveIn(level, 1500.5, 1.0, 1500.5)
+        // A player the server never saw arrive — one who was inside when it
+        // last went down (ADR 0003). Nucleus left them where they were.
+        EmbassyOrigins.forget(player.uuid)
+        player.setPos(1500.5, -70.0, 1500.5)
+
+        helper.runAfterDelay(2) {
+            helper.assertValueEqual(
+                player.level().dimension(),
+                EmbassiesFeature.DIMENSION,
+                "the dimension of a player with no origin who fell into the void",
+            )
+            helper.assertValueEqual(player.y, -70.0, "where a player with no origin ends up")
+            player.leave()
+            helper.succeed()
+        }
+    }
+
+    @GameTest(maxTicks = 600)
+    fun loggingOutInsideEmbassiesLogsBackInAtTheOrigin(helper: GameTestHelper) {
+        val server = helper.level.server
+        val level = embassies(helper)
+        val uuid = UUID.randomUUID()
+
+        val firstSession = TestPlayers.login(server, "T01Relog", uuid)
+        check(firstSession.teleportTo(server.overworld(), 900.5, 80.0, 900.5, emptySet(), 90.0f, 5.0f, false))
+        firstSession.arriveIn(level, 1600.5, 1.0, 1600.5)
+        TestPlayers.logout(firstSession)
+
+        val secondSession = TestPlayers.login(server, "T01Relog", uuid)
+        try {
+            helper.assertValueEqual(
+                secondSession.level().dimension(),
+                Level.OVERWORLD,
+                "the dimension a player who logged out inside embassies logs back into",
+            )
+            helper.assertValueEqual(
+                listOf(secondSession.x, secondSession.y, secondSession.z),
+                listOf(900.5, 80.0, 900.5),
+                "where a player who logged out inside embassies logs back in",
+            )
+        } finally {
+            TestPlayers.logout(secondSession)
+        }
+        helper.succeed()
+    }
+
+    @GameTest
+    fun theServerGoingDownReturnsEveryoneStillInside(helper: GameTestHelper) {
+        val server = helper.level.server
+        val level = embassies(helper)
+        val player = MessageCapturingPlayer.join(helper, "T01Stop")
+        player.standAt(helper, 1.0, 1.0, 1.0)
+        val origin = player.position()
+        player.arriveIn(level, 1700.5, 1.0, 1700.5)
+
+        EmbassiesFeature.returnEveryoneInside(server)
+
+        helper.assertValueEqual(
+            player.level().dimension(),
+            helper.level.dimension(),
+            "the dimension a stopping server leaves the player in",
+        )
+        helper.assertValueEqual(
+            listOf(player.x, player.y, player.z),
+            listOf(origin.x, origin.y, origin.z),
+            "where a stopping server leaves the player",
+        )
         player.leave()
         helper.succeed()
     }
