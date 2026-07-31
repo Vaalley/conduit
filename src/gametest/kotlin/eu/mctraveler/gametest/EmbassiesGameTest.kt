@@ -18,6 +18,7 @@ import net.minecraft.world.attribute.EnvironmentAttributes
 import net.minecraft.world.entity.MobCategory
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.Blocks
+import net.minecraft.world.phys.Vec3
 
 /**
  * The embassies dimension itself (spec stories 1-2): a flat void of plains
@@ -254,6 +255,27 @@ class EmbassiesGameTest {
             player.leave()
             helper.succeed()
         }
+    }
+
+    @GameTest
+    fun leavingTheDimensionByTeleportDropsTheOrigin(helper: GameTestHelper) {
+        val level = embassies(helper)
+        val player = MessageCapturingPlayer.join(helper, "T01Leave")
+        player.standAt(helper, 1.0, 1.0, 1.0)
+
+        player.arriveIn(level, 1900.5, 1.0, 1900.5)
+        helper.assertTrue(EmbassyOrigins.originOf(player) != null, "entering embassies recorded no origin")
+
+        // Out again by an ordinary teleport — the crystal menu and the embassy
+        // anchor both leave this way (deviation 11).
+        val out = helper.absoluteVec(Vec3(1.0, 1.0, 1.0))
+        player.arriveIn(helper.level, out.x, out.y, out.z)
+        helper.assertTrue(
+            EmbassyOrigins.originOf(player) == null,
+            "the origin outlived the player's teleport out of embassies",
+        )
+        player.leave()
+        helper.succeed()
     }
 
     @GameTest
