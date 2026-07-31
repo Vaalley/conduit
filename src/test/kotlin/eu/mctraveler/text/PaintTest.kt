@@ -223,6 +223,36 @@ class PaintTest {
     }
 
     @Test
+    fun `info helper renders aqua-bold INFO then gray content`() {
+        // Nucleus's INFO_COMPONENT: aqua bold label, gray body.
+        val component = Paint.info("Sneaking, teleportation ignored")
+        assertEquals("INFO Sneaking, teleportation ignored", component.string)
+
+        val (prefix, space, content) = component.siblings
+        assertEquals("INFO", prefix.string)
+        assertEquals(TextColor.fromLegacyFormat(ChatFormatting.AQUA), prefix.style.color)
+        assertEquals(true, prefix.style.isBold)
+        assertEquals(" ", space.string)
+        assertEquals("Sneaking, teleportation ignored", content.string)
+        assertEquals(TextColor.fromLegacyFormat(ChatFormatting.GRAY), content.style.color)
+    }
+
+    @Test
+    fun `warning helper renders gold-bold WARNING then gray content`() {
+        // Nucleus's WARNING_COMPONENT: gold bold label, gray body.
+        val component = Paint.warning("This cannot be undone.")
+        assertEquals("WARNING This cannot be undone.", component.string)
+
+        val (prefix, space, content) = component.siblings
+        assertEquals("WARNING", prefix.string)
+        assertEquals(TextColor.fromLegacyFormat(ChatFormatting.GOLD), prefix.style.color)
+        assertEquals(true, prefix.style.isBold)
+        assertEquals(" ", space.string)
+        assertEquals("This cannot be undone.", content.string)
+        assertEquals(TextColor.fromLegacyFormat(ChatFormatting.GRAY), content.style.color)
+    }
+
+    @Test
     fun `helpers accept nested styled components in their content`() {
         val component = Paint.error("Player ", Paint.red("Steve"), " not found or is offline")
         assertEquals("ERROR Player Steve not found or is offline", component.string)

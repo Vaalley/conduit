@@ -94,9 +94,16 @@ class Paint private constructor(private val style: Style) {
         /** `USAGE <content>`: aqua+bold prefix, gray content (the Portal's §b§lUSAGE §7). */
         fun usage(vararg content: Any?): MutableComponent = prefixed(aqua.bold("USAGE"), content)
 
-        // Aqua exists only for the USAGE prefix — it is not part of the Portal's
-        // public color vocabulary, so it stays private.
+        /** `INFO <content>`: aqua+bold prefix, gray content (Nucleus's INFO). */
+        fun info(vararg content: Any?): MutableComponent = prefixed(aqua.bold("INFO"), content)
+
+        /** `WARNING <content>`: gold+bold prefix, gray content (Nucleus's WARNING). */
+        fun warning(vararg content: Any?): MutableComponent = prefixed(gold.bold("WARNING"), content)
+
+        // Aqua and gold exist only for prefixes — neither is part of the Portal's
+        // public color vocabulary, so they stay private.
         private val aqua: Paint get() = Paint(Style.EMPTY.withColor(ChatFormatting.AQUA))
+        private val gold: Paint get() = Paint(Style.EMPTY.withColor(ChatFormatting.GOLD))
 
         private fun prefixed(prefix: Component, content: Array<out Any?>): MutableComponent =
             plain(prefix, " ", gray(*content))
