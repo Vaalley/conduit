@@ -21,6 +21,14 @@ The per-World record of where a player last stood, restored when they Travel bac
 **Region**:
 A player-owned protected cuboid in a World's dimension, with members, flags, and optional sub-regions. Protection applies to player actions and (since the port) environmental damage.
 
+**Teleportation Crystal**:
+A craftable hand-held teleporter: a re-skinned Echo Shard, identified by a custom-data marker, in three tiers. The tier is its charge capacity — how far into an empty Energy pool it still works.
+_Avoid_: crystal item, teleporter (ambiguous with the embassy anchors)
+
+**Energy**:
+The pool of 0–3 teleport charges a player carries, shared by every Teleportation Crystal they own and recharging one point per 15 minutes of play time. Shown to each player as the damage bar of every crystal they see, so the same crystal reads differently for different viewers.
+_Avoid_: charges, durability (the damage bar is a display of Energy, not wear)
+
 **Admin**:
 A player with vanilla server operator status. The port keeps no separate admin flag; vanilla /op and /deop are the management commands.
 _Avoid_: isAdmin (the Portal's stored flag)
@@ -39,7 +47,3 @@ The pre-Portal legacy system — the MCTravelerNucleus Paper plugin. Source of t
 **Embassies**:
 The plot-museum dimension (`mctraveler:embassies`): flat void, admin-allocated 11×11 plots on a chunk spiral, each an EMBASSY-flagged region with a respawn-anchor teleporter to its saved destination. An out-of-trio dimension, not a World (ADR 0003) — entered and left only by teleport, with the player's origin restored on void-fall, disconnect, or server stop.
 _Avoid_: embassy world as a World, third World
-
-**Teleportation Crystal**:
-A craftable Echo Shard (tiers 1–3) that opens the destination menu (Bed, Spawn, Player, Embassy, Wilderness). All of a player's crystals share one 0–3 energy pool shown as the item's damage bar (viewer-relative); one energy regenerates per 15 minutes of play time.
-_Avoid_: charge (the respawn anchor's word), mana

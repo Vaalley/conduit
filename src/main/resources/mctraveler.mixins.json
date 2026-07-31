@@ -25,7 +25,9 @@
     "RegionEndermanTakeMixin",
     "RegionEndermanPlaceMixin",
     "RegionPressurePlateMixin",
-    "EmbassyOriginMixin"
+    "EmbassyOriginMixin",
+    "CrystalCraftingGuardMixin",
+    "CrystalDamageDisplayMixin"
   ],
   "injectors": {
     "defaultRequire": 1

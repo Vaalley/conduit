@@ -374,10 +374,7 @@ object RegionCommands {
 
     // ---- admin commands ----
 
-    /** The Portal's gate reply for every admin-only command, or null to proceed. */
-    private fun adminGate(player: ServerPlayer): Component? =
-        if (RegionsFeature.isAdmin(player)) null
-        else Paint.error("You must be an admin to use this command")
+    private fun adminGate(player: ServerPlayer): Component? = RegionsFeature.adminGate(player)
 
     private fun toggleFlag(player: ServerPlayer, rawFlag: String): Component {
         adminGate(player)?.let { return it }

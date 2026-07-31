@@ -52,6 +52,26 @@ class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
         write(uuid, WORLDS, PortalJson.emit(worlds.values))
     }
 
+    override fun crystalEnergy(uuid: UUID): Int? = readInt(uuid, CRYSTAL_ENERGY)
+
+    override fun setCrystalEnergy(uuid: UUID, energy: Int) =
+        write(uuid, CRYSTAL_ENERGY, energy.toString())
+
+    override fun crystalNextRegenAt(uuid: UUID): Int? = readInt(uuid, CRYSTAL_NEXT_REGEN_AT)
+
+    override fun setCrystalNextRegenAt(uuid: UUID, playTimeTicks: Int?) {
+        // No pending recharge is the *absence* of the field, not a sentinel:
+        // a full player's record looks like one that never spent any energy.
+        if (playTimeTicks == null) remove(uuid, CRYSTAL_NEXT_REGEN_AT)
+        else write(uuid, CRYSTAL_NEXT_REGEN_AT, playTimeTicks.toString())
+    }
+
+    private fun readInt(uuid: UUID, key: String): Int? =
+        read(uuid)[key]?.let { field ->
+            field.rawValue.toIntOrNull()
+                ?: throw IllegalArgumentException("\"$key\" is not a whole number: ${field.rawValue}")
+        }
+
     /**
      * The bucket a raw `worlds.<world>` object slice denotes. Bucket fields are
      * mod-owned, so a slice missing one is corrupt data and throws (matching
@@ -132,6 +152,14 @@ class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
         Files.writeString(fileFor(uuid), PortalJson.emit(record.values))
     }
 
+    /** Drops [key] from the record; a no-op (no write at all) if it is absent. */
+    private fun remove(uuid: UUID, key: String) {
+        val record = read(uuid)
+        if (record.remove(key) == null) return
+        Files.createDirectories(playersDir)
+        Files.writeString(fileFor(uuid), PortalJson.emit(record.values))
+    }
+
     private fun fileFor(uuid: UUID): Path = playersDir.resolve("$uuid.json")
 
     private companion object {
@@ -145,5 +173,9 @@ class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
         const val DIMENSION = "dimension"
         const val RESPAWN = "respawn"
         const val FORCED = "forced"
+
+        // Teleportation Crystal energy, shared by all a player's crystals.
+        const val CRYSTAL_ENERGY = "crystalEnergy"
+        const val CRYSTAL_NEXT_REGEN_AT = "crystalNextRegenAt"
     }
 }

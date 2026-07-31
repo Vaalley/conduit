@@ -38,4 +38,23 @@ interface PlayerStore {
     fun bucket(uuid: UUID, world: String): PerWorldBucket?
 
     fun setBucket(uuid: UUID, world: String, bucket: PerWorldBucket)
+
+    /**
+     * The player's Teleportation Crystal energy (0-3), or null if they have
+     * never spent any — read as full energy by
+     * [eu.mctraveler.crystal.CrystalEnergy], which owns the range.
+     */
+    fun crystalEnergy(uuid: UUID): Int?
+
+    fun setCrystalEnergy(uuid: UUID, energy: Int)
+
+    /**
+     * The play-time tick count at which the player's next energy point is due,
+     * or null when no recharge is pending (they are at full energy). Play time,
+     * not wall clock: an offline player's recharge does not advance.
+     */
+    fun crystalNextRegenAt(uuid: UUID): Int?
+
+    /** Sets, or with a null [playTimeTicks] clears, the pending recharge. */
+    fun setCrystalNextRegenAt(uuid: UUID, playTimeTicks: Int?)
 }

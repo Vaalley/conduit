@@ -4,6 +4,7 @@ import eu.mctraveler.away.AwayFeature
 import eu.mctraveler.chat.ChatBridge
 import eu.mctraveler.chat.ChatFeature
 import eu.mctraveler.chat.PrivateMessages
+import eu.mctraveler.crystal.CrystalFeature
 import eu.mctraveler.embassy.EmbassiesFeature
 import eu.mctraveler.http.HttpApi
 import eu.mctraveler.notepad.NotepadFeature
@@ -59,6 +60,7 @@ object MCTraveler : ModInitializer {
         eu.mctraveler.worlds.WorldsFeature.register()
         RegionsFeature.register()
         EmbassiesFeature.register()
+        CrystalFeature.register()
         HttpApi.register()
         LOGGER.info("MCTraveler initialized")
     }
