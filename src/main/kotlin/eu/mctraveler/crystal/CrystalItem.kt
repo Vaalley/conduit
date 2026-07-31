@@ -54,7 +54,11 @@ object CrystalItem {
             crystal,
             CompoundTag().apply {
                 putBoolean(MARKER, true)
-                putInt(TIER, tier)
+                // A byte, not an int, so a crystal built here is byte-identical
+                // to one the datapack recipes craft: JSON has no integer widths,
+                // so the decoder narrows every small number to a byte. Reading
+                // goes through getIntOr, which takes any numeric tag either way.
+                putByte(TIER, tier.toByte())
             },
         )
         crystal.set(DataComponents.ITEM_NAME, Component.literal(ITEM_NAME))

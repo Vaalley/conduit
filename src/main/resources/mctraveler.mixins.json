@@ -24,7 +24,8 @@
     "RegionMobGriefingMixin",
     "RegionEndermanTakeMixin",
     "RegionEndermanPlaceMixin",
-    "RegionPressurePlateMixin"
+    "RegionPressurePlateMixin",
+    "CrystalCraftingGuardMixin"
   ],
   "injectors": {
     "defaultRequire": 1
