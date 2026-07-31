@@ -32,3 +32,14 @@ _Avoid_: bug-for-bug parity
 **Portal**:
 The legacy system being ported away from — the standalone TypeScript/Bun proxy that sat between clients and the backend servers.
 _Avoid_: proxy (ambiguous once the Fabric mod exists)
+
+**Nucleus**:
+The pre-Portal legacy system — the MCTravelerNucleus Paper plugin. Source of the Embassies and Teleportation Crystal features and of their era's data (embassies world, embassy regions, crystal energy).
+
+**Embassies**:
+The plot-museum dimension (`mctraveler:embassies`): flat void, admin-allocated 11×11 plots on a chunk spiral, each an EMBASSY-flagged region with a respawn-anchor teleporter to its saved destination. An out-of-trio dimension, not a World (ADR 0003) — entered and left only by teleport, with the player's origin restored on void-fall, disconnect, or server stop.
+_Avoid_: embassy world as a World, third World
+
+**Teleportation Crystal**:
+A craftable Echo Shard (tiers 1–3) that opens the destination menu (Bed, Spawn, Player, Embassy, Wilderness). All of a player's crystals share one 0–3 energy pool shown as the item's damage bar (viewer-relative); one energy regenerates per 15 minutes of play time.
+_Avoid_: charge (the respawn anchor's word), mana
