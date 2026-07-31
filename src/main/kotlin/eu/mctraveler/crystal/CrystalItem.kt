@@ -29,7 +29,11 @@ object CrystalItem {
     /** The lowest tier, craftable from an Eye of Ender. */
     const val MIN_TIER = 1
 
-    /** The highest tier, and the energy a crystal's damage bar is scaled against. */
+    /**
+     * The highest tier. Equal to [CrystalEnergy.MAX_ENERGY] on purpose: a tier
+     * is a charge capacity, so a top-tier crystal's bar spans the whole pool
+     * while a tier-1's fills after a single point is spent.
+     */
     const val MAX_TIER = 3
 
     /** The crystal's item name, exactly as Nucleus named it. */
@@ -43,8 +47,12 @@ object CrystalItem {
 
     /**
      * A fresh crystal of [tier]. Throws for a tier outside [MIN_TIER]..[MAX_TIER]
-     * — every caller in the mod knows its tier statically, so an out-of-range one
-     * is a bug, not user input.
+     * — a tier is never user input, so an out-of-range one is a bug.
+     *
+     * Players get their crystals from the datapack recipes rather than from
+     * here; this is the definition those recipes' `result` blocks are held to
+     * (see `CrystalRecipeJsonTest`), and the crystal any later feature needs to
+     * hand out directly.
      */
     fun of(tier: Int): ItemStack {
         require(tier in MIN_TIER..MAX_TIER) { "crystal tier must be $MIN_TIER..$MAX_TIER, was $tier" }

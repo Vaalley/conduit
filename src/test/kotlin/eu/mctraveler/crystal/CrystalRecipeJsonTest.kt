@@ -1,10 +1,9 @@
 package eu.mctraveler.crystal
 
+import com.google.gson.JsonElement
 import com.google.gson.JsonParser
 import com.mojang.serialization.JsonOps
 import eu.mctraveler.MinecraftTestBootstrap
-import java.nio.file.Files
-import java.nio.file.Path
 import net.minecraft.data.registries.VanillaRegistries
 import net.minecraft.resources.RegistryOps
 import net.minecraft.world.item.ItemStack
@@ -35,13 +34,16 @@ class CrystalRecipeJsonTest {
         fun bootstrapMinecraft() = MinecraftTestBootstrap.ensure()
     }
 
-    private val ops: RegistryOps<com.google.gson.JsonElement> =
+    private val ops: RegistryOps<JsonElement> =
         RegistryOps.create(JsonOps.INSTANCE, VanillaRegistries.createLookup())
 
-    private fun recipeFile(tier: Int): Path =
-        Path.of("src/main/resources/data/mctraveler/recipe/teleportation_crystal_tier_$tier.json")
-
-    private fun json(tier: Int) = JsonParser.parseString(Files.readString(recipeFile(tier)))
+    /** The shipped recipe, read off the classpath exactly where the server looks for it. */
+    private fun json(tier: Int): JsonElement {
+        val path = "/data/mctraveler/recipe/teleportation_crystal_tier_$tier.json"
+        val bytes = checkNotNull(javaClass.getResourceAsStream(path)) { "no recipe on the classpath at $path" }
+            .use { it.readBytes() }
+        return JsonParser.parseString(bytes.decodeToString())
+    }
 
     private fun resultOf(tier: Int): ItemStack =
         ItemStackTemplate.CODEC

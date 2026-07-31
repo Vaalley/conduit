@@ -4,6 +4,8 @@ import net.minecraft.core.component.DataComponents
 import net.minecraft.network.protocol.Packet
 import net.minecraft.network.protocol.game.ClientboundContainerSetContentPacket
 import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket
+import net.minecraft.network.protocol.game.ClientboundSetCursorItemPacket
+import net.minecraft.network.protocol.game.ClientboundSetPlayerInventoryPacket
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.item.ItemStack
 
@@ -23,10 +25,14 @@ import net.minecraft.world.item.ItemStack
 object CrystalDamageDisplay {
 
     /**
-     * [packet] as [viewer] should see it: unchanged unless it carries crystals,
-     * in which case a copy is returned with each crystal's damage bar showing
-     * [viewer]'s energy. Never mutates the packet or the stacks in it — those
-     * stacks are the server's own inventory contents.
+     * [packet] as [viewer] should see it: [packet] itself unless it carries
+     * crystals, in which case a copy is returned with each crystal's damage bar
+     * showing [viewer]'s energy. Never mutates the packet or the stacks in it —
+     * those stacks are the server's own inventory contents.
+     *
+     * Every clientbound packet in the game passes through here, so the cheap
+     * "is there a crystal in this at all" test comes first and [viewer]'s energy
+     * is read at most once, however many crystals a packet carries.
      */
     @JvmStatic
     fun forViewer(viewer: ServerPlayer, packet: Packet<*>): Packet<*> = when (packet) {
@@ -38,7 +44,7 @@ object CrystalDamageDisplay {
                     packet.containerId,
                     packet.stateId,
                     packet.slot,
-                    painted(packet.item, viewer),
+                    painted(packet.item, damageFor(viewer)),
                 )
             }
         }
@@ -47,11 +53,35 @@ object CrystalDamageDisplay {
             if (packet.items().none(CrystalItem::isCrystal) && !CrystalItem.isCrystal(packet.carriedItem())) {
                 packet
             } else {
+                val damage = damageFor(viewer)
                 ClientboundContainerSetContentPacket(
                     packet.containerId(),
                     packet.stateId(),
-                    packet.items().map { painted(it, viewer) },
-                    painted(packet.carriedItem(), viewer),
+                    packet.items().map { painted(it, damage) },
+                    painted(packet.carriedItem(), damage),
+                )
+            }
+        }
+
+        // Since 1.21.4 the cursor and single player-inventory slots have their
+        // own packets rather than riding inside the container ones, so leaving
+        // these out would drop the bar off a crystal the moment it was picked
+        // up onto the cursor.
+        is ClientboundSetCursorItemPacket -> {
+            if (!CrystalItem.isCrystal(packet.contents())) {
+                packet
+            } else {
+                ClientboundSetCursorItemPacket(painted(packet.contents(), damageFor(viewer)))
+            }
+        }
+
+        is ClientboundSetPlayerInventoryPacket -> {
+            if (!CrystalItem.isCrystal(packet.contents())) {
+                packet
+            } else {
+                ClientboundSetPlayerInventoryPacket(
+                    packet.slot(),
+                    painted(packet.contents(), damageFor(viewer)),
                 )
             }
         }
@@ -60,14 +90,15 @@ object CrystalDamageDisplay {
     }
 
     /**
-     * A crystal wearing [viewer]'s energy, or [stack] itself if it is not one.
-     * The bar is read as "energy spent": a full player's crystal shows no damage,
-     * an empty player's shows a full bar.
+     * The damage bar [viewer] should see on any crystal, read as "energy spent":
+     * a full player's crystal shows no damage, an empty player's a full bar.
      */
-    private fun painted(stack: ItemStack, viewer: ServerPlayer): ItemStack {
+    private fun damageFor(viewer: ServerPlayer): Int =
+        CrystalEnergy.MAX_ENERGY - CrystalEnergy.energyOf(viewer)
+
+    /** A crystal wearing [damage], or [stack] itself if it is not a crystal. */
+    private fun painted(stack: ItemStack, damage: Int): ItemStack {
         if (!CrystalItem.isCrystal(stack)) return stack
-        return stack.copy().apply {
-            set(DataComponents.DAMAGE, CrystalEnergy.MAX_ENERGY - CrystalEnergy.energyOf(viewer))
-        }
+        return stack.copy().apply { set(DataComponents.DAMAGE, damage) }
     }
 }

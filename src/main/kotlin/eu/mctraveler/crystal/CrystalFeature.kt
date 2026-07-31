@@ -35,19 +35,8 @@ object CrystalFeature {
     private fun onEndServerTick(server: MinecraftServer) {
         if (server.tickCount % REGEN_CHECK_INTERVAL_TICKS != 0) return
         for (player in server.playerList.players) {
-            val granted = CrystalEnergy.regen(
-                store(),
-                player.uuid,
-                CrystalEnergy.playTimeTicks(player),
-            )
-            if (!granted) continue
-            CrystalEnergy.resync(player)
+            if (!CrystalEnergy.regen(player)) continue
             player.sendSystemMessage(Paint.info("Your energy crystal has recharged one energy"))
         }
     }
-
-    private fun store() =
-        checkNotNull(eu.mctraveler.MCTraveler.persistence) {
-            "the Teleportation Crystal needs the Persistence service"
-        }.players
 }

@@ -53,6 +53,10 @@ object CrystalEnergy {
     fun modify(store: PlayerStore, uuid: UUID, delta: Int, playTimeTicks: Int): Int {
         val current = energyOf(store, uuid)
         val proposed = (current + delta).coerceIn(0, MAX_ENERGY)
+        // Every store write is a whole-file rewrite, so a move that moves
+        // nothing (a clamped spend, setting the energy someone already has)
+        // touches no disk.
+        if (proposed == current) return current
         store.setCrystalEnergy(uuid, proposed)
         if (current == MAX_ENERGY && proposed < MAX_ENERGY && nextRegenAt(store, uuid) == null) {
             store.setCrystalNextRegenAt(uuid, playTimeTicks + RECHARGE_TICKS)
@@ -100,6 +104,17 @@ object CrystalEnergy {
     /** Sets [player]'s energy outright (the admin command's one job). */
     fun setEnergy(player: ServerPlayer, energy: Int): Int =
         modify(player, energy - energyOf(player))
+
+    /**
+     * Grants [player] a recharge if one has come due, resyncing their crystals
+     * and returning whether it did — the recharge loop's whole step, so the loop
+     * needs no store of its own.
+     */
+    fun regen(player: ServerPlayer): Boolean {
+        if (!regen(store(), player.uuid, playTimeTicks(player))) return false
+        resync(player)
+        return true
+    }
 
     /** Ticks played, the clock every crystal threshold is measured against. */
     fun playTimeTicks(player: ServerPlayer): Int =

@@ -79,6 +79,42 @@ class CrystalCraftingGameTest {
     }
 
     @GameTest
+    fun aCrystalInAnArmCannotStandInForTheOneInTheCentre(helper: GameTestHelper) {
+        // The tier-3 recipe keys its arms to echo_shard, and a crystal is an
+        // echo shard — so the recipe itself matches here. Only the guard's
+        // positional check stops a plain shard in the middle crafting a tier 3
+        // off a crystal parked in a corner of the plus.
+        val bench = CraftingBench.open(helper, "CrystalSmuggler")
+        try {
+            bench.plus(centre = ItemStack(Items.ECHO_SHARD), arm = ItemStack(Items.ECHO_SHARD))
+            bench.put(1, CrystalItem.of(2))
+            helper.assertTrue(
+                bench.result().isEmpty,
+                "a crystal in an arm must not upgrade a plain centre, found ${bench.result()}",
+            )
+            helper.succeed()
+        } finally {
+            bench.close()
+        }
+    }
+
+    @GameTest
+    fun aSecondCrystalIsNeverSpentAsAPlainShard(helper: GameTestHelper) {
+        val bench = CraftingBench.open(helper, "CrystalSpendthrift")
+        try {
+            bench.plus(centre = CrystalItem.of(2), arm = ItemStack(Items.ECHO_SHARD))
+            bench.put(3, CrystalItem.of(1))
+            helper.assertTrue(
+                bench.result().isEmpty,
+                "a second crystal must not be consumed as a plain shard, found ${bench.result()}",
+            )
+            helper.succeed()
+        } finally {
+            bench.close()
+        }
+    }
+
+    @GameTest
     fun aCrystalIsNeverAnIngredientInSomeoneElsesRecipe(helper: GameTestHelper) {
         val bench = CraftingBench.open(helper, "CrystalWaster")
         try {

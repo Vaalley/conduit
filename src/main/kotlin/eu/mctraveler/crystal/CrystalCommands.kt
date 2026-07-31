@@ -63,7 +63,7 @@ object CrystalCommands {
      * sender should be told.
      */
     private fun setEnergy(sender: ServerPlayer, energy: Int, targetName: String): Component {
-        adminGate(sender)?.let { return it }
+        RegionsFeature.adminGate(sender)?.let { return it }
         // Bounds before the lookup, so a typo in the energy is not reported as
         // a missing player.
         if (energy < 0 || energy > CrystalEnergy.MAX_ENERGY) {
@@ -79,11 +79,6 @@ object CrystalCommands {
             " energy",
         )
     }
-
-    /** The house gate reply for every admin-only command, or null to proceed. */
-    private fun adminGate(player: ServerPlayer): Component? =
-        if (RegionsFeature.isAdmin(player)) null
-        else Paint.error("You must be an admin to use this command")
 
     private inline fun reply(
         ctx: CommandContext<CommandSourceStack>,

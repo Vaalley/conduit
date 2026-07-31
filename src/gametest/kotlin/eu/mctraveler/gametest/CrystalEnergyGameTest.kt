@@ -7,9 +7,12 @@ import net.minecraft.core.component.DataComponents
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.network.protocol.game.ClientboundContainerSetContentPacket
 import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket
+import net.minecraft.network.protocol.game.ClientboundSetCursorItemPacket
+import net.minecraft.network.protocol.game.ClientboundSetPlayerInventoryPacket
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.stats.Stats
 import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.Items
 
 /**
  * Crystal energy as the player experiences it (spec User Stories 23-25):
@@ -99,10 +102,42 @@ class CrystalEnergyGameTest {
     }
 
     @GameTest
+    fun aCrystalOnTheCursorKeepsItsBar(helper: GameTestHelper) {
+        // The cursor and single inventory slots got their own packets in 1.21.4;
+        // a crystal picked up in a GUI travels on one of those, not inside a
+        // container packet.
+        val viewer = MessageCapturingPlayer.join(helper, "CrystalJuggler")
+        try {
+            CrystalEnergy.setEnergy(viewer, 1)
+            PacketCapture.drain(viewer)
+            viewer.connection.send(ClientboundSetCursorItemPacket(CrystalItem.of(3)))
+            viewer.connection.send(ClientboundSetPlayerInventoryPacket(0, CrystalItem.of(3)))
+            // One drain: it empties the channel, so both packets have to come
+            // out of the same read.
+            val sent = PacketCapture.drain(viewer)
+            val cursor = sent.filterIsInstance<ClientboundSetCursorItemPacket>().single()
+            helper.assertValueEqual(
+                cursor.contents().getOrDefault(DataComponents.DAMAGE, 0),
+                2,
+                "the damage bar on the cursor",
+            )
+            val slot = sent.filterIsInstance<ClientboundSetPlayerInventoryPacket>().single()
+            helper.assertValueEqual(
+                slot.contents().getOrDefault(DataComponents.DAMAGE, 0),
+                2,
+                "the damage bar on a pushed inventory slot",
+            )
+            helper.succeed()
+        } finally {
+            viewer.leave()
+        }
+    }
+
+    @GameTest
     fun anOrdinaryItemIsSentThroughUntouched(helper: GameTestHelper) {
         val viewer = MessageCapturingPlayer.join(helper, "CrystalBystander")
         try {
-            val plain = ItemStack(net.minecraft.world.item.Items.ECHO_SHARD)
+            val plain = ItemStack(Items.ECHO_SHARD)
             PacketCapture.drain(viewer)
             viewer.connection.send(ClientboundContainerSetSlotPacket(0, 0, 36, plain))
             val sent = PacketCapture.drainOf<ClientboundContainerSetSlotPacket>(viewer).single()
