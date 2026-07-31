@@ -14,18 +14,27 @@ import net.minecraft.world.level.Level
  * unchanged. Primary is the vanilla trio; the Secondary dimension ids below
  * anticipate ticket 04's datapack trio (adjust here, and only here, if that
  * ticket lands on different ids).
+ *
+ * The out-of-trio embassies dimension (ADR 0003) is here for the same reason:
+ * Nucleus stored its embassy regions under its Bukkit world name, `embassies`,
+ * so keeping that string is what lets the twenty imported embassies be found
+ * where they stand.
  */
 object RegionWorlds {
-    private fun secondary(path: String): ResourceKey<Level> =
+    private fun modDimension(path: String): ResourceKey<Level> =
         ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath("mctraveler", path))
+
+    /** The legacy world string of the embassies dimension — Nucleus's world name. */
+    const val EMBASSIES = "embassies"
 
     private val legacyNames: Map<ResourceKey<Level>, String> = mapOf(
         Level.OVERWORLD to "world",
         Level.NETHER to "world_nether",
         Level.END to "world_the_end",
-        secondary("secondary") to "last",
-        secondary("secondary_nether") to "last_nether",
-        secondary("secondary_end") to "last_the_end",
+        modDimension("secondary") to "last",
+        modDimension("secondary_nether") to "last_nether",
+        modDimension("secondary_end") to "last_the_end",
+        modDimension("embassies") to EMBASSIES,
     )
 
     /**
@@ -41,9 +50,11 @@ object RegionWorlds {
 
     /**
      * `/rg locate`'s `server/dimension` rendering of a legacy world string,
-     * with the Portal's exact mapping.
+     * with the Portal's exact mapping. The embassies dimension is in no World
+     * and has no trio to name a role in, so it is simply itself.
      */
     fun locateInfo(world: String): String {
+        if (world == EMBASSIES) return EMBASSIES
         val server = if (isSecondaryWorld(world)) "secondary" else "primary"
         val dimension = when {
             world.contains("nether") -> "nether"

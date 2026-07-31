@@ -48,6 +48,11 @@ class RegionWorldsTest {
     }
 
     @Test
+    fun `the embassies dimension keeps Nucleus's own world name`() {
+        assertEquals("embassies", RegionWorlds.legacyName(secondary("embassies")))
+    }
+
+    @Test
     fun `an unknown dimension maps to its own id and never a legacy name`() {
         val key = secondary("mystery")
         assertEquals("mctraveler:mystery", RegionWorlds.legacyName(key))
@@ -69,5 +74,10 @@ class RegionWorldsTest {
         assertEquals("secondary/overworld", RegionWorlds.locateInfo("last"))
         assertEquals("secondary/nether", RegionWorlds.locateInfo("last_nether"))
         assertEquals("secondary/end", RegionWorlds.locateInfo("last_the_end"))
+    }
+
+    @Test
+    fun `locate names the embassies dimension, which belongs to no World`() {
+        assertEquals("embassies", RegionWorlds.locateInfo("embassies"))
     }
 }
