@@ -194,6 +194,45 @@ class JsonPlayerStoreTest {
     }
 
     @Test
+    fun `a player with no crystal state has neither energy nor a recharge threshold`() {
+        assertNull(store().crystalEnergy(uuid))
+        assertNull(store().crystalNextRegenAt(uuid))
+    }
+
+    @Test
+    fun `crystal energy and recharge threshold round-trip through the store`() {
+        val store = store()
+        store.setCrystalEnergy(uuid, 1)
+        store.setCrystalNextRegenAt(uuid, 123456)
+        assertEquals(1, store().crystalEnergy(uuid))
+        assertEquals(123456, store().crystalNextRegenAt(uuid))
+    }
+
+    @Test
+    fun `clearing the recharge threshold removes the field, leaving energy alone`() {
+        val file = dir.resolve("$uuid.json")
+        val store = store()
+        store.setCrystalEnergy(uuid, 2)
+        store.setCrystalNextRegenAt(uuid, 999)
+        store.setCrystalNextRegenAt(uuid, null)
+        assertNull(store().crystalNextRegenAt(uuid))
+        assertEquals(2, store().crystalEnergy(uuid))
+        assertEquals("""{"crystalEnergy":2}""", Files.readString(file))
+    }
+
+    @Test
+    fun `crystal fields are written under their documented names beside legacy data`() {
+        val file = seedPortalFile()
+        val store = store()
+        store.setCrystalEnergy(uuid, 0)
+        store.setCrystalNextRegenAt(uuid, 24000)
+        assertEquals(
+            portalFile.dropLast(1) + ""","crystalEnergy":0,"crystalNextRegenAt":24000}""",
+            Files.readString(file),
+        )
+    }
+
+    @Test
     fun `a file that cannot be parsed is never overwritten`() {
         val file = dir.resolve("$uuid.json")
         Files.writeString(file, """{"balance":12.3""") // truncated write, e.g. a past crash

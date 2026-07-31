@@ -32,6 +32,13 @@ class Paint private constructor(private val style: Style) {
     val blue: Paint get() = Paint(style.withColor(ChatFormatting.BLUE))
     val darkGray: Paint get() = Paint(style.withColor(ChatFormatting.DARK_GRAY))
 
+    /**
+     * Gold. Beyond the Portal's vocabulary — it arrived with the Nucleus-era
+     * features (spec deviation 10): the WARNING prefix, and the Teleportation
+     * Crystal's charge-capacity lore line.
+     */
+    val gold: Paint get() = Paint(style.withColor(ChatFormatting.GOLD))
+
     /** No explicit color: the text inherits its surroundings' (default white at top level). */
     val reset: Paint get() = Paint(style.withColor(null as TextColor?))
 
@@ -73,6 +80,7 @@ class Paint private constructor(private val style: Style) {
         val red: Paint get() = plain.red
         val blue: Paint get() = plain.blue
         val darkGray: Paint get() = plain.darkGray
+        val gold: Paint get() = plain.gold
         val reset: Paint get() = plain.reset
         val bold: Paint get() = plain.bold
         val italic: Paint get() = plain.italic
@@ -93,6 +101,15 @@ class Paint private constructor(private val style: Style) {
 
         /** `USAGE <content>`: aqua+bold prefix, gray content (the Portal's §b§lUSAGE §7). */
         fun usage(vararg content: Any?): MutableComponent = prefixed(aqua.bold("USAGE"), content)
+
+        // INFO and WARNING joined the vocabulary with the Nucleus-era features
+        // (spec deviation 10), in Nucleus's exact prefix colors.
+
+        /** `INFO <content>`: aqua+bold prefix, gray content. */
+        fun info(vararg content: Any?): MutableComponent = prefixed(aqua.bold("INFO"), content)
+
+        /** `WARNING <content>`: gold+bold prefix, gray content. */
+        fun warning(vararg content: Any?): MutableComponent = prefixed(gold.bold("WARNING"), content)
 
         // Aqua exists only for the USAGE prefix — it is not part of the Portal's
         // public color vocabulary, so it stays private.
