@@ -320,3 +320,13 @@ Entries keep their numbers permanently; tickets cite them as "deviation N".
 17. **Anchor guard scope**: the right-click guard applies inside embassy-flagged
     regions (as in Nucleus); anchors elsewhere in the dimension cannot exist through
     normal play.
+18. **Legacy crystal stacks**: Nucleus-era crystals still sitting in migrated
+    inventories, chests, ender chests, and shulkers carry Bukkit's marker layout
+    (`custom_data` → `PublicBukkitValues` → `mctravelernucleus:is-teleportation-crystal`
+    / `mctravelernucleus:teleportation-crystal-tier`). Crystal identification
+    recognizes both layouts at runtime — an importer sweep could not reach every
+    container, and Nucleus's own default (missing tier reads as 3) is preserved.
+19. **Admin set-energy leaves the recharge clock alone**: as in Nucleus, setting a
+    below-full player to full does not clear a pending recharge threshold, so their
+    next spend is refunded once when the stale threshold lapses. Kept for identical
+    end-user behavior; admin-only and rare.
