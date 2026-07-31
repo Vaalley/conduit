@@ -8,6 +8,7 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.core.BlockPos
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.server.level.ServerLevel
+import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.attribute.EnvironmentAttributes
 import net.minecraft.world.entity.MobCategory
 import net.minecraft.world.level.block.Blocks
@@ -111,7 +112,7 @@ class EmbassiesGameTest {
         val player = MessageCapturingPlayer.join(helper, "T01VoidDig")
         val at = BlockPos(1100, 0, 1100)
         level.setBlockAndUpdate(at, Blocks.STONE.defaultBlockState())
-        check(player.teleportTo(level, at.x + 0.5, 1.0, at.z + 1.5, emptySet(), 0.0f, 0.0f, false))
+        player.arriveIn(level, at.x + 0.5, 1.0, at.z + 1.5)
 
         helper.assertFalse(player.gameMode.destroyBlock(at), "a player dug up the protected embassies void")
         helper.assertValueEqual(
@@ -132,7 +133,7 @@ class EmbassiesGameTest {
 
         helper.runAfterDelay(2) {
             helper.assertTrue(view.refresh().visible, "no sidebar in the player's own region to begin with")
-            check(player.teleportTo(level, 1200.5, 1.0, 1200.5, emptySet(), 0.0f, 0.0f, false))
+            player.arriveIn(level, 1200.5, 1.0, 1200.5)
         }
         helper.runAfterDelay(4) {
             view.refresh()
@@ -142,8 +143,55 @@ class EmbassiesGameTest {
         }
     }
 
+    // ---- damage ----
+
+    @GameTest
+    fun nothingHurtsAPlayerInsideTheEmbassiesDimension(helper: GameTestHelper) {
+        val level = embassies(helper)
+        val player = MessageCapturingPlayer.join(helper, "T01Hurt")
+        player.arriveIn(level, 1300.5, 1.0, 1300.5)
+        player.health = 20.0f
+
+        val sources = level.damageSources()
+        for (source in listOf(sources.generic(), sources.fall(), sources.inFire(), sources.fellOutOfWorld())) {
+            player.hurtServer(level, source, 5.0f)
+            helper.assertValueEqual(
+                player.health,
+                20.0f,
+                "the player's health after ${source.msgId} in the embassies dimension",
+            )
+        }
+        player.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun damageOutsideTheEmbassiesDimensionIsUntouched(helper: GameTestHelper) {
+        val player = MessageCapturingPlayer.join(helper, "T01Hurt2")
+        player.standAt(helper, 1.0, 1.0, 1.0)
+        player.health = 20.0f
+
+        player.hurtServer(helper.level, helper.level.damageSources().generic(), 5.0f)
+        helper.assertValueEqual(player.health, 15.0f, "the player's health after ordinary damage outside embassies")
+        player.leave()
+        helper.succeed()
+    }
+
     private fun embassies(helper: GameTestHelper): ServerLevel =
         checkNotNull(helper.level.server.getLevel(EmbassiesFeature.DIMENSION)) {
             "the ${EmbassiesFeature.DIMENSION.identifier()} dimension is not loaded on the server"
         }
+}
+
+/**
+ * Teleports the player into [level] and leaves them as a real session would be
+ * on arrival. Vanilla holds a player invulnerable and mid-dimension-change
+ * until their client acknowledges the teleport; a test's embedded connection
+ * never sends that packet, so the acknowledgement is made here.
+ */
+private fun ServerPlayer.arriveIn(level: ServerLevel, x: Double, y: Double, z: Double) {
+    check(teleportTo(level, x, y, z, emptySet(), 0.0f, 0.0f, false)) {
+        "teleport into ${level.dimension().identifier()} was rejected"
+    }
+    hasChangedDimension()
 }

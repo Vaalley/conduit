@@ -4,9 +4,11 @@ import eu.mctraveler.MCTraveler
 import eu.mctraveler.region.Region
 import eu.mctraveler.region.RegionWorlds
 import eu.mctraveler.region.RegionsFeature
+import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents
 import net.minecraft.core.registries.Registries
 import net.minecraft.resources.Identifier
 import net.minecraft.resources.ResourceKey
+import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.biome.Biome
 
@@ -46,9 +48,18 @@ object EmbassiesFeature {
         endZ = 0,
     ).also { it.flags.add("NO_SCOREBOARD") }
 
+    /** Whether [level] is the embassies dimension. */
+    fun isEmbassies(level: Level): Boolean = level.dimension() == DIMENSION
+
     fun register() {
         RegionsFeature.addLookupGuard { world, _, _, _, found ->
             if (world == RegionWorlds.EMBASSIES) found ?: worldRegion else found
+        }
+        // Nothing hurts a player here, of any kind (spec story 2). Nucleus
+        // cancelled every damage event in the world; deviation 1 makes this the
+        // whole of the ~40 per-world damage gamerules Bukkit let it set.
+        ServerLivingEntityEvents.ALLOW_DAMAGE.register { entity, _, _ ->
+            entity !is ServerPlayer || !isEmbassies(entity.level())
         }
     }
 
