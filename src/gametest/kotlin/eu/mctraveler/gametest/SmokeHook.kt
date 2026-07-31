@@ -1,6 +1,7 @@
 package eu.mctraveler.gametest
 
 import eu.mctraveler.MCTraveler
+import eu.mctraveler.embassy.EmbassiesFeature
 import eu.mctraveler.worlds.DimensionRole
 import eu.mctraveler.worlds.World
 import eu.mctraveler.worlds.WorldsFeature
@@ -39,7 +40,10 @@ object SmokeHook : DedicatedServerModInitializer {
         }
     }
 
-    /** Every World's every dimension is loaded on this real dedicated server. */
+    /**
+     * Every World's every dimension, and the out-of-trio embassies dimension,
+     * are loaded on this real dedicated server.
+     */
     private fun checkWorlds(server: MinecraftServer) {
         val worlds = checkNotNull(WorldsFeature.worlds) {
             "smoke: the Worlds service did not come up with the server"
@@ -62,5 +66,14 @@ object SmokeHook : DedicatedServerModInitializer {
                 )
             }
         }
+        // Embassies is in no World (ADR 0003), so the loop above cannot reach
+        // it — and it is datapack-defined, so only a real boot proves it ships.
+        val embassies = checkNotNull(server.getLevel(EmbassiesFeature.DIMENSION)) {
+            "smoke: the ${EmbassiesFeature.DIMENSION.identifier()} dimension is not loaded"
+        }
+        check(worlds.worldOf(embassies.dimension()) == null) {
+            "smoke: the embassies dimension was claimed by a World"
+        }
+        LOGGER.info("MCTraveler prod smoke: embassies = {}", embassies.dimension().identifier())
     }
 }

@@ -2,7 +2,10 @@ package eu.mctraveler.gametest
 
 import eu.mctraveler.embassy.EmbassiesFeature
 import eu.mctraveler.embassy.EmbassyOrigins
+import eu.mctraveler.region.RegionWorlds
 import eu.mctraveler.region.RegionsFeature
+import eu.mctraveler.text.Paint
+import eu.mctraveler.worlds.WorldsFeature
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
@@ -123,7 +126,46 @@ class EmbassiesGameTest {
             protectedBy("Embassies World"),
             "the refusal in the embassies void",
         )
+        level.setBlockAndUpdate(at, Blocks.AIR.defaultBlockState()) // leave the void as it was found
         player.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun noRegionCanBeCreatedInTheEmbassiesVoid(helper: GameTestHelper) {
+        val level = embassies(helper)
+        val player = MessageCapturingPlayer.join(helper, "T01VoidRg")
+        player.arriveIn(level, 1800.5, 1.0, 1800.5)
+
+        player.runCommand("rg start")
+        player.setPos(1810.5, 1.0, 1810.5)
+        player.runCommand("rg end")
+
+        // Nucleus turned this away the same way: the void is a region, and the
+        // would-be creator is not a member of it.
+        helper.assertValueEqual(
+            player.messages.last(),
+            Paint.error("You are not a member of the parent region"),
+            "the refusal for /rg end in the embassies void",
+        )
+        player.leave()
+        helper.succeed()
+    }
+
+    // ---- the dimension is in no World ----
+
+    @GameTest
+    fun embassiesBelongsToNoWorldSoTravelIgnoresIt(helper: GameTestHelper) {
+        val worlds = checkNotNull(WorldsFeature.worlds) { "the Worlds service is not up" }
+        helper.assertTrue(
+            worlds.worldOf(EmbassiesFeature.DIMENSION) == null,
+            "the embassies dimension was claimed by a World (ADR 0003: it is outside every trio)",
+        )
+        helper.assertValueEqual(
+            RegionWorlds.legacyName(EmbassiesFeature.DIMENSION),
+            "embassies",
+            "the legacy world string embassy regions are stored under",
+        )
         helper.succeed()
     }
 
