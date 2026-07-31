@@ -27,7 +27,8 @@
       "eu.mctraveler.gametest.OrphanedSaveClaimGameTest",
       "eu.mctraveler.gametest.RegionProtectionGameTest",
       "eu.mctraveler.gametest.RegionEnvironmentGameTest",
-      "eu.mctraveler.gametest.RegionFlagGameTest"
+      "eu.mctraveler.gametest.RegionFlagGameTest",
+      "eu.mctraveler.gametest.EmbassiesGameTest"
     ],
     "server": [
       {
