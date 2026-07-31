@@ -23,6 +23,9 @@ object RegionsFeature {
     var service: RegionService? = null
         private set
 
+    /** The guards [regionAt] folds over the service's answer (see [addLookupGuard]). */
+    private val lookupGuards = mutableListOf<(String, Int, Int, Int, Region?) -> Region?>()
+
     fun requireService(): RegionService =
         checkNotNull(service) { "the Region service is not started" }
 
@@ -49,7 +52,7 @@ object RegionsFeature {
     /**
      * The deepest region covering [pos] in [level], or null — the block-shaped
      * lookup protection is decided by ([RegionTracker.regionOf] is the
-     * player-shaped one). Null before the service is up.
+     * player-shaped one).
      */
     fun regionAt(level: Level, pos: BlockPos): Region? =
         regionAt(RegionWorlds.legacyName(level.dimension()), pos.x, pos.y, pos.z)
@@ -73,8 +76,6 @@ object RegionsFeature {
     fun addLookupGuard(guard: (world: String, x: Int, y: Int, z: Int, found: Region?) -> Region?) {
         lookupGuards.add(guard)
     }
-
-    private val lookupGuards = mutableListOf<(String, Int, Int, Int, Region?) -> Region?>()
 
     fun register() {
         ServerLifecycleEvents.SERVER_STARTING.register { server ->

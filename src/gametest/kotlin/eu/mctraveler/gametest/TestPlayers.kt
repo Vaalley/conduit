@@ -11,9 +11,11 @@ import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.FormattedText
 import net.minecraft.network.chat.Style
 import net.minecraft.network.protocol.PacketFlow
+import net.minecraft.network.protocol.game.ServerboundPlayerLoadedPacket
 import net.minecraft.resources.Identifier
 import net.minecraft.resources.ResourceKey
 import net.minecraft.server.MinecraftServer
+import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.server.network.CommonListenerCookie
 import net.minecraft.server.players.NameAndId
@@ -60,6 +62,20 @@ object TestPlayers {
     fun logout(player: ServerPlayer) {
         player.connection.onDisconnect(DisconnectionDetails(Component.literal("gametest logout")))
     }
+}
+
+/**
+ * Teleports the player and leaves them as a real session would be on arrival.
+ * Vanilla holds a player mid-dimension-change — and shielded from all damage —
+ * until their client acknowledges the move and says the world is loaded; a
+ * test's embedded connection never sends either packet, so they are made here.
+ */
+fun ServerPlayer.arriveIn(level: ServerLevel, x: Double, y: Double, z: Double) {
+    check(teleportTo(level, x, y, z, emptySet(), yRot, xRot, false)) {
+        "teleport into ${level.dimension().identifier()} was rejected"
+    }
+    hasChangedDimension()
+    connection.handleAcceptPlayerLoad(ServerboundPlayerLoadedPacket())
 }
 
 /** A [ServerPlayer] that records every system message it is sent, so tests can assert exact Portal wording. */

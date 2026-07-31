@@ -77,12 +77,7 @@ class TestPlayer private constructor(
     }
 
     fun moveTo(level: ServerLevel, x: Double, y: Double, z: Double) {
-        player.teleportTo(level, x, y, z, setOf(), 0f, 0f, false)
-        // Model the client finishing the move: the dimension change completes and the
-        // reloaded world is acked, as a real client would do. (Until then the server
-        // shields the player from all damage.)
-        player.hasChangedDimension()
-        player.connection.handleAcceptPlayerLoad(ServerboundPlayerLoadedPacket())
+        player.arriveIn(level, x, y, z)
     }
 
     /**

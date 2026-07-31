@@ -13,7 +13,6 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.core.BlockPos
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.server.level.ServerLevel
-import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.attribute.EnvironmentAttributes
 import net.minecraft.world.entity.MobCategory
 import net.minecraft.world.level.Level
@@ -329,7 +328,10 @@ class EmbassiesGameTest {
         helper.succeed()
     }
 
-    @GameTest
+    // Its own test environment, which is to say its own batch: this is the one
+    // test that reaches for every player on the server, and tests within a batch
+    // run side by side — it would send its neighbours' players home mid-assertion.
+    @GameTest(environment = "mctraveler-test:alone")
     fun theServerGoingDownReturnsEveryoneStillInside(helper: GameTestHelper) {
         val server = helper.level.server
         val level = embassies(helper)
@@ -358,17 +360,4 @@ class EmbassiesGameTest {
         checkNotNull(helper.level.server.getLevel(EmbassiesFeature.DIMENSION)) {
             "the ${EmbassiesFeature.DIMENSION.identifier()} dimension is not loaded on the server"
         }
-}
-
-/**
- * Teleports the player into [level] and leaves them as a real session would be
- * on arrival. Vanilla holds a player invulnerable and mid-dimension-change
- * until their client acknowledges the teleport; a test's embedded connection
- * never sends that packet, so the acknowledgement is made here.
- */
-private fun ServerPlayer.arriveIn(level: ServerLevel, x: Double, y: Double, z: Double) {
-    check(teleportTo(level, x, y, z, emptySet(), 0.0f, 0.0f, false)) {
-        "teleport into ${level.dimension().identifier()} was rejected"
-    }
-    hasChangedDimension()
 }

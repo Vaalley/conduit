@@ -27,6 +27,9 @@ import net.minecraft.world.level.biome.Biome
  */
 object EmbassiesFeature {
 
+    /** The bottom of the dimension: under here a player is falling through the void. */
+    private const val VOID_Y = -64.0
+
     /** The dimension. Outside every World's trio, so `Worlds.worldOf` is null for it. */
     val DIMENSION: ResourceKey<Level> = ResourceKey.create(Registries.DIMENSION, id("embassies"))
 
@@ -93,9 +96,6 @@ object EmbassiesFeature {
         }
         ServerLifecycleEvents.SERVER_STOPPING.register(::returnEveryoneInside)
     }
-
-    /** Below the dimension's bedrock floor: nothing under here but the void. */
-    private const val VOID_Y = -64.0
 
     private fun id(path: String): Identifier =
         Identifier.fromNamespaceAndPath(MCTraveler.MOD_ID, path)

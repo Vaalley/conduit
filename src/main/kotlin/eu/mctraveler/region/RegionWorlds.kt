@@ -1,5 +1,6 @@
 package eu.mctraveler.region
 
+import eu.mctraveler.MCTraveler
 import net.minecraft.core.registries.Registries
 import net.minecraft.resources.Identifier
 import net.minecraft.resources.ResourceKey
@@ -22,7 +23,7 @@ import net.minecraft.world.level.Level
  */
 object RegionWorlds {
     private fun modDimension(path: String): ResourceKey<Level> =
-        ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath("mctraveler", path))
+        ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath(MCTraveler.MOD_ID, path))
 
     /** The legacy world string of the embassies dimension — Nucleus's world name. */
     const val EMBASSIES = "embassies"
