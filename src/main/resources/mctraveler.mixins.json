@@ -25,7 +25,8 @@
     "RegionEndermanTakeMixin",
     "RegionEndermanPlaceMixin",
     "RegionPressurePlateMixin",
-    "CrystalCraftingGuardMixin"
+    "CrystalCraftingGuardMixin",
+    "CrystalDamageDisplayMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -28,7 +28,9 @@
       "eu.mctraveler.gametest.RegionProtectionGameTest",
       "eu.mctraveler.gametest.RegionEnvironmentGameTest",
       "eu.mctraveler.gametest.RegionFlagGameTest",
-      "eu.mctraveler.gametest.CrystalCraftingGameTest"
+      "eu.mctraveler.gametest.CrystalCraftingGameTest",
+      "eu.mctraveler.gametest.CrystalEnergyGameTest",
+      "eu.mctraveler.gametest.CrystalCommandGameTest"
     ],
     "server": [
       {
