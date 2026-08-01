@@ -138,6 +138,7 @@ tasks.named("runServer") {
 
 apply(from = "gradle/migrate.gradle.kts") // the one-time Portal migration tool (docs/migration.md)
 apply(from = "gradle/import-nucleus.gradle.kts") // the Nucleus embassy import (docs/nucleus-import.md)
+apply(from = "gradle/merge-worlds.gradle.kts") // the one-time merge of Secondary into Primary
 
 // Hot-reload dev loop (docs/dev-loop.md): run with
 //   ./gradlew runServer -Pmctraveler.devJbr=<JetBrains Runtime home>
