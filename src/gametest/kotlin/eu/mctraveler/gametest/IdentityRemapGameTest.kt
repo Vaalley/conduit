@@ -133,6 +133,48 @@ class IdentityRemapGameTest {
         }
     }
 
+    /**
+     * The receive half of the aliased players' chat (ticket 22, deviation 58).
+     * A vanilla client gates player-voiced chat — and only player-voiced chat —
+     * behind client-account state the server cannot see (friends-only, chat
+     * restrictions, commands-only visibility), and the two aliased players
+     * proved to be on the wrong side of one of those gates in production: they
+     * could send, and saw system traffic, but no one else's chat. The system
+     * channel passes every such gate, so it is the channel they now get chat on.
+     */
+    @GameTest
+    fun anAliasedPlayerReceivesChatAsSystemMessages(helper: GameTestHelper) {
+        val server = helper.level.server
+        val aliased = TestPlayer.joinAs(server, GameProfile(ALIAS_UUID, "iElmo"))
+        val ordinary = TestPlayer.join(server, "RemapTalker")
+
+        helper.runAfterDelay(2) {
+            ordinary.chat("hello iElmo")
+            aliased.chat("hello back")
+        }
+        helper.succeedWhen {
+            if (aliased.systemMessages().none { it.string == "RemapTalker hello iElmo" }) {
+                throw helper.assertionException(
+                    "an ordinary player's line did not reach the aliased player as a decorated system line",
+                )
+            }
+            // Their own echo arrives on the same channel, so they see themselves speak.
+            if (aliased.systemMessages().none { it.string == "iElmo hello back" }) {
+                throw helper.assertionException("the aliased player's own line did not echo back as a system line")
+            }
+            // Nothing player-voiced goes to an aliased client — either kind may be dropped unseen there.
+            if (aliased.chatPackets().isNotEmpty() || aliased.disguisedChatPackets().isNotEmpty()) {
+                throw helper.assertionException(
+                    "the aliased player was sent player or disguised chat, which their client may hide",
+                )
+            }
+            // The control: an ordinary player keeps the signed player-chat path.
+            if (ordinary.chatPackets().none { it.body().content() == "hello iElmo" }) {
+                throw helper.assertionException("an ordinary player's chat left the player-chat path")
+            }
+        }
+    }
+
     @GameTest
     fun unaffectedNamesLogInUntouched(helper: GameTestHelper) {
         val profile = loginProfileFor(helper, "Notch")

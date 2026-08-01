@@ -12,6 +12,7 @@
     "EndPortalBlockMixin",
     "ServerLoginPacketListenerImplMixin",
     "AliasedPlayerSecureChatMixin",
+    "AliasedPlayerChatDeliveryMixin",
     "PlayerDataStorageMixin",
     "CommandsMixin",
     "ServerGamePacketListenerImplMixin",
