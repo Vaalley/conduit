@@ -87,6 +87,15 @@ object RegionProtection {
      * listener ordering: ordering is invisible at the point it matters, and one
      * reordering of [eu.mctraveler.MCTraveler.onInitialize] would silently take
      * the crystal away from every player standing on someone else's land.
+     *
+     * A predicate list rather than a direct `CrystalItem.isCrystal` call here,
+     * even though the crystal is the only registrant today, because the arrow
+     * only points one way: `crystal` is built on `region`, and naming the
+     * crystal here would turn that into a cycle and leave region protection
+     * unusable without the feature it is supposed to be independent of. The
+     * list is the seam that keeps this file's contract general — "a feature may
+     * own items this does not touch" — rather than a list of one feature's
+     * names.
      */
     fun exemptItem(exemption: (ItemStack) -> Boolean) {
         itemExemptions.add(exemption)
