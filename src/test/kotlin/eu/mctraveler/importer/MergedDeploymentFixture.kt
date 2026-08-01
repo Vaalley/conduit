@@ -17,6 +17,12 @@ import java.nio.file.Path
  * The chunk files themselves are opaque bytes. Planning a merge never opens
  * one: which region files exist is the whole of what a placement search knows,
  * and it is all it needs (merge spec, "Placement search").
+ *
+ * A merge that actually relocates needs Secondary's chunk data to be real, and
+ * [withRealSecondaryChunks] makes it so. **Primary's stays opaque even then**,
+ * which is the point: the merge stages into empty destination files and never
+ * opens a Primary chunk, so a test whose Primary is unreadable nonsense and
+ * which passes anyway is evidence of exactly that.
  */
 class MergedDeploymentFixture(val root: Path) {
 
@@ -50,16 +56,55 @@ class MergedDeploymentFixture(val root: Path) {
         return this
     }
 
+    /**
+     * A plan that only chooses the offset, unless a test asks otherwise.
+     *
+     * Most of what there is to assert about a merge is decided before anything
+     * is written, and planning is also the only thing the opaque chunk files
+     * [build] writes can support. A test that wants the relocation to happen
+     * says `planOnly = false` and builds real chunk data first.
+     */
     fun plan(
         clearance: Int = WorldMerge.DEFAULT_CLEARANCE,
         offset: MergeOffset? = null,
         searchLimit: Int = WorldMerge.DEFAULT_SEARCH_LIMIT,
+        planOnly: Boolean = true,
     ) = MergePlan(
         targetDir = targetDir,
         clearance = clearance,
         offset = offset,
         searchLimit = searchLimit,
+        planOnly = planOnly,
     )
+
+    /**
+     * Secondary's opaque chunk files replaced with region files a server could
+     * load, in the same region files [build] put them in — so the placement the
+     * planning tests assert is the placement the relocation tests get.
+     *
+     * The overworld spans two region files on purpose: it is the only way to
+     * show that each source file lands on one destination file of its own rather
+     * than everything being funnelled into one. [FRONTIER] is the half-generated
+     * chunk that must not travel.
+     */
+    fun withRealSecondaryChunks(): MergedDeploymentFixture {
+        SECONDARY_FOLDERS.values.forEach { deleteRecursively(levelDir.resolve("dimensions/$it")) }
+        SyntheticChunks.write(levelDir, secondaryDimension(DimensionRole.OVERWORLD), SECONDARY_OVERWORLD)
+        SyntheticChunks.write(levelDir, secondaryDimension(DimensionRole.NETHER), SECONDARY_NETHER)
+        // Discarded rather than relocated, so it never has to be readable.
+        secondary(DimensionRole.END, "region", 0 to 0)
+        // Maps and raids, which were never imported at the Portal cutover either.
+        write(levelDir.resolve("dimensions/${SECONDARY_FOLDERS[DimensionRole.OVERWORLD]}/data/map_0.dat"), "a map")
+        return this
+    }
+
+    fun secondaryDimension(role: DimensionRole) = WorldLayout.SECONDARY.dimension(role)
+
+    fun primaryDimension(role: DimensionRole) = WorldLayout.PRIMARY.dimension(role)
+
+    /** Where [role]'s relocated chunk data ends up in the live save. */
+    fun primaryStorage(role: DimensionRole): Path =
+        Footprint.storageFolder(levelDir, primaryDimension(role))
 
     /** Chunk files in one of Primary's dimensions, at the given region-file coordinates. */
     fun primary(role: DimensionRole, folder: String, vararg files: Pair<Int, Int>) =
@@ -124,5 +169,22 @@ class MergedDeploymentFixture(val root: Path) {
             DimensionRole.NETHER to "mctraveler/secondary_nether",
             DimensionRole.END to "mctraveler/secondary_end",
         )
+
+        /** The chunk vanilla never finished, at Secondary's frontier. */
+        val FRONTIER = SyntheticChunks.Chunk(7, 7, SyntheticChunks.PROTO)
+
+        /**
+         * Secondary's overworld: two finished chunks in region file (0,0), one
+         * more in (1,0) — chunk 32 is the first chunk of the second file — and
+         * the frontier chunk that stays behind.
+         */
+        val SECONDARY_OVERWORLD = listOf(
+            SyntheticChunks.Chunk(0, 0),
+            SyntheticChunks.Chunk(5, 3),
+            SyntheticChunks.Chunk(32, 0),
+            FRONTIER,
+        )
+
+        val SECONDARY_NETHER = listOf(SyntheticChunks.Chunk(0, 0))
     }
 }

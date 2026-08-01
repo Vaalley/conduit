@@ -17,12 +17,18 @@ import net.minecraft.server.Bootstrap
 object WorldMergeMain {
 
     private val USAGE = """
-        Plans the merge of the Secondary World into Primary, against a live server run directory.
+        Merges the Secondary World into Primary, against a live server run directory.
 
-        Run it with the server STOPPED. It writes nothing: it measures both Worlds, chooses
-        where Secondary's landmass would go, and prints the placement for you to accept or reject.
+        Run it with the server STOPPED. It measures both Worlds, chooses where Secondary's
+        landmass goes, and relocates Secondary's overworld and nether chunk data into Primary's
+        at that offset. Everything is built in a staging directory and moved into place only if
+        the whole merge succeeds; Secondary's End is discarded rather than moved.
+
+        Plan it first with --plan-only, check the placement against the real map, then run it
+        for real with the offset it chose.
 
           --target <dir>        the live server run directory (regions.json, mctraveler/, world/)
+          --plan-only           choose the offset, print it and write NOTHING AT ALL
           --level-name <name>   the level directory to work in         [default: world]
           --clearance <blocks>  empty ground to leave around the landmass, in NETHER blocks;
                                 the overworld is given eight times as much
@@ -60,15 +66,24 @@ object WorldMergeMain {
         }
 
         try {
-            val placement = WorldMerge(plan).run()
-            println("Planned the merge of Secondary into Primary in ${plan.targetDir}:")
-            placement.lines().forEach { println("  $it") }
-            println(
-                "\nNothing was written. Check that distance against the live map before the real " +
-                    "run — Secondary has grown since the Portal cutover — and pass " +
-                    "--offset ${placement.offset.x},${placement.offset.z} when you run it for real, " +
-                    "so the rehearsal and the night put the landmass in the same place.",
-            )
+            val report = WorldMerge(plan).run()
+            val what = if (plan.planOnly) "Planned" else "Merged"
+            println("$what the merge of Secondary into Primary in ${plan.targetDir}:")
+            report.lines().forEach { println("  $it") }
+            if (plan.planOnly) {
+                println(
+                    "\nNothing was written. Check that distance against the live map before the real " +
+                        "run — Secondary has grown since the Portal cutover — and pass " +
+                        "--offset ${report.offset.x},${report.offset.z} when you run it for real, " +
+                        "so the rehearsal and the night put the landmass in the same place.",
+                )
+            } else {
+                println(
+                    "\nThe merge is committed and ${plan.targetDir} now carries the merge stamp, so " +
+                        "this will refuse to run again. Secondary's End and its level-wide saved " +
+                        "data were discarded rather than moved.",
+                )
+            }
         } catch (refusal: MigrationRefused) {
             System.err.println("Merge refused, nothing was written: ${refusal.message}")
             exitProcess(1)
@@ -86,6 +101,7 @@ object WorldMergeMain {
         offset = options["offset"]?.let(::offset),
         searchLimit = options["search-limit"]?.let { number("search-limit", it) }
             ?: WorldMerge.DEFAULT_SEARCH_LIMIT,
+        planOnly = options.containsKey("plan-only"),
     )
 
     /**

@@ -23,6 +23,12 @@ data class MergePlan(
     val offset: MergeOffset? = null,
     /** How many [MergeGeometry.OFFSET_ALIGNMENT]-block steps out from the origin the search will look. */
     val searchLimit: Int = WorldMerge.DEFAULT_SEARCH_LIMIT,
+    /**
+     * Stop after choosing the offset and write nothing at all, so that the
+     * operator can see the placement and reject one they do not like before the
+     * merge touches the save (merge spec, User Story 5).
+     */
+    val planOnly: Boolean = false,
 ) {
     init {
         require(clearance >= 0) { "the clearance cannot be negative, got $clearance" }
@@ -101,7 +107,8 @@ data class MergePlacement(
 
 private const val REPORT_KEY_WIDTH = 24
 
-private fun reportLine(key: String, value: String): String = key.padEnd(REPORT_KEY_WIDTH) + " : " + value
+/** One `key : value` line of the merge report, aligned with every other one. */
+internal fun reportLine(key: String, value: String): String = key.padEnd(REPORT_KEY_WIDTH) + " : " + value
 
 /**
  * Where on Primary's map Secondary can be put down.
@@ -255,12 +262,15 @@ class PlacementSearch(
  * offline tool of the cutover, after `migrate` and `importNucleus`, run against
  * the live production save in a downtime window.
  *
- * This is the planning half. It measures how far Primary has been generated and
- * how much ground Secondary covers, finds or checks the offset Secondary will
- * move by, and hands back a [MergePlacement] for the operator to accept or
- * reject. **It writes nothing** — not a staging directory, not a marker, not a
- * byte — so asking where Secondary would go costs nothing and can be asked as
- * often as the operator likes.
+ * It measures how far Primary has been generated and how much ground Secondary
+ * covers, finds or checks the offset Secondary will move by, and then hands the
+ * placement to [MergeStaging], which does the writing.
+ *
+ * With [MergePlan.planOnly] it stops at the placement and **writes nothing** —
+ * not a staging directory, not a marker, not a byte — so asking where Secondary
+ * would go costs nothing and can be asked as often as the operator likes, and a
+ * placement can be rejected before the save is touched (merge spec, User
+ * Story 5).
  *
  * The refusals it already makes are the ones that must happen before any later
  * phase can start writing: a run directory that is not the live server's, a save
@@ -278,7 +288,7 @@ class WorldMerge(private val plan: MergePlan) {
     private val staging: Path = plan.targetDir.resolve(STAGING_DIRECTORY)
     private val levelDir: Path = plan.targetDir.resolve(plan.levelName)
 
-    fun run(): MergePlacement {
+    fun run(): MergeReport {
         refuseUnlessLiveRunDirectory()
         refuseIfAlreadyMerged()
 
@@ -286,7 +296,9 @@ class WorldMerge(private val plan: MergePlan) {
         refuseIfSecondaryIsMissing(secondary)
 
         val search = PlacementSearch(secondary, footprints(WorldLayout.PRIMARY), plan.clearance)
-        return plan.offset?.let(search::checked) ?: search.nearestSlot(plan.searchLimit)
+        val placement = plan.offset?.let(search::checked) ?: search.nearestSlot(plan.searchLimit)
+        if (plan.planOnly) return MergeReport(placement)
+        return MergeStaging(plan, staging, levelDir).write(placement)
     }
 
     // ---- refusals -----------------------------------------------------------

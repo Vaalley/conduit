@@ -3,6 +3,7 @@ package eu.mctraveler.importer
 import eu.mctraveler.worlds.DimensionRole
 import java.nio.file.Files
 import java.nio.file.Path
+import java.security.MessageDigest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import net.minecraft.SharedConstants
 import net.minecraft.server.Bootstrap
+import net.minecraft.world.level.ChunkPos
 
 /**
  * The first half of the merge: an operator asks where Secondary would go and
@@ -31,6 +33,14 @@ class WorldMergeTest {
             SharedConstants.tryDetectVersion()
             Bootstrap.bootStrap()
         }
+
+        /**
+         * The first region file column the relocation can land in. Primary's own
+         * data is at (−1,−1)…(0,0), and Secondary arrives at 2 and beyond in the
+         * nether and 16 and beyond in the overworld — so this tells relocated
+         * files from Primary's own without a test having to name any of them.
+         */
+        private const val RELOCATED_FROM = 2
     }
 
     @TempDir
@@ -43,11 +53,16 @@ class WorldMergeTest {
         save = MergedDeploymentFixture(dir).build()
     }
 
+    /** Where Secondary would go. Writes nothing; see [MergedDeploymentFixture.plan]. */
     private fun merge(
         clearance: Int = WorldMerge.DEFAULT_CLEARANCE,
         offset: MergeOffset? = null,
         searchLimit: Int = WorldMerge.DEFAULT_SEARCH_LIMIT,
-    ) = WorldMerge(save.plan(clearance, offset, searchLimit)).run()
+    ) = WorldMerge(save.plan(clearance, offset, searchLimit)).run().placement
+
+    /** The whole merge, run for real against Secondary's real chunk data. */
+    private fun relocate(offset: MergeOffset? = null) =
+        WorldMerge(save.plan(offset = offset, planOnly = false)).run()
 
     // ---- what the operator sees ---------------------------------------------
 
@@ -326,4 +341,299 @@ class WorldMergeTest {
 
         assertEquals(before, save.contents())
     }
+
+    // ---- relocating the chunks ----------------------------------------------
+    //
+    // These run the real MCA Selector, resolved and checksum-verified by the
+    // build, against real region files. Nothing here is stubbed, so a green test
+    // is evidence the tool relocated the chunks rather than evidence the merge
+    // believes it did (merge spec, "Testing Decisions").
+    //
+    // Secondary's overworld sits in region files (0,0) and (1,0) and the search
+    // sends it 8192 blocks east, which is 512 chunks and 16 region files. The
+    // nether gets an eighth of that: 1024 blocks, 64 chunks, 2 region files.
+
+    @Test
+    fun `Secondary's overworld chunks land where Primary's overworld will look for them`() {
+        save.withRealSecondaryChunks()
+
+        relocate()
+
+        assertEquals(
+            setOf(ChunkPos(512, 0), ChunkPos(517, 3), ChunkPos(544, 0)),
+            relocatedChunks(DimensionRole.OVERWORLD, "region"),
+        )
+    }
+
+    @Test
+    fun `each source region file lands on one destination region file of its own`() {
+        save.withRealSecondaryChunks()
+
+        relocate()
+
+        // (0,0) carries two chunks and (1,0) one, so a merge that funnelled
+        // everything into a single file would still have the right chunk count.
+        assertEquals(
+            listOf("r.16.0.mca", "r.17.0.mca"),
+            regionFileNames(DimensionRole.OVERWORLD, "region"),
+        )
+    }
+
+    @Test
+    fun `Secondary's nether moves exactly one eighth as far, so portal pairs still link`() {
+        save.withRealSecondaryChunks()
+
+        relocate()
+
+        assertEquals(setOf(ChunkPos(64, 0)), relocatedChunks(DimensionRole.NETHER, "region"))
+        assertEquals(listOf("r.2.0.mca"), regionFileNames(DimensionRole.NETHER, "region"))
+    }
+
+    @Test
+    fun `terrain, entity and point-of-interest data all move together`() {
+        save.withRealSecondaryChunks()
+
+        relocate()
+
+        val expected = setOf(ChunkPos(512, 0), ChunkPos(517, 3), ChunkPos(544, 0))
+        assertEquals(expected, relocatedChunks(DimensionRole.OVERWORLD, "region"))
+        assertEquals(expected, relocatedChunks(DimensionRole.OVERWORLD, "entities"))
+        assertEquals(expected, relocatedChunks(DimensionRole.OVERWORLD, "poi"))
+    }
+
+    @Test
+    fun `a relocated chunk carries its own new coordinates, not its old ones`() {
+        save.withRealSecondaryChunks()
+
+        relocate()
+
+        val chunk = SyntheticChunks
+            .read(save.primaryStorage(DimensionRole.OVERWORLD).resolve("region"), "chunk", overworld)
+            .getValue(ChunkPos(517, 3))
+
+        assertEquals(517, chunk.getIntOr("xPos", -1))
+        assertEquals(3, chunk.getIntOr("zPos", -1))
+        // The chest in that chunk was at block x 80; it has to have moved with it.
+        assertEquals(
+            80 + 8192,
+            chunk.getListOrEmpty("block_entities").getCompoundOrEmpty(0).getIntOr("x", -1),
+        )
+    }
+
+    @Test
+    fun `a chunk vanilla never finished is dropped rather than relocated`() {
+        save.withRealSecondaryChunks()
+
+        val report = relocate()
+
+        // The frontier chunk would have landed at (519, 519); the whole point is
+        // that the frontier regenerates from Primary's seed instead.
+        assertFalse(ChunkPos(519, 519) in relocatedChunks(DimensionRole.OVERWORLD, "region"))
+        assertEquals(1, report.relocation!!.dimension(DimensionRole.OVERWORLD).dropped)
+    }
+
+    @Test
+    fun `Secondary's End and its level-wide saved data are discarded rather than moved`() {
+        save.withRealSecondaryChunks()
+
+        val report = relocate()
+
+        assertEquals(
+            listOf("Secondary's End", "Secondary's level-wide saved data"),
+            report.relocation!!.discarded.map { it.what },
+        )
+        // Nothing of the End reached Primary, in any dimension.
+        assertTrue(Files.notExists(save.primaryStorage(DimensionRole.END).resolve("region")))
+    }
+
+    @Test
+    fun `the report states what was relocated, what was dropped and what it cost`() {
+        save.withRealSecondaryChunks()
+
+        val report = relocate()
+
+        assertEquals(
+            listOf(
+                "overworld",
+                "  chunks relocated       : 3",
+                "  chunks dropped         : 1 (not fully generated)",
+                "  files written          : 6",
+                "  bytes transferred      : ${bytesIn(DimensionRole.OVERWORLD)}",
+                "nether",
+                "  chunks relocated       : 1",
+                "  chunks dropped         : 0 (not fully generated)",
+                "  files written          : 3",
+                "  bytes transferred      : ${bytesIn(DimensionRole.NETHER)}",
+                "relocated in total       : 4 chunks, 1 dropped, " +
+                    "${bytesIn(DimensionRole.OVERWORLD) + bytesIn(DimensionRole.NETHER)} bytes",
+                "discarded                : Secondary's End — 1 file",
+                "discarded                : Secondary's level-wide saved data — 1 file",
+            ),
+            report.relocation!!.lines(),
+        )
+    }
+
+    @Test
+    fun `the report is the placement as well, so the operator sees where it went`() {
+        save.withRealSecondaryChunks()
+
+        val report = relocate()
+
+        assertEquals(MergeOffset(8192, 0), report.offset)
+        assertEquals("offset                   : x +8192, z +0  (nether x +1024, z +0)", report.lines().first())
+    }
+
+    // ---- the staging discipline ---------------------------------------------
+
+    @Test
+    fun `a completed merge leaves no staging directory behind`() {
+        save.withRealSecondaryChunks()
+
+        relocate()
+
+        assertFalse(Files.exists(save.staging))
+    }
+
+    @Test
+    fun `a completed merge stamps the save with the offset it used`() {
+        save.withRealSecondaryChunks()
+
+        relocate()
+
+        val stamp = Files.readString(save.mergeStamp)
+        assertTrue(stamp.contains("\"offsetX\":8192"), stamp)
+        assertTrue(stamp.contains("\"offsetZ\":0"), stamp)
+    }
+
+    @Test
+    fun `a merged save refuses to be merged a second time`() {
+        save.withRealSecondaryChunks()
+        relocate()
+
+        val refusal = assertThrows(MigrationRefused::class.java) { merge() }
+
+        assertTrue(refusal.message!!.startsWith("${save.targetDir} has already been merged: "), refusal.message)
+    }
+
+    @Test
+    fun `Primary's own chunk data is never opened, let alone changed`() {
+        // Primary's region files hold nonsense no chunk reader could parse. The
+        // merge stages into empty destination files and moves them in, so it
+        // never has cause to look — and this passing is what says so.
+        save.withRealSecondaryChunks()
+        val before = primaryChunkBytes()
+
+        relocate()
+
+        assertEquals(before, primaryChunkBytes())
+    }
+
+    @Test
+    fun `Secondary's own chunk data is left exactly as it was, because the merge only copies`() {
+        // `--worlds move` is deliberately not offered: the pre-merge backup is
+        // the rollback, and a moved source would compromise it (merge spec,
+        // "Further Notes").
+        save.withRealSecondaryChunks()
+        val before = secondaryChunkData()
+
+        relocate()
+
+        assertEquals(before, secondaryChunkData())
+    }
+
+    @Test
+    fun `a failing relocation tool fails the merge with its own output, and moves nothing`() {
+        save.withRealSecondaryChunks()
+        val before = save.contents()
+        val placement = merge()
+        val broken = dir.resolve("not-really-a.jar")
+        Files.writeString(broken, "this is not a jar")
+
+        val failure = assertThrows(IllegalStateException::class.java) {
+            MergeStaging(
+                save.plan(planOnly = false),
+                save.staging,
+                save.levelDir,
+                McaSelector(broken),
+            ).write(placement)
+        }
+
+        assertTrue(failure.message!!.startsWith("MCA Selector failed while "), failure.message)
+        assertTrue(failure.message!!.contains("Nothing has been moved into place."), failure.message)
+        assertEquals(before, save.contents())
+        assertFalse(Files.exists(save.staging))
+    }
+
+    @Test
+    fun `the merge refuses to run without the tool the build resolves`() {
+        val was = System.getProperty(McaSelector.JAR_PROPERTY)
+        System.clearProperty(McaSelector.JAR_PROPERTY)
+        try {
+            val failure = assertThrows(IllegalStateException::class.java) { McaSelector.resolved() }
+
+            assertTrue(
+                failure.message!!.contains("the merge does not know where MCA Selector is"),
+                failure.message,
+            )
+        } finally {
+            was?.let { System.setProperty(McaSelector.JAR_PROPERTY, it) }
+        }
+    }
+
+    // ---- reading the merged save back ---------------------------------------
+
+    private val overworld get() = save.primaryDimension(DimensionRole.OVERWORLD)
+
+    private fun relocatedChunks(role: DimensionRole, folder: String): Set<ChunkPos> =
+        SyntheticChunks.positions(save.primaryStorage(role).resolve(folder), folder, save.primaryDimension(role))
+
+    /** The region files the merge added to [role], leaving Primary's own out of it. */
+    private fun regionFileNames(role: DimensionRole, folder: String): List<String> =
+        Files.newDirectoryStream(save.primaryStorage(role).resolve(folder), "r.*.mca")
+            .use { files -> files.map { it.fileName.toString() }.toList() }
+            .filter { RegionFilePos.parse(it)!!.x >= RELOCATED_FROM }
+            .sorted()
+
+    /** The bytes of relocated chunk data now in [role], as the report should have counted them. */
+    private fun bytesIn(role: DimensionRole): Long = Footprint.CHUNK_DIRECTORIES
+        .map { save.primaryStorage(role).resolve(it) }
+        .filter(Files::isDirectory)
+        .flatMap { folder -> Files.newDirectoryStream(folder, "r.*.mca").use { it.toList() } }
+        .filter { RegionFilePos.parse(it.fileName.toString())!!.x >= RELOCATED_FROM }
+        .sumOf(Files::size)
+
+    /** Every file of Secondary's, by path and content, so a rewrite of any of them shows up. */
+    private fun secondaryChunkData(): Map<String, String> {
+        val found = sortedMapOf<String, String>()
+        for (role in DimensionRole.entries) {
+            val storage = Footprint.storageFolder(save.levelDir, save.secondaryDimension(role))
+            if (!Files.isDirectory(storage)) continue
+            Files.walk(storage).use { paths ->
+                paths.filter(Files::isRegularFile).forEach { file ->
+                    found[save.levelDir.relativize(file).toString()] = digestOf(file)
+                }
+            }
+        }
+        return found
+    }
+
+    private fun digestOf(file: Path): String = MessageDigest.getInstance("SHA-256")
+        .digest(Files.readAllBytes(file))
+        .joinToString("") { "%02x".format(it) }
+
+    /** Every chunk file Primary had before the merge, by path and content. */
+    private fun primaryChunkBytes(): Map<String, String> {
+        val found = sortedMapOf<String, String>()
+        for (role in DimensionRole.entries) {
+            val storage = save.primaryStorage(role)
+            if (!Files.isDirectory(storage)) continue
+            Files.walk(storage).use { paths ->
+                paths.filter(Files::isRegularFile)
+                    .filter { RegionFilePos.parse(it.fileName.toString())!!.x < RELOCATED_FROM }
+                    .forEach { found[save.levelDir.relativize(it).toString()] = Files.readString(it) }
+            }
+        }
+        return found
+    }
+
 }
