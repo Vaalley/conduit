@@ -13,7 +13,6 @@ import eu.mctraveler.text.Paint
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
 import net.minecraft.network.chat.Component
-import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 
 /**
@@ -158,7 +157,7 @@ object EmbassyCommands {
             )
         }
 
-        EmbassyPlots.clear(level as ServerLevel, EmbassyPlots.plotOf(player.blockX, player.blockZ))
+        EmbassyPlots.clear(level, EmbassyPlots.plotOf(player.blockX, player.blockZ))
         // Everyone standing in it loses its sidebar before it stops existing.
         RegionTracker.clear(level.server, region)
         RegionsFeature.requireService().remove(region)
