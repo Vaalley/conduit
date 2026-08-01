@@ -69,7 +69,7 @@ object CrystalCommands {
         if (energy < 0 || energy > CrystalEnergy.MAX_ENERGY) {
             return Paint.error("Energy must be between 0 and ${CrystalEnergy.MAX_ENERGY}")
         }
-        val target = sender.level().server.playerList.getPlayerByName(targetName)
+        val target = exactPlayer(sender.level().server, targetName)
             ?: return Paint.error(Paint.red(targetName), " is not online")
         CrystalEnergy.setEnergy(target, energy)
         return Paint.success(

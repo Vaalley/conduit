@@ -44,7 +44,7 @@ deviations 4, 8, 13, 16) and the Nucleus source `teleportation-crystal.kt`
 ### Implementation summary
 
 Done on branch `worktree-agent-a9c14c327f92a9630`. Full `./gradlew build` green:
-270 gametests and the unit tier.
+271 gametests and the unit tier.
 
 Two new files in `eu.mctraveler.crystal`:
 
@@ -147,10 +147,9 @@ guarded by `allowsBlockChange` (the building rule) and the air path by
    prefix.** This is Nucleus's own structure (`INFO_COMPONENT.append(message)`,
    click event on the appended builder), and it is what story 34's "the message
    clickable" means. The prefix was never clickable.
-6. **Player lookup by name is case-insensitive.** Nucleus used
-   `getPlayerExact`; the house uses `PlayerList.getPlayerByName` everywhere
-   (`CrystalCommands`, `RegionCommands`, `PrivateMessages`), and consistency
-   inside the mod is worth more than case-sensitivity Nucleus never explained.
+6. ~~**Player lookup by name is case-insensitive.**~~ **Reversed in final
+   review** — see "Fixed in final review" item 3. The crystal's two name
+   arguments now match case exactly, as Nucleus did.
 7. **Requests are dropped in both directions on disconnect.** Nucleus removed
    only the leaving player's *outgoing* request and leaned on a `WeakHashMap` to
    collect the rest. A plain map has no such collector, and a request whose
@@ -212,6 +211,20 @@ Both are written into the test file, because they will bite the next ticket too.
   `mctraveler-test:solo` *and* makes its precondition true by logging everyone
   else out, rather than hoping an earlier batch cleaned up.
 
+### Not done here — needs ticket 02's file
+
+Two final-review items land in `eu.mctraveler.embassy.EmbassyCommands`, which
+does not exist on this branch: ticket 02 merged into `main` after this worktree
+was cut, and the instruction was not to rebase. Both still need doing by
+whoever owns that file:
+
+- **`/embassy create`'s arrival should zero yaw and pitch** (story 9) — the
+  other half of "Fixed in final review" item 2. Same reason, same one-line
+  shape as the Embassy landing in `CrystalMenu.embassy`.
+- **Bare `/embassy` should answer any sender** (story 8). Nucleus's `@Default`
+  took any `CommandSender`, console included, and printed the two lines;
+  ours requires a player. `create` and `delete` stay player-only.
+
 ### For ticket 05 and the final review
 
 - **Legacy crystals are recognised, so the importer does not have to rewrite
@@ -226,6 +239,36 @@ Both are written into the test file, because they will bite the next ticket too.
   the seam if anything else ever wants to raise a teleport request.
 - **Nothing new is persisted**, so `GameTestJanitor` is unchanged: menus are
   in-memory and requests are dropped on disconnect and on server stop.
+
+### Fixed in final review
+
+1. **A Nucleus-era crystal had no presentation at all** (stories 22-23 +
+   deviation 18). Identification learned Bukkit's marker layout but nothing
+   else did, so an heirloom crystal reached the client as a plain "Echo Shard":
+   no name, no lore, no glint, stacking to 64, and — because the stored stack
+   has no `MAX_DAMAGE` — no energy bar however much `DAMAGE` was sent with it.
+   Nucleus never stored any of that either; `updateItemEnergy` wrote item name,
+   lore, max stack size, max damage and glint onto *every* crystal on *every*
+   SET_SLOT and WINDOW_ITEMS, alongside the damage. Presentation was always a
+   wire concern there, and only looked like a stored one here because our own
+   crystals happen to carry it. `CrystalItem.presented(stack)` now dresses any
+   crystal and `CrystalDamageDisplay` applies it with the damage — idempotent
+   for a minted crystal, restorative for a legacy one, and the stored stack is
+   still never touched. `aNucleusEraCrystalIsDressedOnTheWire` covers it, and
+   was confirmed to fail without the fix (the crystal arrives named "Echo
+   Shard").
+2. **Arrival facing zeroed** (story 31). Nucleus's `Location(world, x, y, z)`
+   defaulted yaw and pitch to 0, so an arrival in the embassies dimension faced
+   due south and level; ours carried the traveller's facing over. Zeroed on the
+   crystal menu's Embassy landing. Parity restored, so no register entry.
+3. **Exact-case name matching** (stories 35, 37). Nucleus used
+   `getPlayerExact`; this reverses judgement call 6 above, which had chosen the
+   house's forgiving lookup. Vanilla has no exact lookup at all — both
+   `PlayerList.getPlayer(String)` and `getPlayerByName` compare with
+   `equalsIgnoreCase` — so `exactPlayer` is a predicate of our own. Scoped to
+   the crystal's two name arguments; the rest of the mod stays forgiving, and
+   one of these two names is not typed by hand at all, arriving from the click
+   event of a message this server wrote.
 
 ### Interactions checked
 

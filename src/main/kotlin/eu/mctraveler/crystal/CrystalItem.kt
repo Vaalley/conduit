@@ -87,14 +87,35 @@ object CrystalItem {
                 putByte(TIER, tier.toByte())
             },
         )
-        crystal.set(DataComponents.ITEM_NAME, Component.literal(ITEM_NAME))
-        crystal.set(DataComponents.LORE, ItemLore(loreOf(tier)))
-        crystal.set(DataComponents.MAX_STACK_SIZE, 1)
+        dress(crystal, tier)
+        return crystal
+    }
+
+    /**
+     * A copy of [stack] wearing everything that makes a crystal look like one.
+     *
+     * The presentation lives on the stored stack for crystals this mod minted,
+     * but a Nucleus-era one (spec deviation 18) carries only Bukkit's marker:
+     * no name, no lore, no glint, stacking to 64, and — fatally for the energy
+     * gauge — no `MAX_DAMAGE`, without which a client draws no bar at all. So
+     * the presentation is (re)applied on the way out, alongside the damage
+     * ([CrystalDamageDisplay]), which is exactly what Nucleus's
+     * `updateItemEnergy` did to every crystal on every SET_SLOT and
+     * WINDOW_ITEMS. Idempotent for a minted crystal, restorative for a legacy
+     * one.
+     */
+    @JvmStatic
+    fun presented(stack: ItemStack): ItemStack = stack.copy().also { dress(it, tierOf(it)) }
+
+    /** Writes the crystal's presentation onto [stack] in place. */
+    private fun dress(stack: ItemStack, tier: Int) {
+        stack.set(DataComponents.ITEM_NAME, Component.literal(ITEM_NAME))
+        stack.set(DataComponents.LORE, ItemLore(loreOf(tier)))
+        stack.set(DataComponents.MAX_STACK_SIZE, 1)
         // The damage bar is a fuel gauge, not wear: capacity is the tier, and how
         // full it looks is the viewer's own energy (see CrystalDamageDisplay).
-        crystal.set(DataComponents.MAX_DAMAGE, tier)
-        crystal.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true)
-        return crystal
+        stack.set(DataComponents.MAX_DAMAGE, tier)
+        stack.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true)
     }
 
     /** Nucleus's four lore lines, the last one gold. */
