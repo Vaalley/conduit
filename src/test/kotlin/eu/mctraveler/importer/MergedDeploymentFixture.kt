@@ -69,6 +69,16 @@ class MergedDeploymentFixture(val root: Path) {
     fun secondary(role: DimensionRole, folder: String, vararg files: Pair<Int, Int>) =
         chunks(SECONDARY_FOLDERS.getValue(role), folder, files)
 
+    /**
+     * The run directory's `regions.json`, exactly as the operator's own file
+     * reads. Written verbatim rather than through the live store, so a test can
+     * assert that what the merge did not touch came back out unchanged.
+     */
+    fun withRegions(json: String) = write(regionsFile, json)
+
+    /** What `regions.json` says now — the bytes a booting server would read. */
+    fun regionsJson(): String = Files.readString(regionsFile)
+
     /** The save as it would be if Secondary had never been imported at all. */
     fun forgetSecondary() {
         SECONDARY_FOLDERS.values.forEach { deleteRecursively(levelDir.resolve("dimensions/$it")) }

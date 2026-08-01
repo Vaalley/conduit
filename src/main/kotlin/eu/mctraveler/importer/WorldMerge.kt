@@ -99,9 +99,17 @@ data class MergePlacement(
     ) + dimensions.flatMap { it.lines() }
 }
 
+/** What the merge did, section by section, for the operator to check before booting. */
+data class MergeReport(
+    val placement: MergePlacement,
+    val regions: MergeRegionsReport,
+) {
+    fun lines(): List<String> = placement.lines() + regions.lines()
+}
+
 private const val REPORT_KEY_WIDTH = 24
 
-private fun reportLine(key: String, value: String): String = key.padEnd(REPORT_KEY_WIDTH) + " : " + value
+internal fun reportLine(key: String, value: String): String = key.padEnd(REPORT_KEY_WIDTH) + " : " + value
 
 /**
  * Where on Primary's map Secondary can be put down.
@@ -255,12 +263,11 @@ class PlacementSearch(
  * offline tool of the cutover, after `migrate` and `importNucleus`, run against
  * the live production save in a downtime window.
  *
- * This is the planning half. It measures how far Primary has been generated and
- * how much ground Secondary covers, finds or checks the offset Secondary will
- * move by, and hands back a [MergePlacement] for the operator to accept or
- * reject. **It writes nothing** — not a staging directory, not a marker, not a
- * byte — so asking where Secondary would go costs nothing and can be asked as
- * often as the operator likes.
+ * It measures how far Primary has been generated and how much ground Secondary
+ * covers, finds or checks the offset Secondary will move by, and then sweeps
+ * everything that recorded a place in Secondary onto its new one — the Regions
+ * so far ([MergeRegions]). The [MergeReport] it hands back states the placement
+ * first, because that is the thing the operator has to accept or reject.
  *
  * The refusals it already makes are the ones that must happen before any later
  * phase can start writing: a run directory that is not the live server's, a save
@@ -278,7 +285,7 @@ class WorldMerge(private val plan: MergePlan) {
     private val staging: Path = plan.targetDir.resolve(STAGING_DIRECTORY)
     private val levelDir: Path = plan.targetDir.resolve(plan.levelName)
 
-    fun run(): MergePlacement {
+    fun run(): MergeReport {
         refuseUnlessLiveRunDirectory()
         refuseIfAlreadyMerged()
 
@@ -286,7 +293,8 @@ class WorldMerge(private val plan: MergePlan) {
         refuseIfSecondaryIsMissing(secondary)
 
         val search = PlacementSearch(secondary, footprints(WorldLayout.PRIMARY), plan.clearance)
-        return plan.offset?.let(search::checked) ?: search.nearestSlot(plan.searchLimit)
+        val placement = plan.offset?.let(search::checked) ?: search.nearestSlot(plan.searchLimit)
+        return MergeReport(placement, MergeRegions(plan.targetDir, staging, placement.offset).sweep())
     }
 
     // ---- refusals -----------------------------------------------------------

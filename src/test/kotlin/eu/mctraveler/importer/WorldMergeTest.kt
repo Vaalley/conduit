@@ -47,7 +47,7 @@ class WorldMergeTest {
         clearance: Int = WorldMerge.DEFAULT_CLEARANCE,
         offset: MergeOffset? = null,
         searchLimit: Int = WorldMerge.DEFAULT_SEARCH_LIMIT,
-    ) = WorldMerge(save.plan(clearance, offset, searchLimit)).run()
+    ) = WorldMerge(save.plan(clearance, offset, searchLimit)).run().placement
 
     // ---- what the operator sees ---------------------------------------------
 
