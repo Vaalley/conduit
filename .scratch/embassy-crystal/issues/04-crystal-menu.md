@@ -301,3 +301,30 @@ whoever owns that file:
   half — `RegionContainerSessionMixin` not capturing a container-region session
   for a mod-owned menu — is asserted directly by
   `aCrystalMenuCapturesNoContainerSession`.
+
+### Correction — names this ticket published that have since moved
+
+A later Standards-review cleanup pass renamed things this ticket documented
+above. Behaviour is unchanged; only names are. Recorded here rather than edited
+into the text above, so the history of what this ticket shipped stays readable.
+
+1. **`CrystalMenu.Landing` is now `eu.mctraveler.worlds.Landing`.** It was one of
+   three spellings of the same (level, x, y, z, yaw, pitch) clump — the others
+   being ticket 01's `EmbassyOrigins.Origin` and the untyped JSON reads in ticket
+   02's `EmbassyAnchors` — so it was hoisted into the worlds module and given the
+   teleport itself: `Landing.send(player)` replaces the five hand-written copies
+   of `teleportTo(level, x, y, z, emptySet(), yaw, pitch, false)`. Its stored
+   sibling `Waypoint` (a dimension key rather than a loaded level) is what
+   `EmbassyOrigins` now keeps. The five destinations and their resolution are
+   otherwise untouched.
+
+2. **The two own-batch test environments were renamed.**
+   `mctraveler-test:sweep` is now `mctraveler-test:own_batch_crystal_sweep`, and
+   `mctraveler-test:solo` is now `mctraveler-test:own_batch_crystal_solo`. The
+   files are unchanged and still exist for the reason noted above; the ids just
+   say what they are for. Worth knowing why they cannot be merged into one shared
+   file even though they are byte-identical to each other and to ticket 01's:
+   batches are formed by grouping tests on the environment id they name, so the
+   id — not the file's contents — *is* the batch boundary. Merging the three
+   would put the three own-batch tests back into a single batch, which is
+   precisely the failure each of them was given its own environment to avoid.

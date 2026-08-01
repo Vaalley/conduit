@@ -183,3 +183,32 @@ are stored under, both for ticket 02's new regions and ticket 05's imported ones
   message for it, so this ticket left it alone; if ticket 02 wants it closed,
   the natural place is the `/rg` guard ladder that already refuses EMBASSY
   regions.
+
+### Correction — names this ticket published that have since moved
+
+A later Standards-review cleanup pass renamed two things this ticket documented
+above. The behaviour is unchanged; only the names are. Recorded here rather than
+edited into the text above, so the history of what this ticket shipped stays
+readable.
+
+1. **`EmbassyOrigins.Origin` is now `eu.mctraveler.worlds.Waypoint`.** The
+   "Public surface" list above names
+   `data class Origin(dimension: ResourceKey<Level>, x, y, z: Double, yaw, pitch: Float)`
+   and `originOf(player): Origin?`. That record turned out to be one of three
+   spellings of the same (dimension/level, x, y, z, yaw, pitch) clump — the other
+   two being ticket 04's `CrystalMenu.Landing` and the untyped JSON reads in
+   ticket 02's `EmbassyAnchors` — so it was hoisted into the worlds module as
+   `Waypoint`, alongside a resolved sibling `Landing` that owns the teleport
+   itself (`Landing.send(player)`). `EmbassyOrigins.originOf` keeps its name and
+   its meaning; it now returns `Waypoint?`. `sendHome`, `forget` and
+   `beforeTeleport` are untouched, and the "nothing else should call
+   `beforeTeleport`" rule still stands.
+
+2. **The own-batch test environment `mctraveler-test:alone` is now
+   `mctraveler-test:own_batch_embassies_stop`.** Deviation 8 above names
+   `test_environment/alone.json`. The file is unchanged and still exists for the
+   same reason; only the id is more honest about its job. Worth knowing *why* it
+   cannot be shared with the other own-batch tests: batches are formed by
+   grouping tests on the environment they name, so the id — not the file's
+   contents — is the batch boundary. Three own-batch tests need three ids even
+   though all three files are byte-identical.
