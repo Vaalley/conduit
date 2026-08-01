@@ -22,9 +22,13 @@ import net.minecraft.world.level.Level
  */
 object EmbassyOrigins {
 
-    // A player's standing place in the moment before they entered embassies is
-    // a plain [Waypoint] — a remembered dimension, position and facing, which
-    // is the whole of what this used to spell out as its own `Origin` type.
+    /**
+     * Each player's standing place in the moment before they entered embassies.
+     *
+     * A plain [Waypoint] — a remembered dimension, position and facing — which
+     * is the whole of what this used to spell out as an `Origin` type of its
+     * own (ticket 01's public surface; see that ticket's correction note).
+     */
     private val origins = HashMap<UUID, Waypoint>()
 
     /**
