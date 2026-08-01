@@ -17,6 +17,8 @@ import net.minecraft.server.level.ServerPlayer
 import net.minecraft.tags.DamageTypeTags
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
+import net.minecraft.world.inventory.AbstractContainerMenu
+import net.minecraft.world.item.ItemStack
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.ButtonBlock
 import net.minecraft.world.level.block.DoorBlock
@@ -65,6 +67,52 @@ object RegionProtection {
     private val containerRegions = HashMap<UUID, Region>()
 
     /**
+     * Items whose use no region refuses (see [exemptItem]). Registered once at
+     * mod init, so a restart cannot lose one.
+     */
+    private val itemExemptions = mutableListOf<(ItemStack) -> Boolean>()
+
+    /** Menus this mod owns itself (see [exemptMenu]). */
+    private val menuExemptions = mutableListOf<(AbstractContainerMenu) -> Boolean>()
+
+    /**
+     * Exempts the items [exemption] accepts from item-use protection, wherever
+     * they are used: no region refuses them and none reports a refusal.
+     *
+     * The Teleportation Crystal is the reason this exists (spec deviation 13).
+     * Nucleus's crystal listener never consulted region protection at all, so
+     * the menu opened standing anywhere; ours has to say so explicitly, because
+     * region protection is registered first and would otherwise refuse the
+     * right-click before the crystal ever saw it. An exemption rather than
+     * listener ordering: ordering is invisible at the point it matters, and one
+     * reordering of [eu.mctraveler.MCTraveler.onInitialize] would silently take
+     * the crystal away from every player standing on someone else's land.
+     */
+    fun exemptItem(exemption: (ItemStack) -> Boolean) {
+        itemExemptions.add(exemption)
+    }
+
+    /**
+     * Exempts the menus [exemption] accepts from container protection and from
+     * the container-region session (spec deviation 16).
+     *
+     * A mod-owned menu is not a chest standing in someone's region — it is a
+     * screen this server drew, holding nothing anyone can take. Nucleus's menus
+     * were plugin-owned inventories its region listeners never looked at.
+     */
+    fun exemptMenu(exemption: (AbstractContainerMenu) -> Boolean) {
+        menuExemptions.add(exemption)
+    }
+
+    /** Whether [menu] belongs to the mod rather than to the world. */
+    @JvmStatic
+    fun isModOwnedMenu(menu: AbstractContainerMenu): Boolean =
+        menuExemptions.any { it(menu) }
+
+    private fun isExemptItem(stack: ItemStack): Boolean =
+        !stack.isEmpty && itemExemptions.any { it(stack) }
+
+    /**
      * Whether [player] may change what is inside [region] — a resident, or
      * anyone at all when the region is `PUBLIC`. A null region is unprotected
      * ground.
@@ -98,7 +146,10 @@ object RegionProtection {
         ItemEvents.USE_ON.register { context ->
             val player = context.player
             // This event's "not my business" answer is null, not PASS.
-            if (player is ServerPlayer && !allowsBlockChange(player, context.level, context.clickedPos)) {
+            if (player is ServerPlayer &&
+                !isExemptItem(context.itemInHand) &&
+                !allowsBlockChange(player, context.level, context.clickedPos)
+            ) {
                 InteractionResult.FAIL
             } else {
                 null
@@ -126,14 +177,8 @@ object RegionProtection {
         }
 
         // ---- item use ----
-        // The Portal only saw this when the player actually held something;
-        // an empty hand still does not use an item, so the guard stays.
         UseItemCallback.EVENT.register { player, _, hand ->
-            allowedOrFail(
-                player !is ServerPlayer ||
-                    player.getItemInHand(hand).isEmpty ||
-                    allowsItemUse(player),
-            )
+            allowedOrFail(player !is ServerPlayer || allowsItemUse(player, player.getItemInHand(hand)))
         }
 
         // ---- entities ----
@@ -249,7 +294,14 @@ object RegionProtection {
         return DISABLE_PLAYER_FALL_DAMAGE !in region.flags
     }
 
-    private fun allowsItemUse(player: ServerPlayer): Boolean {
+    /**
+     * Whether [player] may use [stack] where they are standing. An empty hand
+     * uses no item (the Portal only saw this event holding something), and an
+     * exempt item — the Teleportation Crystal — is nobody's business but its
+     * own. A false answer has already told them why.
+     */
+    private fun allowsItemUse(player: ServerPlayer, stack: ItemStack): Boolean {
+        if (stack.isEmpty || isExemptItem(stack)) return true
         val region = RegionTracker.regionOf(player) ?: return true
         return canModifyRegion(player, region) || refuse(player, region)
     }

@@ -27,7 +27,8 @@
     "RegionPressurePlateMixin",
     "EmbassyOriginMixin",
     "CrystalCraftingGuardMixin",
-    "CrystalDamageDisplayMixin"
+    "CrystalDamageDisplayMixin",
+    "CrystalAcceptCommandMixin"
   ],
   "injectors": {
     "defaultRequire": 1

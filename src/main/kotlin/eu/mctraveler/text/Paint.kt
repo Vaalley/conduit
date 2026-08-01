@@ -39,6 +39,14 @@ class Paint private constructor(private val style: Style) {
      */
     val gold: Paint get() = Paint(style.withColor(ChatFormatting.GOLD))
 
+    /**
+     * Aqua. Long the private colour of the USAGE and INFO prefixes; the
+     * Nucleus-era crystal messages made it a content colour too — the
+     * destination a player spent energy on, the player asking to teleport,
+     * and the clickable "here" that accepts them (spec stories 28, 34, 35).
+     */
+    val aqua: Paint get() = Paint(style.withColor(ChatFormatting.AQUA))
+
     /** No explicit color: the text inherits its surroundings' (default white at top level). */
     val reset: Paint get() = Paint(style.withColor(null as TextColor?))
 
@@ -81,6 +89,7 @@ class Paint private constructor(private val style: Style) {
         val blue: Paint get() = plain.blue
         val darkGray: Paint get() = plain.darkGray
         val gold: Paint get() = plain.gold
+        val aqua: Paint get() = plain.aqua
         val reset: Paint get() = plain.reset
         val bold: Paint get() = plain.bold
         val italic: Paint get() = plain.italic
@@ -113,10 +122,6 @@ class Paint private constructor(private val style: Style) {
          * half; its first caller is `/embassy delete`'s confirmation prompt.
          */
         fun warning(vararg content: Any?): MutableComponent = prefixed(gold.bold("WARNING"), content)
-
-        // Aqua exists only for the USAGE and INFO prefixes — it is not part of
-        // the Portal's public color vocabulary, so it stays private.
-        private val aqua: Paint get() = Paint(Style.EMPTY.withColor(ChatFormatting.AQUA))
 
         private fun prefixed(prefix: Component, content: Array<out Any?>): MutableComponent =
             plain(prefix, " ", gray(*content))
