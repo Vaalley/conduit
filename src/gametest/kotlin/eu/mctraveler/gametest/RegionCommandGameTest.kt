@@ -5,6 +5,7 @@ import eu.mctraveler.text.Paint
 import kotlin.math.floor
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.gametest.framework.GameTestHelper
+import net.minecraft.network.chat.ClickEvent
 import net.minecraft.network.chat.Component
 import net.minecraft.world.level.Level
 
@@ -449,8 +450,20 @@ class RegionCommandGameTest {
         alice.runCommand("rg delete")
         helper.assertValueEqual(
             alice.messages.last(),
-            Paint.error("You must use ", Paint.red("/embassy delete"), " to delete an embassy"),
+            Paint.error(
+                "You must use ",
+                Paint.red.runs("/embassy delete")("/embassy delete"),
+                " to delete an embassy",
+            ),
             "the embassy /rg delete reply",
+        )
+        // The way out is one click away (story 19).
+        val refusal = alice.messages.last()
+        val command = refusal.toFlatList(refusal.style).first { it.string == "/embassy delete" }
+        helper.assertValueEqual(
+            checkNotNull(command.style.clickEvent) { "the /embassy delete pointer was not clickable" },
+            ClickEvent.RunCommand("/embassy delete"),
+            "the /embassy delete click event",
         )
         alice.leave()
         helper.succeed()
