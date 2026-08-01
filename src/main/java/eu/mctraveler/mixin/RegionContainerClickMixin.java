@@ -17,7 +17,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * click simply leaves everything where it was.
  *
  * <p>The player's own inventory (window id 0) is never a protected container,
- * exactly as in the Portal.
+ * exactly as in the Portal. Neither is a menu the mod drew itself (spec
+ * deviation 16) — the crystal's destination GUI holds nothing anyone can take,
+ * and it opens standing anywhere, including in a region that would refuse a
+ * chest.
  */
 @Mixin(AbstractContainerMenu.class)
 public abstract class RegionContainerClickMixin {
@@ -26,7 +29,9 @@ public abstract class RegionContainerClickMixin {
     private void mctraveler$protectContainerClick(
             int slot, int button, ContainerInput input, Player player, CallbackInfo ci) {
         AbstractContainerMenu menu = (AbstractContainerMenu) (Object) this;
-        if (menu.containerId == 0 || !(player instanceof ServerPlayer clicker)) {
+        if (menu.containerId == 0
+                || RegionProtection.isModOwnedMenu(menu)
+                || !(player instanceof ServerPlayer clicker)) {
             return;
         }
         if (!RegionProtection.allowsContainerUse(clicker)) {

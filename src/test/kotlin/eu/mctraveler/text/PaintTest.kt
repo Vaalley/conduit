@@ -35,6 +35,11 @@ class PaintTest {
             Paint.red("Red text") to "red",
             Paint.blue("Blue text") to "blue",
             Paint.darkGray("Dark") to "dark_gray",
+            // Beyond the Portal's vocabulary, both from the Nucleus era
+            // (deviation 10): gold for WARNING and the crystal's charge lore,
+            // aqua for the crystal's destination and request messages.
+            Paint.gold("Gold") to "gold",
+            Paint.aqua("Aqua") to "aqua",
         )
         for ((component, colorName) in cases) {
             assertEquals(colorName, component.style.color?.serialize())
