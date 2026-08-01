@@ -234,9 +234,11 @@ before the new build's first boot.
   server: copies `embassies/{region,entities,poi}` →
   `world/dimensions/mctraveler/embassies/`, converts the 20 embassy regions from
   Nucleus `regions.json` (schema: x/z/y bounds, EMBASSY flag, metadata) into the live
-  `regions.json`, imports crystal energy/next-regen from playerdata
-  `PublicBukkitValues` (`mctravelernucleus:tc-teleportation-energy`,
-  `tc-next-regen-at`) into the player store. Idempotent; refuses to double-import
+  `regions.json`, imports crystal energy/next-regen from playerdata's
+  Bukkit persistent-data container — `BukkitValues` on a player entity,
+  `PublicBukkitValues` in the older item spelling; the importer reads whichever
+  is present (`mctravelernucleus:tc-teleportation-energy`, `tc-next-regen-at`)
+  into the player store. Idempotent; refuses to double-import
   embassy regions. Nucleus-era UUIDs are Mojang UUIDs (online-mode server) — no
   identity re-keying.
 
