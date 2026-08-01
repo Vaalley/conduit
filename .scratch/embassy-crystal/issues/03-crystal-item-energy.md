@@ -8,11 +8,7 @@ guard, and `/set-teleportation-crystal-energy`.
 
 **Blocked by:** none.
 
-<<<<<<< HEAD
-**Status:** ready-for-agent
-=======
 **Status:** done
->>>>>>> worktree-agent-a9d928846fc924d5e
 
 See ../spec.md (User Stories 20–25, 37; Implementation Decisions "Crystal item",
 "Energy", "Recipes"; deviations 4, 5, 7, 10, 12) and the Nucleus source
@@ -21,31 +17,13 @@ See ../spec.md (User Stories 20–25, 37; Implementation Decisions "Crystal item
 adapters + regen task, `onCraft`, `SetTeleportationCrystalEnergyCommand`) in the
 reference clone at /Users/jam/Development/MCTravelerNucleus.
 
-<<<<<<< HEAD
-- [ ] Crystal stacks identified by custom data; name, lore, glint, max stack 1, max
-      damage = tier per spec story 22; tiers 1–3 constructible in code
-- [ ] Energy 0–3 (default 3) persisted per player via PlayerStore; unknown-field
-=======
 - [x] Crystal stacks identified by custom data; name, lore, glint, max stack 1, max
       damage = tier per spec story 22; tiers 1–3 constructible in code
 - [x] Energy 0–3 (default 3) persisted per player via PlayerStore; unknown-field
->>>>>>> worktree-agent-a9d928846fc924d5e
       pass-through in players/*.json intact; regen per story 25 driven by
       `Stats.PLAY_TIME` thresholds, checked every 20 ticks, message on each point;
       dropping below 3 arms the first threshold exactly once (Nucleus `modifyEnergy`
       semantics)
-<<<<<<< HEAD
-- [ ] Outgoing set-slot and set-content packets rewrite crystal stacks to
-      damage = 3 − viewer's energy (story 23); stored stacks never mutated; verified
-      at the packet level in a gametest
-- [ ] Recipes: tier 1 shapeless (ender eye), tiers 2/3 plus-pattern per story 20;
-      guard blocks a plain echo shard centre and blocks crystals as ingredients in
-      any foreign recipe (story 21, recovery compass case tested)
-- [ ] `/set-teleportation-crystal-energy` per story 37 (USAGE before admin gate,
-      house rule; feedback to sender, deviation 5)
-- [ ] GameTestJanitor updated if any new persisted file appears
-- [ ] Gametests: crafting all three tiers + both guard cases, regen over
-=======
 - [x] Outgoing set-slot and set-content packets rewrite crystal stacks to
       damage = 3 − viewer's energy (story 23); stored stacks never mutated; verified
       at the packet level in a gametest
@@ -57,13 +35,10 @@ reference clone at /Users/jam/Development/MCTravelerNucleus.
 - [x] GameTestJanitor updated if any new persisted file appears — no new file
       appears; see note 6 below
 - [x] Gametests: crafting all three tiers + both guard cases, regen over
->>>>>>> worktree-agent-a9d928846fc924d5e
       fast-forwarded play time, damage-bar packets, admin command ladder; unit tests
       for pure energy/threshold logic and store round-trip
 
 ## Comments
-<<<<<<< HEAD
-=======
 
 ### Implementation summary
 
@@ -232,4 +207,3 @@ outgoing packet that actually contains a crystal — energy is read once per
 packet, not once per stack. If ticket 04's menu makes energy a hot read, an
 in-memory mirror in the player-shaped façade is the natural next step; it was
 not needed here.
->>>>>>> worktree-agent-a9d928846fc924d5e
