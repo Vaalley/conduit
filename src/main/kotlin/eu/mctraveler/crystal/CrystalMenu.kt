@@ -166,15 +166,26 @@ object CrystalMenu {
         open(player, Kind.DESTINATIONS, contents, rows = 3, title = TITLE, heads = emptyList())
     }
 
+    /** The tallest chest screen the protocol has: six rows of nine. */
+    const val MAX_ROWS = 6
+
     /**
      * Opens the head GUI over everyone else online (spec story 33), one row per
      * nine of them.
+     *
+     * Capped at [MAX_ROWS]. Nucleus's row count was unbounded, which on a server
+     * with more than 54 other players online would have asked Bukkit for an
+     * inventory larger than any chest screen; here it would have meant a menu
+     * whose slot count disagreed with the screen type sent to the client. The
+     * cap is a real limit on who can be picked, so it takes the first
+     * [MAX_ROWS] * 9 rather than silently building a broken screen.
      */
     fun openPlayers(player: ServerPlayer, others: List<ServerPlayer>) {
-        val rows = ((others.size + 8) / 9).coerceAtLeast(1)
+        val shown = others.take(MAX_ROWS * 9)
+        val rows = rowsFor(shown.size)
         val contents = SimpleContainer(rows * 9)
-        for ((slot, other) in others.withIndex()) contents.setItem(slot, head(other))
-        val heads = others.map { Head(it.uuid, it.gameProfile.name) }
+        for ((slot, other) in shown.withIndex()) contents.setItem(slot, head(other))
+        val heads = shown.map { Head(it.uuid, it.gameProfile.name) }
         open(player, Kind.PLAYERS, contents, rows, PLAYERS_TITLE, heads)
     }
 
@@ -195,6 +206,14 @@ object CrystalMenu {
             ),
         )
     }
+
+    /**
+     * How many rows of nine it takes to show [others] heads — Nucleus's
+     * `ceil(size / 9.0)`, never less than one (an empty menu is unreachable but
+     * a zero-row screen is not a thing) and never more than [MAX_ROWS].
+     */
+    fun rowsFor(others: Int): Int =
+        ((others.coerceAtMost(MAX_ROWS * 9) + 8) / 9).coerceIn(1, MAX_ROWS)
 
     /** The crystal GUI [player] has open, if any — the whole of story 36's state. */
     fun openMenuOf(player: ServerPlayer): CrystalChestMenu? =
