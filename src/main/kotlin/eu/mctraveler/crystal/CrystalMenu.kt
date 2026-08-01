@@ -329,7 +329,10 @@ object CrystalMenu {
             player.sendSystemMessage(Paint.error("The embassy world is not available"))
             return null
         }
-        return Landing(level, 0.5, 1.0, 0.5, player.yRot, player.xRot)
+        // Facing zeroed, not carried over. Nucleus built its destination as
+        // `Location(world, x, y, z)`, whose yaw and pitch default to 0, so every
+        // arrival in the embassies dimension faced due south and level.
+        return Landing(level, 0.5, 1.0, 0.5, 0.0f, 0.0f)
     }
 
     /** The stub that is the feature (spec story 32, and Out of Scope). */

@@ -105,7 +105,7 @@ object CrystalRequests {
         if (args.size != 2) return
         val requesterName = args[1]
         val server = acceptor.level().server
-        val requester = server.playerList.getPlayerByName(requesterName)
+        val requester = exactPlayer(server, requesterName)
         if (requester == null) {
             acceptor.sendSystemMessage(notOnline(requesterName))
             return
