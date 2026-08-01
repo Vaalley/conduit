@@ -8,6 +8,7 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents
 import net.minecraft.core.BlockPos
+import net.minecraft.network.chat.Component
 import net.minecraft.server.MinecraftServer
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.level.Level
@@ -41,9 +42,10 @@ object RegionsFeature {
         player.level().server.playerList.isOp(player.nameAndId())
 
     /**
-     * The house gate reply for an admin-only command, or null to let [player]
-     * proceed. One copy, because the refusal is a player-facing string and two
-     * of them would drift.
+     * The refusal every admin-only command gives a player who is not one, or
+     * null to let them through — the in-body gate the house rule asks for, so
+     * a malformed invocation still gets its USAGE first. One copy, because the
+     * refusal is a player-facing string and two of them would drift.
      */
     fun adminGate(player: ServerPlayer): Component? =
         if (isAdmin(player)) null

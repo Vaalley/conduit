@@ -1,5 +1,6 @@
 package eu.mctraveler.region
 
+import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import eu.mctraveler.persistence.PortalJson
@@ -12,15 +13,21 @@ import java.util.UUID
  * ```
  * { "regions": { "<idx>": { title, start-x, start-z, end-x, end-z, world,
  *   members, start-y? (omitted if 320), end-y? (omitted if −64), flags?,
- *   sub-regions?: { …recursive } } } }
+ *   metadata?: { …free-form JSON }, sub-regions?: { …recursive } } } }
  * ```
  *
  * Serialization reproduces the Portal's `JSON.stringify(…, null, 2)` output
- * exactly — key order, 2-space indentation, y defaults omitted, `flags` and
- * `sub-regions` only when non-empty — so a load/save cycle over migrated data
- * is byte-identical. Parsing tolerates omitted y bounds (320/−64 defaults) and
- * omitted members/flags/sub-regions; anything structurally malformed throws,
- * so a file we could not read is never overwritten.
+ * exactly — key order, 2-space indentation, y defaults omitted, `flags`,
+ * `metadata` and `sub-regions` only when non-empty — so a load/save cycle over
+ * migrated data is byte-identical. Parsing tolerates omitted y bounds (320/−64
+ * defaults) and omitted members/flags/metadata/sub-regions; anything
+ * structurally malformed throws, so a file we could not read is never
+ * overwritten.
+ *
+ * `metadata` is the one key the Portal never wrote (deviation 6). It is placed
+ * after `flags` and before `sub-regions`; the two never co-occur in practice,
+ * since the only regions carrying metadata are embassies and a region cannot
+ * be created inside one.
  */
 internal object RegionStore {
     fun parse(text: String): MutableList<Region> {
@@ -44,6 +51,9 @@ internal object RegionStore {
         region.parent = parent
         data.get("members")?.asJsonArray?.forEach { region.members.add(UUID.fromString(it.asString)) }
         data.get("flags")?.asJsonArray?.forEach { region.flags.add(it.asString) }
+        data.get("metadata")?.asJsonObject?.entrySet()?.forEach { (key, value) ->
+            region.metadata[key] = value
+        }
         data.get("sub-regions")?.asJsonObject?.entrySet()?.forEach { (_, sub) ->
             region.subRegions.add(parseRegion(sub.asJsonObject, parent = region))
         }
@@ -81,6 +91,10 @@ internal object RegionStore {
             out.append(",\n").append(inner).append("\"flags\": ")
             writeStringArray(out, region.flags.toList(), inner)
         }
+        if (region.metadata.isNotEmpty()) {
+            out.append(",\n").append(inner).append("\"metadata\": ")
+            writeJsonFields(out, region.metadata.entries.map { it.key to it.value }, inner)
+        }
         if (region.subRegions.isNotEmpty()) {
             out.append(",\n").append(inner).append("\"sub-regions\": ")
             writeIndexedObject(out, region.subRegions, inner) { sub, subIndent ->
@@ -107,6 +121,61 @@ internal object RegionStore {
             if (index > 0) out.append(",\n")
             out.append(inner).append("\"").append(index).append("\": ")
             writeValue(region, inner)
+        }
+        out.append("\n").append(indent).append("}")
+    }
+
+    /**
+     * A metadata value in the Portal's pretty-printing — the same 2-space
+     * shape `JSON.stringify(…, null, 2)` gives any nested object.
+     *
+     * Numbers are re-emitted from [Number.toString], which for a value Gson
+     * parsed out of the file is the original literal (its `LazilyParsedNumber`
+     * keeps the raw text): `64.0` does not come back as `64`, so a load/save
+     * cycle over a file we did not write is still byte-identical.
+     */
+    private fun writeJsonValue(out: StringBuilder, value: JsonElement, indent: String) {
+        when {
+            value.isJsonObject ->
+                writeJsonFields(out, value.asJsonObject.entrySet().map { it.key to it.value }, indent)
+            value.isJsonArray -> {
+                val items = value.asJsonArray.toList()
+                if (items.isEmpty()) {
+                    out.append("[]")
+                    return
+                }
+                val inner = "$indent  "
+                out.append("[\n")
+                items.forEachIndexed { index, item ->
+                    if (index > 0) out.append(",\n")
+                    out.append(inner)
+                    writeJsonValue(out, item, inner)
+                }
+                out.append("\n").append(indent).append("]")
+            }
+            value.isJsonNull -> out.append("null")
+            else -> {
+                val primitive = value.asJsonPrimitive
+                when {
+                    primitive.isString -> out.append(PortalJson.encodeString(primitive.asString))
+                    primitive.isBoolean -> out.append(primitive.asBoolean)
+                    else -> out.append(primitive.asNumber.toString())
+                }
+            }
+        }
+    }
+
+    private fun writeJsonFields(out: StringBuilder, fields: List<Pair<String, JsonElement>>, indent: String) {
+        if (fields.isEmpty()) {
+            out.append("{}")
+            return
+        }
+        val inner = "$indent  "
+        out.append("{\n")
+        fields.forEachIndexed { index, (key, value) ->
+            if (index > 0) out.append(",\n")
+            out.append(inner).append(PortalJson.encodeString(key)).append(": ")
+            writeJsonValue(out, value, inner)
         }
         out.append("\n").append(indent).append("}")
     }

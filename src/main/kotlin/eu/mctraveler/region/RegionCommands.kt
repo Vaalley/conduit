@@ -312,7 +312,12 @@ object RegionCommands {
             return Paint.error("You are not a member of this region")
         }
         if ("EMBASSY" in region.flags) {
-            return Paint.error("You must use ", Paint.red("/embassy delete"), " to delete an embassy")
+            // The command it names is real now, so it is also one click away.
+            return Paint.error(
+                "You must use ",
+                Paint.red.runs("/embassy delete")("/embassy delete"),
+                " to delete an embassy",
+            )
         }
         val title = region.title
         RegionTracker.clear(player.level().server, region)

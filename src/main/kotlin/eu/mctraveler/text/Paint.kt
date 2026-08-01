@@ -1,6 +1,7 @@
 package eu.mctraveler.text
 
 import net.minecraft.ChatFormatting
+import net.minecraft.network.chat.ClickEvent
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.MutableComponent
 import net.minecraft.network.chat.Style
@@ -32,11 +33,11 @@ class Paint private constructor(private val style: Style) {
     val blue: Paint get() = Paint(style.withColor(ChatFormatting.BLUE))
     val darkGray: Paint get() = Paint(style.withColor(ChatFormatting.DARK_GRAY))
 
-    /**
-     * Gold. Beyond the Portal's vocabulary — it arrived with the Nucleus-era
-     * features (spec deviation 10): the WARNING prefix, and the Teleportation
-     * Crystal's charge-capacity lore line.
-     */
+    // Nucleus's two extra colors. They began as prefix-only (the Portal's Paint
+    // had neither), and became content colors when Nucleus's clickable "here"
+    // arrived: aqua in the admin back-link, gold in the delete confirmation and
+    // the Teleportation Crystal's charge-capacity lore line (spec deviation 10).
+    val aqua: Paint get() = Paint(style.withColor(ChatFormatting.AQUA))
     val gold: Paint get() = Paint(style.withColor(ChatFormatting.GOLD))
 
     /** No explicit color: the text inherits its surroundings' (default white at top level). */
@@ -53,6 +54,14 @@ class Paint private constructor(private val style: Style) {
      * separator line) was hand-built as raw NBT instead.
      */
     val strikethrough: Paint get() = Paint(style.withStrikethrough(true))
+
+    /**
+     * Clickable: running [command] as the reader, the way the client runs a
+     * chat suggestion. Part of the style chain, so it composes with a color —
+     * `Paint.gold.runs("/embassy delete Home")("here")` — and applies to the
+     * content it wraps rather than the whole line.
+     */
+    fun runs(command: String): Paint = Paint(style.withClickEvent(ClickEvent.RunCommand(command)))
 
     /** Builds a component carrying this chain's style over the given content. */
     operator fun invoke(vararg content: Any?): MutableComponent {
@@ -80,12 +89,15 @@ class Paint private constructor(private val style: Style) {
         val red: Paint get() = plain.red
         val blue: Paint get() = plain.blue
         val darkGray: Paint get() = plain.darkGray
+        val aqua: Paint get() = plain.aqua
         val gold: Paint get() = plain.gold
         val reset: Paint get() = plain.reset
         val bold: Paint get() = plain.bold
         val italic: Paint get() = plain.italic
         val underline: Paint get() = plain.underline
         val strikethrough: Paint get() = plain.strikethrough
+
+        fun runs(command: String): Paint = plain.runs(command)
 
         /** Unstyled composition: `Paint("Hello ", name)`. */
         operator fun invoke(vararg content: Any?): MutableComponent = plain(*content)
@@ -113,10 +125,6 @@ class Paint private constructor(private val style: Style) {
          * half; its first caller is `/embassy delete`'s confirmation prompt.
          */
         fun warning(vararg content: Any?): MutableComponent = prefixed(gold.bold("WARNING"), content)
-
-        // Aqua exists only for the USAGE and INFO prefixes — it is not part of
-        // the Portal's public color vocabulary, so it stays private.
-        private val aqua: Paint get() = Paint(Style.EMPTY.withColor(ChatFormatting.AQUA))
 
         private fun prefixed(prefix: Component, content: Array<out Any?>): MutableComponent =
             plain(prefix, " ", gray(*content))

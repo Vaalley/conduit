@@ -1,6 +1,7 @@
 package eu.mctraveler.text
 
 import net.minecraft.ChatFormatting
+import net.minecraft.network.chat.ClickEvent
 import net.minecraft.network.chat.TextColor
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
@@ -250,6 +251,33 @@ class PaintTest {
         assertEquals(" ", space.string)
         assertEquals("This cannot be undone.", content.string)
         assertEquals(TextColor.fromLegacyFormat(ChatFormatting.GRAY), content.style.color)
+    }
+
+    // --- Nucleus's wider vocabulary (aqua, gold) and clickable runs ---
+
+    @Test
+    fun `aqua and gold are content colors, not just prefixes`() {
+        // Nucleus coloured "here" aqua in the admin back-link and gold in the
+        // embassy delete confirmation, so both leave the prefix-only cupboard.
+        assertEquals("aqua", Paint.aqua("here").style.color?.serialize())
+        assertEquals("gold", Paint.gold("here").style.color?.serialize())
+    }
+
+    @Test
+    fun `runs attaches a run-command click event to the content`() {
+        val component = Paint.gold.runs("/embassy delete Home")("here")
+        assertEquals("here", component.string)
+        assertEquals(ClickEvent.RunCommand("/embassy delete Home"), component.style.clickEvent)
+        assertEquals(TextColor.fromLegacyFormat(ChatFormatting.GOLD), component.style.color)
+    }
+
+    @Test
+    fun `runs composes with the rest of a message and leaves its siblings alone`() {
+        val component = Paint("You can click ", Paint.aqua.runs("/tp 1 2 3")("here"), " to go back.")
+        assertEquals("You can click here to go back.", component.string)
+        assertNull(component.style.clickEvent)
+        assertEquals(ClickEvent.RunCommand("/tp 1 2 3"), component.siblings[1].style.clickEvent)
+        assertNull(component.siblings[0].style.clickEvent)
     }
 
     @Test

@@ -82,6 +82,17 @@ tasks.withType<ProcessResources>().configureEach {
     }
 }
 
+// Iterating on one gametest class: the runner takes a resource-location selector
+// (wildcards allowed) from a system property, and test ids are
+// `mctraveler-test:<snake_case(ClassName_methodName)>`. For example:
+//   ./gradlew runGameTest -Pmctraveler.gametestFilter='mctraveler-test:embassy_plot_game_test_*'
+// Without the property the whole suite runs, so `./gradlew build` is unchanged.
+tasks.named<JavaExec>("runGameTest") {
+    providers.gradleProperty("mctraveler.gametestFilter").orNull?.let {
+        systemProperty("fabric-api.gametest.filter", it)
+    }
+}
+
 // The gametest source set doubles as the production smoke-check mod (see prodServer).
 val gametestJar = tasks.register<Jar>("gametestJar") {
     from(sourceSets["gametest"].output)
