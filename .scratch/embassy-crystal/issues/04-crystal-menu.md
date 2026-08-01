@@ -44,7 +44,7 @@ deviations 4, 8, 13, 16) and the Nucleus source `teleportation-crystal.kt`
 ### Implementation summary
 
 Done on branch `worktree-agent-a9c14c327f92a9630`. Full `./gradlew build` green:
-267 gametests and the unit tier.
+269 gametests and the unit tier.
 
 Two new files in `eu.mctraveler.crystal`:
 
@@ -79,6 +79,15 @@ knowing: `MinecraftServer.execute` only *enqueues* when
 (which runs inside a task) and runs inline when a gametest calls
 `menu.clicked(...)` directly. Both are correct here; the tests allow a tick
 either way.
+
+That queue opened a hole Nucleus did not have, found in review and fixed:
+**two clicks in one tick both reached the queue before either had closed
+anything**, so a double-click teleported twice for two energy (and, on a head,
+sent two requests for two). Nucleus's synchronous `closeInventory()` cleared
+its session before the second click was handled. Here the menu no longer being
+the player's *is* that session having ended, so a queued action checks
+`player.containerMenu === this` before running. `aDoubleClickSpendsOneEnergyAndTeleportsOnce`
+was confirmed to fail without the guard (two energy, not one).
 
 **There is no per-player menu state.** Nucleus kept two `WeakHashMap`s of who
 had which GUI open and swept them on close and on quit. Here the open menu *is*
@@ -147,7 +156,25 @@ guarded by `allowsBlockChange` (the building rule) and the air path by
     than assuming `server.overworld()`. They are the same dimension today; the
     indirection is what keeps story 30 true if Primary ever stops being the
     vanilla trio.
-11. **`CrystalRequests` carries two test seams**, `clear()` and
+11. **One invented string: ERROR "The embassy world is not available".** Story
+    31 has no failure branch, because Nucleus had none — it passed a possibly
+    null world into `Location` and let the teleport fail. The dimension ships in
+    the mod jar and `SmokeHook` asserts it on a real boot, so this is
+    unreachable in practice; a player whose click did nothing still deserves to
+    be told, which silence would not do. Flagged because it is the one
+    player-facing string here with no counterpart in the spec or in Nucleus.
+12. **Story 29 resolves the bed in the player's *current* World, deliberately.**
+    `findRespawnPositionAndUseSpawnBlock` is rewritten by
+    `ServerPlayerRespawnMixin` → `WorldRouting.withinDeathWorld`, so a bed
+    standing in another World becomes this World's spawn. That is what story 29
+    asks for in as many words ("as vanilla resolves it in my current World") and
+    what the ticket meant by "use the Worlds respawn plumbing where it fits".
+    A review raised this as a bug on the grounds that the rewrite also drops
+    `missingRespawnBlock` and so would charge a player for a broken bed —
+    checked, and it does not: `Worlds.spawnTransition` passes
+    `template.missingRespawnBlock()` straight through (`Worlds.kt:89`), so the
+    free "You have no bed to go to" still fires across Worlds.
+13. **`CrystalRequests` carries two test seams**, `clear()` and
     `backdate(ticks)`, both documented as such. The timeout is measured against
     `server.tickCount`, which a test cannot fast-forward; back-dating the
     outstanding request is the least invasive way to reach it, and the decision
@@ -184,11 +211,23 @@ Both are written into the test file, because they will bite the next ticket too.
   import *energy*.
 - `CrystalMenu.Head(uuid, name)` and `CrystalRequests.send(player, head)` are
   the seam if anything else ever wants to raise a teleport request.
-- **Pre-existing, not from this ticket:**
-  `.scratch/embassy-crystal/issues/03-crystal-item-energy.md` is on `main` with
-  12 unresolved merge-conflict markers left behind by merge commit `f0ccdd2`, so
-  that ticket's Status line and checklist each appear twice and contradict
-  themselves. Left alone here rather than editing another ticket's record;
-  raised separately.
 - **Nothing new is persisted**, so `GameTestJanitor` is unchanged: menus are
   in-memory and requests are dropped on disconnect and on server stop.
+
+### Known-untested, on purpose
+
+- **Story 36's disconnect clause.** `CrystalRequests.forget` is wired to
+  `ServerPlayConnectionEvents.DISCONNECT` but has no test of its own, because
+  the clearing has no observable difference from the player simply being gone:
+  `accept` looks the requester up by name first and answers "&lt;name&gt; is not
+  online" either way, and a rejoining gametest player gets a fresh uuid, so the
+  request could never have been found regardless. Testing it would need a read
+  seam into the map purely to watch it empty. The close-menu and server-stop
+  halves of story 36 are both covered.
+- **The `RegionContainerClickMixin` half of deviation 16** is belt-and-braces
+  and cannot currently be reached: `CrystalChestMenu.clicked` overrides the very
+  method that mixin injects into and never delegates, so the exemption there is
+  insurance for a future mod-owned menu that *does* delegate. The reachable
+  half — `RegionContainerSessionMixin` not capturing a container-region session
+  for a mod-owned menu — is asserted directly by
+  `aCrystalMenuCapturesNoContainerSession`.
