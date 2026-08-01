@@ -5,6 +5,10 @@ backend server directories plus the Portal's own data files — into a Fabric se
 directory ready to boot. It is safe to rehearse: it refuses to touch a run directory that
 already holds a migrated save, and writes nothing at all unless the whole migration succeeds.
 
+It is the first of two imports. The embassies predate the Portal and are in none of its files;
+they come across separately, from the retired Nucleus server, before the new build's first
+boot — see `docs/nucleus-import.md`.
+
 ## What it carries over
 
 | From | To |
@@ -131,18 +135,23 @@ The migration prints a summary. Then:
 1. Put the server's own files in the run directory: `eula.txt`, `server.properties` with
    `online-mode=true`, `level-name` matching `--level-name`, and `max-players=20` (the Portal
    hardcoded a limit of 20; the port advertises the real one — deviation register 17).
-2. Boot the server **once** and watch the log. Minecraft's own file fixer and data fixers do
+2. **Run the Nucleus import** — `docs/nucleus-import.md`. It brings back the embassies, which
+   predate the Portal and are in no Portal file: their plots, their regions and their owners'
+   crystal energy. It has to happen **before** the first boot, because the embassies dimension
+   folder must be on disk the first time that dimension loads.
+3. Boot the server **once** and watch the log. Minecraft's own file fixer and data fixers do
    the version jump on first boot: the level directory is relaid out
    (`playerdata` → `players/data`, `region` → `dimensions/minecraft/overworld/region`, …) and
    every chunk and save is upgraded as it loads. This first boot takes longer than usual.
-3. Verify, in this order:
+4. Verify, in this order:
    - the log lists `mctraveler:secondary`, `mctraveler:secondary_nether`, `mctraveler:secondary_end`;
    - an operator from the old server has operator status (`/op` list, or just use an admin command);
    - a well-travelled player logs in to the World they left, at the position they left;
    - `/switch` puts them back where the other World remembers them;
    - a player whose save was *quarantined* logs in and finds their inventory, XP and position —
      look for their `orphaned-save claim` line in the log;
-   - `/rg locate <something you know>` finds a region in the right World.
+   - `/rg locate <something you know>` finds a region in the right World;
+   - an imported embassy is where it was — see `docs/nucleus-import.md`.
 
 ## Known limitations
 
