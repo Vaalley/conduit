@@ -96,9 +96,18 @@ object CrystalDamageDisplay {
     private fun damageFor(viewer: ServerPlayer): Int =
         CrystalEnergy.MAX_ENERGY - CrystalEnergy.energyOf(viewer)
 
-    /** A crystal wearing [damage], or [stack] itself if it is not a crystal. */
+    /**
+     * A crystal wearing its full presentation and [damage], or [stack] itself
+     * if it is not a crystal.
+     *
+     * The presentation goes on here too, not just the damage: a Nucleus-era
+     * crystal (spec deviation 18) has none of it stored, and without
+     * `MAX_DAMAGE` in particular a client draws no bar however much damage it
+     * is sent. Nucleus's `updateItemEnergy` dressed every crystal on every
+     * outgoing container packet for the same reason.
+     */
     private fun painted(stack: ItemStack, damage: Int): ItemStack {
         if (!CrystalItem.isCrystal(stack)) return stack
-        return stack.copy().apply { set(DataComponents.DAMAGE, damage) }
+        return CrystalItem.presented(stack).apply { set(DataComponents.DAMAGE, damage) }
     }
 }

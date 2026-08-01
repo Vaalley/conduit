@@ -5,6 +5,8 @@ import eu.mctraveler.crystal.CrystalItem
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.core.component.DataComponents
 import net.minecraft.gametest.framework.GameTestHelper
+import net.minecraft.nbt.CompoundTag
+import net.minecraft.world.item.component.CustomData
 import net.minecraft.network.protocol.game.ClientboundContainerSetContentPacket
 import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket
 import net.minecraft.network.protocol.game.ClientboundSetCursorItemPacket
@@ -134,6 +136,69 @@ class CrystalEnergyGameTest {
     }
 
     @GameTest
+    fun aNucleusEraCrystalIsDressedOnTheWire(helper: GameTestHelper) {
+        // Spec deviation 18 plus stories 22-23. A Bukkit-era crystal carries
+        // only the marker: no name, no lore, no glint, stacking to 64, and no
+        // MAX_DAMAGE — without which a client draws no bar however much damage
+        // it is sent. Nucleus's updateItemEnergy re-applied the lot on every
+        // outgoing container packet, so ours does too.
+        val viewer = MessageCapturingPlayer.join(helper, "CrystalHeirloom")
+        try {
+            CrystalEnergy.setEnergy(viewer, 1)
+            val legacy = legacyCrystal(tier = 2)
+            // Every item carries a default item_name, so "bare" is about what it
+            // says, not whether the component is present at all.
+            helper.assertTrue(
+                legacy.get(DataComponents.ITEM_NAME)?.string != CrystalItem.ITEM_NAME &&
+                    !legacy.has(DataComponents.MAX_DAMAGE) &&
+                    !legacy.has(DataComponents.ENCHANTMENT_GLINT_OVERRIDE),
+                "the fixture already presents as a crystal, so this would prove nothing",
+            )
+            helper.assertTrue(CrystalItem.isCrystal(legacy), "the fixture is not recognised as a crystal")
+
+            viewer.inventory.setItem(0, legacy)
+            PacketCapture.drain(viewer)
+            viewer.containerMenu.sendAllDataToRemote()
+            val sent = PacketCapture.drainOf<ClientboundContainerSetContentPacket>(viewer)
+                .flatMap { it.items() }
+                .filter(CrystalItem::isCrystal)
+            helper.assertTrue(sent.isNotEmpty(), "the legacy crystal never reached the wire")
+
+            val seen = sent.first()
+            helper.assertValueEqual(
+                seen.get(DataComponents.ITEM_NAME)?.string ?: "<unnamed>",
+                CrystalItem.ITEM_NAME,
+                "the name on a legacy crystal",
+            )
+            helper.assertValueEqual(seen.get(DataComponents.MAX_STACK_SIZE) ?: 0, 1, "its stack size")
+            helper.assertValueEqual(seen.get(DataComponents.MAX_DAMAGE) ?: 0, 2, "its charge capacity")
+            helper.assertValueEqual(seen.getOrDefault(DataComponents.DAMAGE, 0), 2, "its damage bar")
+            helper.assertValueEqual(seen.get(DataComponents.ENCHANTMENT_GLINT_OVERRIDE) ?: false, true, "its glint")
+            helper.assertValueEqual(
+                seen.get(DataComponents.LORE)?.lines().orEmpty().map { it.string },
+                listOf(
+                    "The power of teleportation in your hands",
+                    "Recharges one use every 15 minutes",
+                    "",
+                    "Charge capacity 2",
+                ),
+                "its lore",
+            )
+            // The heirloom itself is never rewritten — only what is sent.
+            val stored = viewer.inventory.getItem(0)
+            helper.assertTrue(
+                stored.get(DataComponents.ITEM_NAME)?.string != CrystalItem.ITEM_NAME &&
+                    !stored.has(DataComponents.DAMAGE) &&
+                    !stored.has(DataComponents.MAX_DAMAGE),
+                "the stored legacy crystal was mutated",
+            )
+            helper.succeed()
+        } finally {
+            viewer.leave()
+        }
+    }
+
+    @GameTest
     fun anOrdinaryItemIsSentThroughUntouched(helper: GameTestHelper) {
         val viewer = MessageCapturingPlayer.join(helper, "CrystalBystander")
         try {
@@ -216,6 +281,29 @@ class CrystalEnergyGameTest {
             player.leave()
             throw failure
         }
+    }
+
+    /**
+     * An Echo Shard wearing Bukkit's PersistentDataContainer layout — a crystal
+     * as Nucleus left it in a chest (spec deviation 18), with no presentation
+     * of any kind stored on it.
+     */
+    private fun legacyCrystal(tier: Int): ItemStack {
+        val stack = ItemStack(Items.ECHO_SHARD)
+        CustomData.set(
+            DataComponents.CUSTOM_DATA,
+            stack,
+            CompoundTag().apply {
+                put(
+                    "PublicBukkitValues",
+                    CompoundTag().apply {
+                        putBoolean("mctravelernucleus:is-teleportation-crystal", true)
+                        putInt("mctravelernucleus:teleportation-crystal-tier", tier)
+                    },
+                )
+            },
+        )
+        return stack
     }
 
     private fun store() = checkNotNull(eu.mctraveler.MCTraveler.persistence).players
