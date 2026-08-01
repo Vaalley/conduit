@@ -93,24 +93,57 @@ class CrystalMenuGameTest {
     }
 
     @GameTest
-    fun aCrystalAimedAtAChestOpensTheChest(helper: GameTestHelper) {
-        // Pinning a known divergence from Nucleus, which cancelled the whole
-        // interaction from Bukkit's PlayerInteractEvent and so always got the
-        // crystal menu. Vanilla runs the block's own right-click first and
-        // stops there when it consumes the click, so Fabric's item-use event —
-        // the seam this ticket was given — never fires. Right-clicking air, the
-        // ground, or sneaking still opens the menu.
+    fun aCrystalAimedAtAChestOpensTheMenuNotTheChest(helper: GameTestHelper) {
+        // Nucleus cancelled Bukkit's PlayerInteractEvent before the chest could
+        // open, so the crystal always won the click. Vanilla runs a block's own
+        // right-click ahead of the item's, so this only holds because the hook
+        // is UseBlockCallback — which is ahead of both.
         val player = MessageCapturingPlayer.join(helper, "TCOnChest")
         try {
             val chest = BlockPos(1, 1, 1)
             helper.setBlock(chest, Blocks.CHEST)
+            helper.level.getBlockEntity(helper.absolutePos(chest))!!
+                .let { it as net.minecraft.world.level.block.entity.ChestBlockEntity }
+                .setItem(0, ItemStack(Items.DIAMOND))
             player.standAt(helper, 1.0, 1.0, 2.0)
+            CrystalEnergy.setEnergy(player, 3)
             player.usesCrystalOn(helper, chest)
 
+            val menu = CrystalMenu.openMenuOf(player)
+            helper.assertTrue(menu != null, "the chest won the click against a crystal")
+            helper.assertValueEqual(menu!!.kind, CrystalMenu.Kind.DESTINATIONS, "the menu the crystal opened")
+            // The chest's own contents are the tell: a chest that opened would
+            // have put a diamond in the player's window.
             helper.assertTrue(
-                CrystalMenu.openMenuOf(player) == null,
-                "the crystal menu won the click against a chest; if this is now wanted, " +
-                    "the block's own use has to be cancelled and this test updated",
+                menu.contents().none { it.`is`(Items.DIAMOND) },
+                "the chest opened as well as the menu",
+            )
+            helper.assertValueEqual(CrystalEnergy.energyOf(player), 3, "energy for merely opening the menu")
+            helper.succeed()
+        } finally {
+            player.leave()
+        }
+    }
+
+    @GameTest
+    fun aCrystalInTheOffHandOpensTheMenuToo(helper: GameTestHelper) {
+        // Vanilla asks each hand in turn and our hook reads the hand the click
+        // came in on — Nucleus's `e.item`, whose interact event fired per hand.
+        val player = MessageCapturingPlayer.join(helper, "TCOffHand")
+        try {
+            val floor = BlockPos(1, 1, 1)
+            helper.setBlock(floor, Blocks.STONE)
+            player.standAt(helper, 1.0, 2.0, 2.0)
+            player.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY)
+            player.setItemInHand(InteractionHand.OFF_HAND, CrystalItem.of(3))
+
+            val absolute = helper.absolutePos(floor)
+            val hit = BlockHitResult(Vec3.atCenterOf(absolute), Direction.UP, absolute, false)
+            player.gameMode.useItemOn(player, player.level(), player.offhandItem, InteractionHand.OFF_HAND, hit)
+
+            helper.assertTrue(
+                CrystalMenu.openMenuOf(player) != null,
+                "a crystal in the off hand opened no menu",
             )
             helper.succeed()
         } finally {

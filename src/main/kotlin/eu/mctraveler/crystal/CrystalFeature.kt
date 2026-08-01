@@ -5,7 +5,7 @@ import eu.mctraveler.text.Paint
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents
-import net.fabricmc.fabric.api.event.player.ItemEvents
+import net.fabricmc.fabric.api.event.player.UseBlockCallback
 import net.fabricmc.fabric.api.event.player.UseItemCallback
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents
 import net.minecraft.server.MinecraftServer
@@ -13,7 +13,8 @@ import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
 import net.minecraft.world.entity.player.Player
-import net.minecraft.world.item.context.UseOnContext
+import net.minecraft.world.level.Level
+import net.minecraft.world.phys.BlockHitResult
 
 /**
  * Wiring for the Teleportation Crystal (spec User Stories 20-37).
@@ -44,7 +45,7 @@ object CrystalFeature {
 
         // Right-clicking a crystal: at air, and at a block.
         UseItemCallback.EVENT.register { player, _, hand -> onUseItem(player, hand) }
-        ItemEvents.USE_ON.register(::onUseOn)
+        UseBlockCallback.EVENT.register(::onUseBlock)
 
         // Story 36's lifecycle. The open menu is the whole of the per-player
         // state, so closing it is all there is to do; only the requests are
@@ -66,16 +67,34 @@ object CrystalFeature {
     }
 
     /**
-     * Right-click holding a crystal, at a block. The block's own behaviour is a
-     * separate, earlier step in vanilla, so a crystal aimed at a chest still
-     * opens the chest — as it would with any other item in hand.
+     * Right-click holding a crystal, at a block — and the crystal wins the
+     * click, whatever the block would have done with it.
+     *
+     * This is why the hook is [UseBlockCallback] rather than the narrower
+     * `ItemEvents.USE_ON`. Vanilla's `useItemOn` runs the *block's* behaviour
+     * first (`useItemOn`, then `useWithoutItem`) and only reaches the item's own
+     * `useOn` if neither consumed the click, so a crystal aimed at a chest would
+     * open the chest and the item event would never fire.
+     * [UseBlockCallback] is ahead of all of that, which is where Nucleus stood:
+     * it cancelled Bukkit's `PlayerInteractEvent` before the chest ever opened.
+     *
+     * Only the hand the click came in on is considered, which is Nucleus's
+     * `e.item` — its interact event fired per hand and read that hand's item.
+     * The visible consequence is that a crystal in the *off* hand with an empty
+     * main hand loses to an interactive block, because vanilla resolves the
+     * empty main hand against the block first and never asks the off hand.
+     * Nucleus behaved the same way, so it stays.
      */
-    private fun onUseOn(context: UseOnContext): InteractionResult? {
-        val player = context.player
-        val stack = context.itemInHand
-        if (player !is ServerPlayer || !CrystalItem.isCrystal(stack)) return null
+    private fun onUseBlock(
+        player: Player,
+        level: Level,
+        hand: InteractionHand,
+        hit: BlockHitResult,
+    ): InteractionResult {
+        val stack = player.getItemInHand(hand)
+        if (player !is ServerPlayer || !CrystalItem.isCrystal(stack)) return InteractionResult.PASS
         CrystalMenu.use(player, CrystalItem.tierOf(stack))
-        // This event continues on null; anything else cancels.
+        // Anything but PASS cancels the block interaction outright.
         return InteractionResult.SUCCESS_SERVER
     }
 

@@ -44,7 +44,7 @@ deviations 4, 8, 13, 16) and the Nucleus source `teleportation-crystal.kt`
 ### Implementation summary
 
 Done on branch `worktree-agent-a9c14c327f92a9630`. Full `./gradlew build` green:
-269 gametests and the unit tier.
+270 gametests and the unit tier.
 
 Two new files in `eu.mctraveler.crystal`:
 
@@ -106,15 +106,28 @@ guarded by `allowsBlockChange` (the building rule) and the air path by
 
 ### Deviations and judgement calls
 
-1. **A crystal aimed at a chest opens the chest.** Nucleus cancelled the whole
-   interaction from Bukkit's `PlayerInteractEvent` and so always got the menu.
-   Vanilla runs a block's own right-click first and stops there when it consumes
-   the click, so `ItemEvents.USE_ON` — the seam this ticket specified — never
-   fires for an interactive block. Air, ground and sneaking are unaffected.
-   Pinned by `aCrystalAimedAtAChestOpensTheChest`, which says what would have to
-   change (cancelling the block's own use, which needs a mixin on
-   `ServerPlayerGameMode.useItemOn`) if the other behaviour is wanted.
-   **Worth a register entry or a decision.**
+1. **The crystal wins the click against an interactive block — no deviation.**
+   The block right-click hangs off `UseBlockCallback`, not the narrower
+   `ItemEvents.USE_ON` the ticket named. Vanilla's `useItemOn` runs the *block's*
+   behaviour first (`useItemOn`, then `useWithoutItem`) and only reaches the
+   item's own `useOn` if neither consumed the click, so on `ItemEvents.USE_ON` a
+   crystal aimed at a chest opened the chest and the menu never appeared.
+   `UseBlockCallback` is ahead of all of it, which is exactly where Nucleus
+   stood — it cancelled Bukkit's `PlayerInteractEvent` before the chest could
+   open. Returning anything but `PASS` cancels the block interaction outright.
+   `aCrystalAimedAtAChestOpensTheMenuNotTheChest` asserts the parity: the menu
+   opens, the chest does not (checked by its diamond not appearing in the open
+   window), and nothing is spent until a destination is chosen.
+   **Only the hand the click arrived on is considered**, which is Nucleus's
+   `e.item` — its interact event fired per hand and read that hand's item. The
+   visible consequence is that a crystal in the *off* hand with an empty main
+   hand loses to an interactive block, because vanilla resolves the empty main
+   hand against the block first and never asks the off hand; Nucleus behaved the
+   same way. A crystal in the off hand against air, ground or a non-interactive
+   block does open the menu (`aCrystalInTheOffHandOpensTheMenuToo`).
+   Air, ground and sneaking are unchanged, and the region exemptions still hold:
+   `UseBlockCallback` carries no region hook of its own, so the block path is
+   free on foreign land by construction rather than by exemption.
 2. **The head menu is capped at six rows.** Nucleus's row count was
    `ceil(others / 9)` unbounded; past 54 other players that asks for more rows
    than a chest screen has. Capped, taking the first 54 — a real limit on who
@@ -213,6 +226,20 @@ Both are written into the test file, because they will bite the next ticket too.
   the seam if anything else ever wants to raise a teleport request.
 - **Nothing new is persisted**, so `GameTestJanitor` is unchanged: menus are
   in-memory and requests are dropped on disconnect and on server stop.
+
+### Interactions checked
+
+- **Notepad.** No interaction is possible: an edit session holds a stand-in book
+  in the player's selected slot, and `NotepadFeature`'s tick sweep ends the
+  session the moment that slot stops holding it — so a player cannot be holding
+  a crystal and mid-edit at once. `UseBlockCallback` returns `PASS` for
+  everything that is not a crystal, so a session's own right-clicks are
+  untouched, and the notepad gametests are unchanged and green.
+- **Region protection.** The block path no longer runs through
+  `ItemEvents.USE_ON` at all, so `RegionProtection`'s exemption there is now
+  belt-and-braces for the crystal (it still governs every other item). The
+  air path still needs the exemption on `allowsItemUse`, and both region tests
+  — air and block, inside a region the player cannot modify — still pass.
 
 ### Known-untested, on purpose
 
