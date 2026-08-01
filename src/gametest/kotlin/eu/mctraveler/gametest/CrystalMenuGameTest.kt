@@ -9,6 +9,7 @@ import eu.mctraveler.embassy.EmbassyOrigins
 import eu.mctraveler.text.Paint
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.core.BlockPos
+import net.minecraft.core.Direction
 import net.minecraft.core.component.DataComponents
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.network.chat.ClickEvent
@@ -17,10 +18,14 @@ import net.minecraft.network.protocol.game.ClientboundOpenScreenPacket
 import net.minecraft.network.protocol.game.ServerboundChatCommandPacket
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.InteractionHand
+import net.minecraft.world.InteractionResult
 import net.minecraft.world.inventory.ContainerInput
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
+import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.storage.LevelData
+import net.minecraft.world.phys.BlockHitResult
+import net.minecraft.world.phys.Vec3
 
 /**
  * The crystal's menu as a player meets it (spec User Stories 26-36): the
@@ -54,6 +59,56 @@ class CrystalMenuGameTest {
             // The title is the one thing only the packet carries.
             val opened = PacketCapture.drainOf<ClientboundOpenScreenPacket>(player).single()
             helper.assertValueEqual(opened.title.string, CrystalMenu.TITLE, "the menu title")
+            helper.succeed()
+        } finally {
+            player.leave()
+        }
+    }
+
+    @GameTest
+    fun rightClickingABlockWithACrystalOpensTheMenuToo(helper: GameTestHelper) {
+        // The other half of story 26's "air or block": a different vanilla path
+        // and a different Fabric event from the air right-click above.
+        val player = MessageCapturingPlayer.join(helper, "TCOnBlock")
+        try {
+            val floor = BlockPos(1, 1, 1)
+            helper.setBlock(floor, Blocks.STONE)
+            player.standAt(helper, 1.0, 2.0, 2.0)
+
+            helper.assertTrue(
+                player.usesCrystalOn(helper, floor) != InteractionResult.PASS,
+                "the crystal's block use was left to vanilla",
+            )
+            helper.assertTrue(
+                CrystalMenu.openMenuOf(player) != null,
+                "right-clicking a block with a crystal opened no menu",
+            )
+            helper.succeed()
+        } finally {
+            player.leave()
+        }
+    }
+
+    @GameTest
+    fun aCrystalAimedAtAChestOpensTheChest(helper: GameTestHelper) {
+        // Pinning a known divergence from Nucleus, which cancelled the whole
+        // interaction from Bukkit's PlayerInteractEvent and so always got the
+        // crystal menu. Vanilla runs the block's own right-click first and
+        // stops there when it consumes the click, so Fabric's item-use event —
+        // the seam this ticket was given — never fires. Right-clicking air, the
+        // ground, or sneaking still opens the menu.
+        val player = MessageCapturingPlayer.join(helper, "TCOnChest")
+        try {
+            val chest = BlockPos(1, 1, 1)
+            helper.setBlock(chest, Blocks.CHEST)
+            player.standAt(helper, 1.0, 1.0, 2.0)
+            player.usesCrystalOn(helper, chest)
+
+            helper.assertTrue(
+                CrystalMenu.openMenuOf(player) == null,
+                "the crystal menu won the click against a chest; if this is now wanted, " +
+                    "the block's own use has to be cancelled and this test updated",
+            )
             helper.succeed()
         } finally {
             player.leave()
@@ -195,6 +250,22 @@ class CrystalMenuGameTest {
             helper.assertFalse(
                 guest.wasRefusedBy("TCLandlord's Place"),
                 "the crystal drew a protection refusal, got ${guest.messages.map { it.string }}",
+            )
+
+            // The block path is guarded by a different rule (allowsBlockChange,
+            // which is what refuses building) and so needs its own exemption.
+            guest.closeContainer()
+            val floor = BlockPos(2, 1, 2)
+            helper.setBlock(floor, Blocks.STONE)
+            guest.messages.clear()
+            guest.usesCrystalOn(helper, floor)
+            helper.assertTrue(
+                CrystalMenu.openMenuOf(guest) != null,
+                "the crystal was refused on a block inside a foreign region (deviation 13)",
+            )
+            helper.assertFalse(
+                guest.wasRefusedBy("TCLandlord's Place"),
+                "the crystal-on-block drew a protection refusal, got ${guest.messages.map { it.string }}",
             )
             helper.succeed()
         } finally {
@@ -807,6 +878,18 @@ private fun CrystalMenu.CrystalChestMenu.contents(): List<ItemStack> =
 private fun MessageCapturingPlayer.usesCrystal(tier: Int) {
     setItemInHand(InteractionHand.MAIN_HAND, CrystalItem.of(tier))
     gameMode.useItem(this, level(), mainHandItem, InteractionHand.MAIN_HAND)
+}
+
+/** Right-clicks a crystal at the top face of the block at [target]. */
+private fun MessageCapturingPlayer.usesCrystalOn(
+    helper: GameTestHelper,
+    target: BlockPos,
+    tier: Int = 3,
+): InteractionResult {
+    setItemInHand(InteractionHand.MAIN_HAND, CrystalItem.of(tier))
+    val absolute = helper.absolutePos(target)
+    val hit = BlockHitResult(Vec3.atCenterOf(absolute), Direction.UP, absolute, false)
+    return gameMode.useItemOn(this, level(), mainHandItem, InteractionHand.MAIN_HAND, hit)
 }
 
 /**
