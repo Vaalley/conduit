@@ -3,11 +3,11 @@ package eu.mctraveler.crystal
 import eu.mctraveler.embassy.EmbassiesFeature
 import eu.mctraveler.text.Paint
 import eu.mctraveler.worlds.DimensionRole
+import eu.mctraveler.worlds.Landing
 import eu.mctraveler.worlds.WorldsFeature
 import java.util.UUID
 import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
-import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.Container
 import net.minecraft.world.SimpleContainer
@@ -70,16 +70,6 @@ object CrystalMenu {
 
     /** One online player, as the head GUI offers them. */
     data class Head(val uuid: UUID, val name: String)
-
-    /** Where a destination puts the player. */
-    private class Landing(
-        val level: ServerLevel,
-        val x: Double,
-        val y: Double,
-        val z: Double,
-        val yaw: Float,
-        val pitch: Float,
-    )
 
     /**
      * One of the five buttons: how it looks, and where it leads. A null landing
@@ -240,16 +230,7 @@ object CrystalMenu {
     private fun choose(player: ServerPlayer, destination: Destination) {
         player.closeContainer()
         val landing = destination.resolve(player) ?: return
-        player.teleportTo(
-            landing.level,
-            landing.x,
-            landing.y,
-            landing.z,
-            emptySet(),
-            landing.yaw,
-            landing.pitch,
-            false,
-        )
+        landing.send(player)
         CrystalEnergy.modify(player, -1)
         player.sendSystemMessage(
             Paint.info("You used one energy going to ", Paint.aqua(destination.name.lowercase())),

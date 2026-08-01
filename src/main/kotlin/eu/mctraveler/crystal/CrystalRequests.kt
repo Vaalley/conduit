@@ -1,6 +1,7 @@
 package eu.mctraveler.crystal
 
 import eu.mctraveler.text.Paint
+import eu.mctraveler.worlds.Landing
 import java.util.UUID
 import net.minecraft.network.chat.ClickEvent
 import net.minecraft.network.chat.MutableComponent
@@ -74,10 +75,6 @@ object CrystalRequests {
             style.withClickEvent(ClickEvent.RunCommand("/$ACCEPT_COMMAND $requesterName"))
         }
 
-    /** Nucleus's `sendNotOnline`. */
-    private fun notOnline(name: String): MutableComponent =
-        Paint.error(Paint.red(name), " is not online")
-
     /**
      * True if [command] — a command line as the packet carries it, with or
      * without its leading slash — is the hidden accept command. Safe from any
@@ -122,16 +119,7 @@ object CrystalRequests {
             acceptor.sendSystemMessage(Paint.error("Request timed out"))
             return
         }
-        requester.teleportTo(
-            acceptor.level(),
-            acceptor.x,
-            acceptor.y,
-            acceptor.z,
-            emptySet(),
-            acceptor.yRot,
-            acceptor.xRot,
-            false,
-        )
+        Landing.of(acceptor).send(requester)
         requester.sendSystemMessage(
             Paint.info(Paint.aqua(acceptor.gameProfile.name), " has accepted your request"),
         )

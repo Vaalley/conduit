@@ -1,5 +1,7 @@
 package eu.mctraveler.crystal
 
+import eu.mctraveler.text.Paint
+import net.minecraft.network.chat.MutableComponent
 import net.minecraft.server.MinecraftServer
 import net.minecraft.server.level.ServerPlayer
 
@@ -18,3 +20,13 @@ import net.minecraft.server.level.ServerPlayer
  */
 internal fun exactPlayer(server: MinecraftServer, name: String): ServerPlayer? =
     server.playerList.players.firstOrNull { it.gameProfile.name == name }
+
+/**
+ * What both of the crystal's name arguments answer when [exactPlayer] finds
+ * nobody — Nucleus's `sendNotOnline`.
+ *
+ * One copy, next to the lookup it is the failure of: it is a player-facing
+ * string, and two of them would drift.
+ */
+internal fun notOnline(name: String): MutableComponent =
+    Paint.error(Paint.red(name), " is not online")

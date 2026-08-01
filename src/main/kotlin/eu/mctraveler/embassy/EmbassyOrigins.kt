@@ -1,5 +1,6 @@
 package eu.mctraveler.embassy
 
+import eu.mctraveler.worlds.Waypoint
 import java.util.UUID
 import net.minecraft.resources.ResourceKey
 import net.minecraft.server.level.ServerPlayer
@@ -21,17 +22,10 @@ import net.minecraft.world.level.Level
  */
 object EmbassyOrigins {
 
-    /** A player's standing place in the moment before they entered embassies. */
-    data class Origin(
-        val dimension: ResourceKey<Level>,
-        val x: Double,
-        val y: Double,
-        val z: Double,
-        val yaw: Float,
-        val pitch: Float,
-    )
-
-    private val origins = HashMap<UUID, Origin>()
+    // A player's standing place in the moment before they entered embassies is
+    // a plain [Waypoint] — a remembered dimension, position and facing, which
+    // is the whole of what this used to spell out as its own `Origin` type.
+    private val origins = HashMap<UUID, Waypoint>()
 
     /**
      * Called before every player teleport, from the one place that still knows
@@ -50,14 +44,14 @@ object EmbassyOrigins {
         val from = player.level().dimension()
         if (from == destination) return
         if (destination == EmbassiesFeature.DIMENSION) {
-            origins[player.uuid] = Origin(from, player.x, player.y, player.z, player.yRot, player.xRot)
+            origins[player.uuid] = Waypoint.of(player)
         } else if (from == EmbassiesFeature.DIMENSION) {
             origins.remove(player.uuid)
         }
     }
 
     /** Where [player] entered embassies from, or null if nothing was recorded. */
-    fun originOf(player: ServerPlayer): Origin? = origins[player.uuid]
+    fun originOf(player: ServerPlayer): Waypoint? = origins[player.uuid]
 
     /**
      * Puts [player] back where they entered from and forgets it. False when
@@ -67,8 +61,8 @@ object EmbassyOrigins {
      */
     fun sendHome(player: ServerPlayer): Boolean {
         val origin = origins.remove(player.uuid) ?: return false
-        val level = player.level().server.getLevel(origin.dimension) ?: return false
-        player.teleportTo(level, origin.x, origin.y, origin.z, emptySet(), origin.yaw, origin.pitch, false)
+        val landing = origin.resolve(player.level().server) ?: return false
+        landing.send(player)
         // The drop into the void is not a fall the player may land from.
         player.resetFallDistance()
         return true
