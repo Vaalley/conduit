@@ -77,6 +77,7 @@ object EmbassiesFeature {
         CommandRegistrationCallback.EVENT.register { dispatcher, _, _ ->
             EmbassyCommands.register(dispatcher)
         }
+        EmbassyAnchors.register()
         // Nothing hurts a player here, of any kind (spec story 2). Nucleus
         // cancelled every damage event in the world; deviation 1 makes this the
         // whole of the ~40 per-world damage gamerules Bukkit let it set.

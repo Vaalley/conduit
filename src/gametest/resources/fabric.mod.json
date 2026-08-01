@@ -30,7 +30,8 @@
       "eu.mctraveler.gametest.RegionFlagGameTest",
       "eu.mctraveler.gametest.EmbassiesGameTest",
       "eu.mctraveler.gametest.EmbassyPlotGameTest",
-      "eu.mctraveler.gametest.EmbassyCommandGameTest"
+      "eu.mctraveler.gametest.EmbassyCommandGameTest",
+      "eu.mctraveler.gametest.EmbassyAnchorGameTest"
     ],
     "server": [
       {

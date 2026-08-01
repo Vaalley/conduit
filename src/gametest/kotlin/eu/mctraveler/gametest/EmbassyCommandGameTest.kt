@@ -32,11 +32,16 @@ class EmbassyCommandGameTest {
         val player = MessageCapturingPlayer.join(helper, "T02Help")
         player.runCommand("embassy")
 
-        // Nucleus sent two plain lines, with no prefix and no styling.
-        helper.assertValueEqual(player.messages.size, 2, "the number of /embassy help lines")
-        helper.assertValueEqual(player.messages[0].string, "/embassy create", "the first help line")
-        helper.assertValueEqual(player.messages[1].string, "/embassy delete", "the second help line")
-        helper.assertTrue(player.messages[0].style.isEmpty, "the help lines should carry no styling")
+        // Nucleus sent two plain lines, with no prefix and no styling. Picked
+        // out of the message list rather than counted: a captured player also
+        // hears the server's broadcasts, including other tests' joins.
+        val lines = player.messages.filter { it.string.startsWith("/embassy") }
+        helper.assertValueEqual(
+            lines.map(Component::getString),
+            listOf("/embassy create", "/embassy delete"),
+            "the /embassy help lines",
+        )
+        helper.assertTrue(lines[0].style.isEmpty, "the help lines should carry no styling")
         player.leave()
         helper.succeed()
     }
