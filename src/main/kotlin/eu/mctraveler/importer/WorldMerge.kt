@@ -99,9 +99,22 @@ data class MergePlacement(
     ) + dimensions.flatMap { it.lines() }
 }
 
+/**
+ * What a merge did, for the operator to check against what they expected (merge
+ * spec, User Story 48). The placement is embedded rather than replaced: where the
+ * landmass went is the first thing to look at whether or not anything was
+ * written, and every later phase adds its own counts beside it.
+ */
+data class MergeReport(
+    val placement: MergePlacement,
+    val players: PlayerSweepReport,
+) {
+    fun lines(): List<String> = placement.lines() + players.lines()
+}
+
 private const val REPORT_KEY_WIDTH = 24
 
-private fun reportLine(key: String, value: String): String = key.padEnd(REPORT_KEY_WIDTH) + " : " + value
+internal fun reportLine(key: String, value: String): String = key.padEnd(REPORT_KEY_WIDTH) + " : " + value
 
 /**
  * Where on Primary's map Secondary can be put down.
@@ -278,7 +291,7 @@ class WorldMerge(private val plan: MergePlan) {
     private val staging: Path = plan.targetDir.resolve(STAGING_DIRECTORY)
     private val levelDir: Path = plan.targetDir.resolve(plan.levelName)
 
-    fun run(): MergePlacement {
+    fun run(): MergeReport {
         refuseUnlessLiveRunDirectory()
         refuseIfAlreadyMerged()
 
@@ -286,7 +299,13 @@ class WorldMerge(private val plan: MergePlan) {
         refuseIfSecondaryIsMissing(secondary)
 
         val search = PlacementSearch(secondary, footprints(WorldLayout.PRIMARY), plan.clearance)
-        return plan.offset?.let(search::checked) ?: search.nearestSlot(plan.searchLimit)
+        val placement = plan.offset?.let(search::checked) ?: search.nearestSlot(plan.searchLimit)
+
+        // Everything past here writes, and writes only inside the staging
+        // directory until every phase has succeeded — see [MergeStaging].
+        return MergeStaging.commit(plan.targetDir, staging) { staged ->
+            MergeReport(placement, PlayerSweep(plan, placement.offset).sweep(staged))
+        }
     }
 
     // ---- refusals -----------------------------------------------------------

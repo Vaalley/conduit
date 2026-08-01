@@ -8,7 +8,7 @@ val sourceSets = the<SourceSetContainer>()
 
 tasks.register<JavaExec>("mergeWorlds") {
     group = "migration"
-    description = "Plans where Secondary's landmass moves to inside Primary, and writes nothing."
+    description = "Moves Secondary's landmass into Primary and sweeps everything that named a place in it."
     // The mod's own runtime classpath: the merge reuses the live region service,
     // player store and World layout rather than reimplementing any of them.
     classpath = sourceSets["main"].runtimeClasspath

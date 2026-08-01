@@ -108,6 +108,18 @@ data class MergeOffset(val x: Int, val z: Int) {
     fun mergedZ(z: Int, role: DimensionRole): Int = z + shiftZ(role)
 
     /**
+     * The merged X a Secondary X becomes, for the places a save records to the
+     * fraction of a block: a player's own position, the vehicle they logged out
+     * inside, the point they entered the nether from. The shift is a whole
+     * number of blocks, so the fraction survives it exactly and a player logs in
+     * standing where they logged out rather than snapped to a block corner.
+     */
+    fun mergedX(x: Double, role: DimensionRole): Double = x + shiftX(role)
+
+    /** The merged Z a Secondary Z becomes, to the fraction of a block; see [mergedX]. */
+    fun mergedZ(z: Double, role: DimensionRole): Double = z + shiftZ(role)
+
+    /**
      * Region files [role] moves along X. Whole by construction — that is what
      * [MergeGeometry.OFFSET_ALIGNMENT] buys — so a source file's chunks all land
      * in one destination file.

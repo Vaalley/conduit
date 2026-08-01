@@ -17,10 +17,11 @@ import net.minecraft.server.Bootstrap
 object WorldMergeMain {
 
     private val USAGE = """
-        Plans the merge of the Secondary World into Primary, against a live server run directory.
+        Merges the Secondary World into Primary, against a live server run directory.
 
-        Run it with the server STOPPED. It writes nothing: it measures both Worlds, chooses
-        where Secondary's landmass would go, and prints the placement for you to accept or reject.
+        Run it with the server STOPPED. It measures both Worlds, chooses where Secondary's
+        landmass goes, and rewrites everything that recorded a place in Secondary to name
+        its new one. Nothing at all is written unless the whole merge succeeds.
 
           --target <dir>        the live server run directory (regions.json, mctraveler/, world/)
           --level-name <name>   the level directory to work in         [default: world]
@@ -60,14 +61,14 @@ object WorldMergeMain {
         }
 
         try {
-            val placement = WorldMerge(plan).run()
-            println("Planned the merge of Secondary into Primary in ${plan.targetDir}:")
-            placement.lines().forEach { println("  $it") }
+            val report = WorldMerge(plan).run()
+            println("Merged Secondary into Primary in ${plan.targetDir}:")
+            report.lines().forEach { println("  $it") }
             println(
-                "\nNothing was written. Check that distance against the live map before the real " +
-                    "run — Secondary has grown since the Portal cutover — and pass " +
-                    "--offset ${placement.offset.x},${placement.offset.z} when you run it for real, " +
-                    "so the rehearsal and the night put the landmass in the same place.",
+                "\nCheck that distance against the live map — Secondary has grown since the " +
+                    "Portal cutover — and pass " +
+                    "--offset ${report.placement.offset.x},${report.placement.offset.z} on the " +
+                    "real run, so the rehearsal and the night put the landmass in the same place.",
             )
         } catch (refusal: MigrationRefused) {
             System.err.println("Merge refused, nothing was written: ${refusal.message}")
