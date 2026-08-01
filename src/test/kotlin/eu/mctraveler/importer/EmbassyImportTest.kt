@@ -234,6 +234,25 @@ class EmbassyImportTest {
     }
 
     @Test
+    fun `an embassy region anywhere in the target's tree refuses`() {
+        nucleus.targetRegions(
+            """
+            {"regions":{"0":{"title":"Wanderer's Keep","start-x":-10,"start-z":-10,"end-x":10,"end-z":10,
+            "world":"last_nether","members":[],"sub-regions":{"0":{"title":"Smuggled Embassy","start-x":3,
+            "start-z":3,"end-x":13,"end-z":13,"world":"embassies","members":[]}}}}}
+            """.trimIndent(),
+        )
+
+        val refusal = assertThrows(MigrationRefused::class.java) { import() }
+
+        assertEquals(
+            "${nucleus.regionsFile} already holds 1 region(s) in world \"embassies\" " +
+                "(first: \"Smuggled Embassy\") — the embassy regions have been imported already",
+            refusal.message,
+        )
+    }
+
+    @Test
     fun `a run directory the migration never wrote refuses`() {
         Files.delete(nucleus.regionsFile)
 
@@ -297,7 +316,10 @@ class EmbassyImportTest {
 
         val refusal = assertThrows(MigrationRefused::class.java) { import() }
 
-        assertEquals("$playerdata does not exist — is ${nucleus.oldDir} the Nucleus server directory?", refusal.message)
+        assertEquals(
+            "$playerdata does not exist — is ${nucleus.oldDir} the Nucleus server directory?",
+            refusal.message,
+        )
     }
 
     @Test

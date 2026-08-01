@@ -189,7 +189,11 @@ class EmbassyImport(private val plan: EmbassyImportPlan) {
                 "$embassiesDimension already exists — the embassies have been imported already",
             )
         }
-        val existing = RegionService(regionsFile).roots.filter { it.world == RegionWorlds.EMBASSIES }
+        // The whole tree, not just the roots: an embassy is always a root, but
+        // this guard is the only thing standing between a slip and a doubled
+        // region file, and a scan costs nothing.
+        val existing = RegionService(regionsFile).roots.flatMap(::selfAndDescendants)
+            .filter { it.world == RegionWorlds.EMBASSIES }
         if (existing.isNotEmpty()) {
             throw MigrationRefused(
                 "$regionsFile already holds ${existing.size} region(s) in world " +
@@ -201,6 +205,9 @@ class EmbassyImport(private val plan: EmbassyImportPlan) {
             throw MigrationRefused("$staging is left over from an interrupted import; remove it and run again")
         }
     }
+
+    private fun selfAndDescendants(region: Region): List<Region> =
+        listOf(region) + region.subRegions.flatMap(::selfAndDescendants)
 
     private fun refuseUnlessNucleusSources() {
         if (!Files.isDirectory(plan.oldDir)) {
