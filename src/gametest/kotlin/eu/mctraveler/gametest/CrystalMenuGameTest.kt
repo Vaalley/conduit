@@ -6,7 +6,10 @@ import eu.mctraveler.crystal.CrystalMenu
 import eu.mctraveler.crystal.CrystalRequests
 import eu.mctraveler.embassy.EmbassiesFeature
 import eu.mctraveler.embassy.EmbassyOrigins
+import eu.mctraveler.region.RegionProtection
 import eu.mctraveler.text.Paint
+import eu.mctraveler.worlds.DimensionRole
+import eu.mctraveler.worlds.WorldsFeature
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
@@ -277,6 +280,36 @@ class CrystalMenuGameTest {
     // ---- deviation 16: the menu is the mod's, not the region's ----
 
     @GameTest
+    fun aCrystalMenuCapturesNoContainerSession(helper: GameTestHelper) {
+        // The reachable half of deviation 16. The click mixin's exemption is
+        // belt-and-braces — CrystalChestMenu.clicked overrides the method it
+        // injects into and never delegates — but the session mixin's is live:
+        // a menu the mod drew stands in no region, so no region may be captured
+        // as the one governing it.
+        val owner = MessageCapturingPlayer.join(helper, "TCSessionA")
+        val guest = MessageCapturingPlayer.join(helper, "TCSessionB")
+        try {
+            createRegion(helper, owner, 0.0 to 0.0, 4.0 to 4.0)
+            guest.standAt(helper, 2.0, 1.0, 2.0)
+            guest.usesCrystal(tier = 3)
+            guest.messages.clear()
+
+            helper.assertTrue(
+                RegionProtection.allowsContainerUse(guest),
+                "opening a crystal menu captured the region it was opened in",
+            )
+            helper.assertTrue(
+                guest.spokenMessages().isEmpty(),
+                "asking about the container session drew ${guest.spokenMessages().map { it.string }}",
+            )
+            helper.succeed()
+        } finally {
+            owner.leave()
+            guest.leave()
+        }
+    }
+
+    @GameTest
     fun aMenuOpenedOnForeignLandStillAcceptsItsClicks(helper: GameTestHelper) {
         val owner = MessageCapturingPlayer.join(helper, "TCHostA")
         val guest = MessageCapturingPlayer.join(helper, "TCHostB")
@@ -303,16 +336,38 @@ class CrystalMenuGameTest {
         val player = MessageCapturingPlayer.join(helper, "TCSticky")
         try {
             player.usesCrystal(tier = 3)
+            // Slot 1, not 0: the crystal is held, and holding it is slot 0.
+            player.inventory.setItem(1, ItemStack(Items.DIAMOND, 5))
             val menu = CrystalMenu.openMenuOf(player)!!
 
-            for (input in listOf(ContainerInput.PICKUP, ContainerInput.QUICK_MOVE, ContainerInput.THROW)) {
-                menu.clicked(0, 0, input, player)
-                menu.clicked(11, 0, input, player)
+            // Only slots that do not act, so this test is about movement alone
+            // (the acting slots have their own tests). Shift-clicking a pane is
+            // the one players actually try; the last two are the player's own
+            // half of the window and the click that lands outside it.
+            val inert = listOf(0, 9, 16, 26, menu.contents().size + 4, -999)
+            for (input in listOf(
+                ContainerInput.PICKUP,
+                ContainerInput.QUICK_MOVE,
+                ContainerInput.THROW,
+                ContainerInput.SWAP,
+                ContainerInput.PICKUP_ALL,
+            )) {
+                for (slot in inert) menu.clicked(slot, 0, input, player)
             }
-            // Shift-clicking a pane is the one players actually try.
             helper.assertTrue(
                 menu.contents()[0].`is`(Items.STAINED_GLASS_PANE.black()),
                 "a pane left the menu",
+            )
+            helper.assertTrue(
+                CrystalMenu.openMenuOf(player) != null,
+                "an inert click closed the menu",
+            )
+            // Shift-clicking out of the player's own half must not push
+            // anything into the menu either.
+            helper.assertValueEqual(
+                player.inventory.getItem(1).count,
+                5,
+                "the diamonds the player brought in",
             )
             helper.assertTrue(menu.carried.isEmpty, "something ended up on the cursor: ${menu.carried}")
             val gained = (0 until player.inventory.containerSize)
@@ -351,6 +406,39 @@ class CrystalMenuGameTest {
     // ---- the destinations ----
 
     @GameTest
+    fun adoubleClickSpendsOneEnergyAndTeleportsOnce(helper: GameTestHelper) {
+        // The destination is queued rather than run inside the click, so both
+        // clicks of a double-click can reach the queue before either has closed
+        // the menu. Nucleus's synchronous close made this impossible; here the
+        // menu identity is what makes the second click stale.
+        val player = MessageCapturingPlayer.join(helper, "TCDouble")
+        CrystalEnergy.setEnergy(player, 3)
+        player.usesCrystal(tier = 3)
+        val menu = CrystalMenu.openMenuOf(player)!!
+        player.messages.clear()
+
+        menu.clicked(SPAWN_SLOT, 0, ContainerInput.PICKUP, player)
+        menu.clicked(SPAWN_SLOT, 0, ContainerInput.PICKUP, player)
+        helper.runAfterDelay(1) {
+            try {
+                helper.assertValueEqual(
+                    CrystalEnergy.energyOf(player),
+                    2,
+                    "energy after double-clicking one destination",
+                )
+                helper.assertOnlyMessage(
+                    player,
+                    Paint.info("You used one energy going to ", Paint.aqua("spawn")),
+                    "a double-click should report one journey",
+                )
+                helper.succeed()
+            } finally {
+                player.leave()
+            }
+        }
+    }
+
+    @GameTest
     fun spawnSendsThePlayerToSpawnTownAndCostsOneEnergy(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "TCSpawn")
         CrystalEnergy.setEnergy(player, 3)
@@ -358,6 +446,12 @@ class CrystalMenuGameTest {
         player.messages.clear()
 
         helper.afterClick(player, SPAWN_SLOT, player) {
+            // Story 30 names Primary's overworld, not just the coordinates.
+            helper.assertValueEqual(
+                player.level().dimension(),
+                WorldsFeature.worlds!!.byId("primary")!!.dimension(DimensionRole.OVERWORLD),
+                "the dimension spawn town is in",
+            )
             helper.assertValueEqual(player.x, 16.5, "spawn x")
             helper.assertValueEqual(player.y, 71.0, "spawn y")
             helper.assertValueEqual(player.z, -15.5, "spawn z")
@@ -502,8 +596,14 @@ class CrystalMenuGameTest {
         val other = MessageCapturingPlayer.join(helper, "TCChosen")
         CrystalEnergy.setEnergy(chooser, 3)
         chooser.usesCrystal(tier = 3)
+        PacketCapture.drain(chooser)
 
         helper.afterClick(chooser, PLAYER_SLOT, chooser, other) {
+            helper.assertValueEqual(
+                PacketCapture.drainOf<ClientboundOpenScreenPacket>(chooser).last().title.string,
+                CrystalMenu.PLAYERS_TITLE,
+                "the head menu's title",
+            )
             val menu = CrystalMenu.openMenuOf(chooser)
             helper.assertTrue(
                 menu != null,

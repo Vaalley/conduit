@@ -419,7 +419,16 @@ object CrystalMenu {
             // its post-click bookkeeping, and would apply it to whatever we had
             // left open. Queued on the server thread, it lands after
             // handleContainerClick has finished with this menu.
-            player.level().server.execute { action(player) }
+            player.level().server.execute {
+                // ...which leaves a window Nucleus did not have. Its close was
+                // synchronous, so a second click arriving in the same tick found
+                // the session already gone; here both clicks reach this queue
+                // before either has closed anything, and a double-click would
+                // teleport twice for two energy (or send two requests). This
+                // menu no longer being the player's *is* that session having
+                // ended, so a stale click is one whose menu has moved on.
+                if (player.containerMenu === this) action(player)
+            }
         }
 
         /**
