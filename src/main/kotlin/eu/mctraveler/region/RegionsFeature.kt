@@ -3,7 +3,6 @@ package eu.mctraveler.region
 import eu.mctraveler.MCTraveler
 import eu.mctraveler.text.Paint
 import java.util.UUID
-import net.minecraft.network.chat.Component
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents
