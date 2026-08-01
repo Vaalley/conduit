@@ -36,10 +36,10 @@ object EmbassyCommands {
         dispatcher.register(
             Commands.literal("embassy")
                 .executes { ctx ->
-                    val player = ctx.source.playerOrException
-                    // Nucleus sent two plain lines, with no prefix at all.
-                    player.sendSystemMessage(Paint("/embassy create"))
-                    player.sendSystemMessage(Paint("/embassy delete"))
+                    // Nucleus sent two plain lines, with no prefix at all, to
+                    // any sender — the console included.
+                    ctx.source.sendSystemMessage(Paint("/embassy create"))
+                    ctx.source.sendSystemMessage(Paint("/embassy delete"))
                     Command.SINGLE_SUCCESS
                 }
                 .then(Commands.literal("create").executes { ctx -> reply(ctx, ::create) })
@@ -103,14 +103,15 @@ object EmbassyCommands {
         region.metadata[DESTINATION] = destinationOf(player)
         RegionsFeature.requireService().add(region, parent = null)
 
+        // Nucleus's Location(world, x, y, z) zeroed the facing on arrival.
         player.teleportTo(
             level,
             plot.x * 16 + EmbassyPlots.ANCHOR_LOCAL + 0.5,
             1.0,
             plot.z * 16 + EmbassyPlots.ANCHOR_LOCAL + 0.5,
             emptySet(),
-            player.yRot,
-            player.xRot,
+            0.0f,
+            0.0f,
             false,
         )
         return Paint.success("Created embassy")
