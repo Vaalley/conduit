@@ -330,3 +330,13 @@ Entries keep their numbers permanently; tickets cite them as "deviation N".
     below-full player to full does not clear a pending recharge threshold, so their
     next spend is refunded once when the stale threshold lapses. Kept for identical
     end-user behavior; admin-only and rare.
+20. **One invented error string**: the crystal menu's Embassy destination refuses
+    with ERROR "The embassy world is not available" if the embassies dimension is
+    somehow absent. Nucleus had no failure branch (Bukkit's getWorld would have
+    NPE'd); the branch is unreachable in practice — the dimension ships in the jar
+    and the smoke boot asserts it.
+21. **Head-GUI rows are capped at six**: Nucleus sized the "Select a player" menu
+    as unbounded ceil(others/9) rows, which past 54 other players builds a menu
+    whose slot count disagrees with the chest screen type and desyncs the client.
+    We cap at 54 heads (six rows); with 55+ others online the overflow is simply
+    not listed.
