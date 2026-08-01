@@ -331,7 +331,13 @@ class EmbassiesGameTest {
     // Its own test environment, which is to say its own batch: this is the one
     // test that reaches for every player on the server, and tests within a batch
     // run side by side — it would send its neighbours' players home mid-assertion.
-    @GameTest(environment = "mctraveler-test:alone")
+    //
+    // The environment *id* is what buys that, not the file's contents: batches
+    // are `groupingBy` the environment a test names, so every own-batch test
+    // needs an id of its own. The `own_batch_*` files are deliberately identical
+    // and deliberately not shared — merging them would put these tests back in
+    // one batch, which is the very thing each of them cannot survive.
+    @GameTest(environment = "mctraveler-test:own_batch_embassies_stop")
     fun theServerGoingDownReturnsEveryoneStillInside(helper: GameTestHelper) {
         val server = helper.level.server
         val level = embassies(helper)

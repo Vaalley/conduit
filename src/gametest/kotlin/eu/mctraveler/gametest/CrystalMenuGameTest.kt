@@ -599,8 +599,9 @@ class CrystalMenuGameTest {
 
     // Its own environment, which is to say its own batch: "no-one else is
     // online" is a claim about the whole player list, and tests inside a batch
-    // run side by side.
-    @GameTest(environment = "mctraveler-test:solo")
+    // run side by side. The id is what makes the batch — see the note on
+    // theServerStoppingClosesEveryOpenCrystalMenu below.
+    @GameTest(environment = "mctraveler-test:own_batch_crystal_solo")
     fun playerRefusesWhenNobodyElseIsOnline(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "TCAlone")
         // The claim is about the whole player list, so make it true rather than
@@ -935,7 +936,13 @@ class CrystalMenuGameTest {
     // Its own environment, and so its own batch: closeAll reaches for every
     // player on the server, and tests inside a batch run side by side — in a
     // shared batch this test closes its neighbours' menus out from under them.
-    @GameTest(environment = "mctraveler-test:sweep")
+    //
+    // The environment *id* is what buys that, not the file's contents: batches
+    // are `groupingBy` the environment a test names, so every own-batch test
+    // needs an id of its own. The `own_batch_*` files are deliberately identical
+    // and deliberately not shared — merging them would put these tests back in
+    // one batch, which is the very thing each of them cannot survive.
+    @GameTest(environment = "mctraveler-test:own_batch_crystal_sweep")
     fun theServerStoppingClosesEveryOpenCrystalMenu(helper: GameTestHelper) {
         // SERVER_STOPPING itself cannot be reached from a gametest, so what it
         // calls is called directly (as EmbassiesGameTest does for its own stop hook).
