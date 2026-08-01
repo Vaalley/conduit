@@ -29,7 +29,8 @@
       "eu.mctraveler.gametest.RegionEnvironmentGameTest",
       "eu.mctraveler.gametest.RegionFlagGameTest",
       "eu.mctraveler.gametest.EmbassiesGameTest",
-      "eu.mctraveler.gametest.EmbassyPlotGameTest"
+      "eu.mctraveler.gametest.EmbassyPlotGameTest",
+      "eu.mctraveler.gametest.EmbassyCommandGameTest"
     ],
     "server": [
       {

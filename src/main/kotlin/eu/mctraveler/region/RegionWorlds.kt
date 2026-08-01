@@ -46,6 +46,19 @@ object RegionWorlds {
     fun legacyName(dimension: ResourceKey<Level>): String =
         legacyNames[dimension] ?: dimension.identifier().toString()
 
+    private val dimensions: Map<String, ResourceKey<Level>> =
+        legacyNames.entries.associate { (dimension, world) -> world to dimension }
+
+    /**
+     * The dimension a legacy world string names, or null when nothing on this
+     * server answers to it — the inverse of [legacyName], for the stored
+     * destinations that only ever say "world" or "last_nether".
+     *
+     * Null is a real answer, not an error: a saved embassy destination naming a
+     * world this server no longer has is simply not somewhere to go.
+     */
+    fun dimensionFor(world: String): ResourceKey<Level>? = dimensions[world]
+
     /** Whether the legacy world string belongs to the Secondary World. */
     fun isSecondaryWorld(world: String): Boolean = world.startsWith("last")
 

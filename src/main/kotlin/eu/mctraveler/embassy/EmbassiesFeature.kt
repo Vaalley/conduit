@@ -4,6 +4,7 @@ import eu.mctraveler.MCTraveler
 import eu.mctraveler.region.Region
 import eu.mctraveler.region.RegionWorlds
 import eu.mctraveler.region.RegionsFeature
+import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
@@ -72,6 +73,9 @@ object EmbassiesFeature {
     fun register() {
         RegionsFeature.addLookupGuard { world, _, _, _, found ->
             if (world == RegionWorlds.EMBASSIES) found ?: worldRegion else found
+        }
+        CommandRegistrationCallback.EVENT.register { dispatcher, _, _ ->
+            EmbassyCommands.register(dispatcher)
         }
         // Nothing hurts a player here, of any kind (spec story 2). Nucleus
         // cancelled every damage event in the world; deviation 1 makes this the

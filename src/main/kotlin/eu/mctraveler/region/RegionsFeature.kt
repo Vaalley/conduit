@@ -1,11 +1,13 @@
 package eu.mctraveler.region
 
 import eu.mctraveler.MCTraveler
+import eu.mctraveler.text.Paint
 import java.util.UUID
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents
 import net.minecraft.core.BlockPos
+import net.minecraft.network.chat.Component
 import net.minecraft.server.MinecraftServer
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.level.Level
@@ -37,6 +39,15 @@ object RegionsFeature {
      */
     fun isAdmin(player: ServerPlayer): Boolean =
         player.level().server.playerList.isOp(player.nameAndId())
+
+    /**
+     * The refusal every admin-only command gives a player who is not one, or
+     * null to let them through — the in-body gate the house rule asks for, so
+     * a malformed invocation still gets its USAGE first.
+     */
+    fun adminGate(player: ServerPlayer): Component? =
+        if (isAdmin(player)) null
+        else Paint.error("You must be an admin to use this command")
 
     /**
      * The username behind a member uuid — the online player's, else the name

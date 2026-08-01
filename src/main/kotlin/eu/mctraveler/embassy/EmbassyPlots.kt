@@ -4,6 +4,7 @@ import eu.mctraveler.region.RegionWorlds
 import eu.mctraveler.region.RegionsFeature
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
+import net.minecraft.core.SectionPos
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.level.ChunkPos
 import net.minecraft.world.level.block.Block
@@ -99,6 +100,10 @@ object EmbassyPlots {
 
     /** The next plot to build on. */
     fun nextFreePlot(): ChunkPos = spiral().first(::isFree)
+
+    /** The plot chunk the block column at [x]/[z] belongs to. */
+    fun plotOf(x: Int, z: Int): ChunkPos =
+        ChunkPos(SectionPos.blockToSectionCoord(x), SectionPos.blockToSectionCoord(z))
 
     /**
      * Builds the plot: bedrock floor, dirt fill, a smooth quartz deck, an 11×11
