@@ -4,7 +4,7 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.google.gson.JsonSyntaxException
-import eu.mctraveler.embassy.EmbassyCommands
+import eu.mctraveler.embassy.EmbassyDestination
 import eu.mctraveler.region.Region
 import eu.mctraveler.region.RegionWorlds
 import java.util.UUID
@@ -85,9 +85,7 @@ object NucleusRegions {
      */
     fun unknownDestinationWorlds(regions: List<Region>): List<String> =
         regions.mapNotNull { region ->
-            val world = region.metadata[EmbassyCommands.DESTINATION]
-                ?.asJsonObject?.get("world")?.asString
-                ?: return@mapNotNull null
+            val world = EmbassyDestination.of(region)?.world ?: return@mapNotNull null
             if (RegionWorlds.dimensionFor(world) != null) null else "${region.title} → \"$world\""
         }
 
@@ -122,7 +120,7 @@ object NucleusRegions {
         data.get("metadata")?.let { metadata ->
             require(metadata.isJsonObject) { "region \"$title\" has a \"metadata\" that is not an object" }
             metadata.asJsonObject.entrySet().forEach { (key, value) -> region.metadata[key] = value }
-            checkDestination(title, region.metadata[EmbassyCommands.DESTINATION])
+            checkDestination(title, region.metadata[EmbassyDestination.KEY])
         }
         array(data, "regions", title).forEach { sub ->
             require(sub.isJsonObject) { "region \"$title\" has a sub-region that is not an object" }

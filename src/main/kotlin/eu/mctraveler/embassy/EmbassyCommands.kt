@@ -1,6 +1,5 @@
 package eu.mctraveler.embassy
 
-import com.google.gson.JsonObject
 import com.mojang.brigadier.Command
 import com.mojang.brigadier.CommandDispatcher
 import com.mojang.brigadier.arguments.StringArgumentType
@@ -10,6 +9,7 @@ import eu.mctraveler.region.RegionTracker
 import eu.mctraveler.region.RegionWorlds
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.text.Paint
+import eu.mctraveler.worlds.Landing
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
 import net.minecraft.network.chat.Component
@@ -25,12 +25,6 @@ import net.minecraft.server.level.ServerPlayer
  * the embassy's exact title back, and offers a clickable line that types it.
  */
 object EmbassyCommands {
-
-    /** The one flag that makes a region an embassy. */
-    private const val EMBASSY = "EMBASSY"
-
-    /** The metadata key an embassy's anchor reads its destination from. */
-    const val DESTINATION = "embassy-destination"
 
     fun register(dispatcher: CommandDispatcher<CommandSourceStack>) {
         dispatcher.register(
@@ -99,33 +93,20 @@ object EmbassyCommands {
             // wrote and what the store omits.
         )
         region.members.add(player.uuid)
-        region.flags.add(EMBASSY)
-        region.metadata[DESTINATION] = destinationOf(player)
+        region.flags.add(Region.EMBASSY_FLAG)
+        region.metadata[EmbassyDestination.KEY] = EmbassyDestination.at(player).toJson()
         RegionsFeature.requireService().add(region, parent = null)
 
         // Nucleus's Location(world, x, y, z) zeroed the facing on arrival.
-        player.teleportTo(
+        Landing(
             level,
             plot.x * 16 + EmbassyPlots.ANCHOR_LOCAL + 0.5,
             1.0,
             plot.z * 16 + EmbassyPlots.ANCHOR_LOCAL + 0.5,
-            emptySet(),
             0.0f,
             0.0f,
-            false,
-        )
+        ).send(player)
         return Paint.success("Created embassy")
-    }
-
-    /** Where [player] is standing, in the shape an anchor reads back. */
-    private fun destinationOf(player: ServerPlayer): JsonObject = JsonObject().apply {
-        addProperty("x", player.x)
-        addProperty("y", player.y)
-        addProperty("z", player.z)
-        addProperty("yaw", player.yRot)
-        addProperty("pitch", player.xRot)
-        // The legacy world string, so the file reads like Nucleus's did.
-        addProperty("world", RegionWorlds.legacyName(player.level().dimension()))
     }
 
     /**
@@ -143,7 +124,7 @@ object EmbassyCommands {
             return Paint.error("You must be in the embassies world")
         }
         val region = RegionTracker.regionOf(player)
-        if (region == null || EMBASSY !in region.flags) {
+        if (region == null || Region.EMBASSY_FLAG !in region.flags) {
             return Paint.error("You must be in an embassy")
         }
         if (!region.isResident(player.uuid)) {

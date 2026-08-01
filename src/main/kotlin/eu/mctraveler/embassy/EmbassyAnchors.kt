@@ -1,8 +1,7 @@
 package eu.mctraveler.embassy
 
-import com.google.gson.JsonObject
+import eu.mctraveler.region.Region
 import eu.mctraveler.region.RegionTracker
-import eu.mctraveler.region.RegionWorlds
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.text.Paint
 import java.util.UUID
@@ -31,8 +30,6 @@ import net.minecraft.world.level.block.RespawnAnchorBlock
  * being the answer inside an embassy.
  */
 object EmbassyAnchors {
-
-    private const val EMBASSY = "EMBASSY"
 
     /**
      * The block each player last stood on, while they are in the dimension.
@@ -101,7 +98,7 @@ object EmbassyAnchors {
         val state = level.getBlockState(pos)
         if (!state.`is`(Blocks.RESPAWN_ANCHOR)) return true
         val region = RegionsFeature.regionAt(level, pos) ?: return true
-        if (EMBASSY !in region.flags) return true
+        if (Region.EMBASSY_FLAG !in region.flags) return true
 
         val charges = state.getValue(RespawnAnchorBlock.CHARGE)
         if (charges == 0) return true
@@ -114,7 +111,7 @@ object EmbassyAnchors {
     /** [player] has just stepped onto the block at [feet]. */
     private fun steppedOn(player: ServerPlayer, feet: BlockPos) {
         val region = RegionTracker.regionOf(player) ?: return
-        if (EMBASSY !in region.flags) return
+        if (Region.EMBASSY_FLAG !in region.flags) return
         if (!player.level().getBlockState(feet.below()).`is`(Blocks.RESPAWN_ANCHOR)) return
 
         if (player.isShiftKeyDown) {
@@ -122,24 +119,12 @@ object EmbassyAnchors {
             return
         }
 
-        val destination = region.metadata[EmbassyCommands.DESTINATION]?.asJsonObject ?: return
-        val world = destination.get("world")?.asString ?: return
-        val dimension = RegionWorlds.dimensionFor(world) ?: return
-        val level = player.level().server.getLevel(dimension) ?: return
+        val landing = EmbassyDestination.of(region)?.resolve(player.level().server) ?: return
 
         // The way back is offered before the trip, so an admin who lands
         // somewhere unexpected still has the line in front of them.
         if (RegionsFeature.isAdmin(player)) sendBackLink(player)
-        player.teleportTo(
-            level,
-            destination.doubleAt("x"),
-            destination.doubleAt("y"),
-            destination.doubleAt("z"),
-            emptySet(),
-            destination.floatAt("yaw"),
-            destination.floatAt("pitch"),
-            false,
-        )
+        landing.send(player)
         player.sendSystemMessage(Paint.success("Teleported from embassy"))
     }
 
@@ -165,7 +150,4 @@ object EmbassyAnchors {
         )
     }
 
-    private fun JsonObject.doubleAt(key: String): Double = get(key).asDouble
-
-    private fun JsonObject.floatAt(key: String): Float = get(key).asFloat
 }
