@@ -2,8 +2,10 @@ package eu.mctraveler.crystal
 
 import eu.mctraveler.MinecraftTestBootstrap
 import net.minecraft.core.component.DataComponents
+import net.minecraft.nbt.CompoundTag
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
+import net.minecraft.world.item.component.CustomData
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -90,5 +92,81 @@ class CrystalItemTest {
                 CrystalItem.of(tier)
             }
         }
+    }
+
+    // ---- Nucleus-era crystals (spec deviation 18) ----
+    //
+    // Bukkit's PersistentDataContainer writes into a `PublicBukkitValues`
+    // compound inside custom_data, keyed by namespaced string, with booleans
+    // stored as bytes. Crystals in migrated inventories, chests, ender chests
+    // and shulkers still wear that layout, and no importer sweep can reach
+    // them all — so identification has to know both.
+
+    @Test
+    fun `a Nucleus-era crystal is still a crystal`() {
+        for (tier in 1..3) {
+            val legacy = legacyCrystal(tier)
+            assertTrue(CrystalItem.isCrystal(legacy), "a legacy tier-$tier crystal should be recognised")
+            assertEquals(tier, CrystalItem.tierOf(legacy), "a legacy tier-$tier crystal's tier")
+        }
+    }
+
+    @Test
+    fun `a Nucleus-era crystal with no recorded tier reads as tier 3`() {
+        // Nucleus's own default: `get(...) ?: 3`.
+        assertEquals(3, CrystalItem.tierOf(legacyCrystal(tier = null)))
+    }
+
+    @Test
+    fun `a Nucleus-era marker stored as a byte counts as true`() {
+        // PersistentDataType.BOOLEAN is a byte on disk, so the tag may decode
+        // as either depending on which writer last touched it.
+        val legacy = legacyCrystal(tier = 2, markerAsByte = true)
+        assertTrue(CrystalItem.isCrystal(legacy), "a byte-valued legacy marker should be recognised")
+        assertEquals(2, CrystalItem.tierOf(legacy))
+    }
+
+    @Test
+    fun `a Bukkit item carrying other plugin data is not a crystal`() {
+        val stack = ItemStack(Items.ECHO_SHARD)
+        CustomData.set(
+            DataComponents.CUSTOM_DATA,
+            stack,
+            CompoundTag().apply {
+                put(
+                    "PublicBukkitValues",
+                    CompoundTag().apply { putString("someplugin:owner", "Nobody") },
+                )
+            },
+        )
+        assertFalse(CrystalItem.isCrystal(stack))
+    }
+
+    @Test
+    fun `a Nucleus-era marker set to false is not a crystal`() {
+        assertFalse(CrystalItem.isCrystal(legacyCrystal(tier = 1, marker = false)))
+    }
+
+    /** An Echo Shard wearing Bukkit's PersistentDataContainer layout. */
+    private fun legacyCrystal(
+        tier: Int?,
+        marker: Boolean = true,
+        markerAsByte: Boolean = false,
+    ): ItemStack {
+        val stack = ItemStack(Items.ECHO_SHARD)
+        val bukkit = CompoundTag().apply {
+            if (markerAsByte) {
+                putByte("mctravelernucleus:is-teleportation-crystal", if (marker) 1 else 0)
+            } else {
+                putBoolean("mctravelernucleus:is-teleportation-crystal", marker)
+            }
+            if (tier != null) putInt("mctravelernucleus:teleportation-crystal-tier", tier)
+        }
+        CustomData.set(
+            DataComponents.CUSTOM_DATA,
+            stack,
+            CompoundTag().apply { put("PublicBukkitValues", bukkit) },
+        )
+        return stack
     }
 }

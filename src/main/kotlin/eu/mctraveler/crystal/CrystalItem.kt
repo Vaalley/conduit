@@ -45,6 +45,24 @@ object CrystalItem {
     /** Custom-data tier, 1-3. */
     private const val TIER = "tier"
 
+    // ---- the Nucleus-era layout (spec deviation 18) ----
+    //
+    // Bukkit's PersistentDataContainer serialises into its own compound inside
+    // custom_data, keyed by namespaced string. Crystals minted before the port
+    // are still sitting in migrated inventories, chests, ender chests and
+    // shulkers, and no importer sweep can reach every container — so a crystal
+    // is whatever wears *either* marker, and everything downstream (the menu,
+    // the damage bar, the crafting guard) treats the two alike.
+
+    /** Bukkit's persistent-data compound inside [DataComponents.CUSTOM_DATA]. */
+    private const val BUKKIT_VALUES = "PublicBukkitValues"
+
+    /** Nucleus's `is-teleportation-crystal` key, namespaced as Bukkit wrote it. */
+    private const val LEGACY_MARKER = "mctravelernucleus:is-teleportation-crystal"
+
+    /** Nucleus's `teleportation-crystal-tier` key, namespaced as Bukkit wrote it. */
+    private const val LEGACY_TIER = "mctravelernucleus:teleportation-crystal-tier"
+
     /**
      * A fresh crystal of [tier]. Throws for a tier outside [MIN_TIER]..[MAX_TIER]
      * — a tier is never user input, so an out-of-range one is a bug.
@@ -87,18 +105,32 @@ object CrystalItem {
         Paint.gold("Charge capacity $tier"),
     )
 
-    /** True if [stack] is one of our crystals. Safe from any thread. */
-    @JvmStatic
-    fun isCrystal(stack: ItemStack): Boolean =
-        stack.`is`(Items.ECHO_SHARD) &&
-            stack.get(DataComponents.CUSTOM_DATA)?.copyTag()?.getBooleanOr(MARKER, false) == true
-
     /**
-     * The tier [stack] was crafted at. Nucleus read a missing tier as the top
-     * one; kept, so a crystal from before the tier marker existed stays usable.
-     * Meaningless for a stack [isCrystal] rejects.
+     * True if [stack] is one of our crystals — minted here, or by Nucleus
+     * before the port (see [BUKKIT_VALUES]). Safe from any thread.
      */
     @JvmStatic
-    fun tierOf(stack: ItemStack): Int =
-        stack.get(DataComponents.CUSTOM_DATA)?.copyTag()?.getIntOr(TIER, MAX_TIER) ?: MAX_TIER
+    fun isCrystal(stack: ItemStack): Boolean {
+        if (!stack.`is`(Items.ECHO_SHARD)) return false
+        val data = customData(stack) ?: return false
+        return data.getBooleanOr(MARKER, false) ||
+            data.getCompoundOrEmpty(BUKKIT_VALUES).getBooleanOr(LEGACY_MARKER, false)
+    }
+
+    /**
+     * The tier [stack] was crafted at, in whichever layout it carries. Nucleus
+     * read a missing tier as the top one; kept, so a crystal from before the
+     * tier marker existed stays usable. Meaningless for a stack [isCrystal]
+     * rejects.
+     */
+    @JvmStatic
+    fun tierOf(stack: ItemStack): Int {
+        val data = customData(stack) ?: return MAX_TIER
+        return data.getInt(TIER)
+            .or { data.getCompoundOrEmpty(BUKKIT_VALUES).getInt(LEGACY_TIER) }
+            .orElse(MAX_TIER)
+    }
+
+    private fun customData(stack: ItemStack): CompoundTag? =
+        stack.get(DataComponents.CUSTOM_DATA)?.copyTag()
 }
