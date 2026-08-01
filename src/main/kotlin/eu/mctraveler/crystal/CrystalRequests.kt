@@ -34,7 +34,7 @@ object CrystalRequests {
     const val ACCEPT_COMMAND = "teleportation-crystal-accept"
 
     /** Who a player asked, and when. */
-    private class Request(val target: UUID, val createdAtTick: Int)
+    private class Request(val target: UUID, var createdAtTick: Int)
 
     /** Outstanding requests, keyed by the player who asked. One each, as in Nucleus. */
     private val requests = HashMap<UUID, Request>()
@@ -118,7 +118,7 @@ object CrystalRequests {
         // Consumed either way: a request that has timed out is spent by the
         // attempt, exactly as in Nucleus.
         requests.remove(requester.uuid)
-        if (server.tickCount - request.createdAtTick > TIMEOUT_TICKS) {
+        if (hasTimedOut(request.createdAtTick, server.tickCount)) {
             acceptor.sendSystemMessage(Paint.error("Request timed out"))
             return
         }
@@ -152,8 +152,19 @@ object CrystalRequests {
         requests.values.removeIf { it.target == uuid }
     }
 
+    /** Whether a request made at [createdAtTick] has lapsed by [now]. */
+    fun hasTimedOut(createdAtTick: Int, now: Int): Boolean = now - createdAtTick > TIMEOUT_TICKS
+
     /** Test seam: forget every outstanding request. */
     fun clear() {
         requests.clear()
+    }
+
+    /**
+     * Test seam: back-dates every outstanding request by [ticks], so a test can
+     * reach the timeout without sitting through five minutes of it.
+     */
+    fun backdate(ticks: Int) {
+        for (request in requests.values) request.createdAtTick -= ticks
     }
 }

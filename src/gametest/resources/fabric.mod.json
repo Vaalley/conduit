@@ -31,7 +31,8 @@
       "eu.mctraveler.gametest.EmbassiesGameTest",
       "eu.mctraveler.gametest.CrystalCraftingGameTest",
       "eu.mctraveler.gametest.CrystalEnergyGameTest",
-      "eu.mctraveler.gametest.CrystalCommandGameTest"
+      "eu.mctraveler.gametest.CrystalCommandGameTest",
+      "eu.mctraveler.gametest.CrystalMenuGameTest"
     ],
     "server": [
       {
