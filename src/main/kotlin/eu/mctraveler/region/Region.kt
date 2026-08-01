@@ -79,5 +79,17 @@ class Region(
 
         /** Default bottom y — full build depth, also the omit-on-save value. */
         const val DEFAULT_END_Y = -64
+
+        /**
+         * The one flag that makes a region an embassy.
+         *
+         * It lives here rather than in the embassy module because the region
+         * layer is underneath it: `/rg` refuses to toggle this flag and refuses
+         * to delete or nest inside a region carrying it, all without knowing
+         * what an embassy *is*. Spelling the same literal in both modules is
+         * two places for a typo to hide, and a typo here reads as "not an
+         * embassy" rather than as an error.
+         */
+        const val EMBASSY_FLAG = "EMBASSY"
     }
 }

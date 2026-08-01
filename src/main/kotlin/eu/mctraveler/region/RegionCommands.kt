@@ -37,7 +37,7 @@ object RegionCommands {
 
     /** The Portal's flag vocabulary, in its canonical (display) order. */
     private val VALID_FLAGS = listOf(
-        "EMBASSY",
+        Region.EMBASSY_FLAG,
         "NO_SCOREBOARD",
         "ENABLE_EXPLOSIONS",
         "ADMIN",
@@ -250,7 +250,7 @@ object RegionCommands {
         }
 
         if (parent != null) {
-            if ("EMBASSY" in parent.flags) {
+            if (Region.EMBASSY_FLAG in parent.flags) {
                 return Paint.error("You cannot create a region inside an embassy")
             }
             if ("ADMIN" in parent.flags) {
@@ -311,7 +311,7 @@ object RegionCommands {
         if (!region.isResident(player.uuid) && !RegionsFeature.isAdmin(player)) {
             return Paint.error("You are not a member of this region")
         }
-        if ("EMBASSY" in region.flags) {
+        if (Region.EMBASSY_FLAG in region.flags) {
             // The command it names is real now, so it is also one click away.
             return Paint.error(
                 "You must use ",
@@ -379,17 +379,15 @@ object RegionCommands {
 
     // ---- admin commands ----
 
-    private fun adminGate(player: ServerPlayer): Component? = RegionsFeature.adminGate(player)
-
     private fun toggleFlag(player: ServerPlayer, rawFlag: String): Component {
-        adminGate(player)?.let { return it }
+        RegionsFeature.adminGate(player)?.let { return it }
         val region = RegionTracker.regionOf(player)
             ?: return Paint.error("You must stand in the region you want to toggle a flag on")
         val flag = rawFlag.uppercase()
         if (flag !in VALID_FLAGS) {
             return Paint.error("Invalid flag. Valid flags: ${VALID_FLAGS.joinToString(", ")}")
         }
-        if (flag == "EMBASSY") {
+        if (flag == Region.EMBASSY_FLAG) {
             return Paint.error("You cannot toggle the embassy flag")
         }
         val added = region.flags.add(flag)
@@ -403,7 +401,7 @@ object RegionCommands {
     }
 
     private fun listFlags(player: ServerPlayer): Component {
-        adminGate(player)?.let { return it }
+        RegionsFeature.adminGate(player)?.let { return it }
         val region = RegionTracker.regionOf(player)
             ?: return Paint.error("You must stand in a region to view flags")
         // Enabled flags in green then disabled in red, each group in the
@@ -419,7 +417,7 @@ object RegionCommands {
     }
 
     private fun setBounds(player: ServerPlayer, rawMinY: Int, rawMaxY: Int): Component {
-        adminGate(player)?.let { return it }
+        RegionsFeature.adminGate(player)?.let { return it }
         val region = RegionTracker.regionOf(player)
             ?: return Paint.error("You must stand in the region you want to set bounds for")
         val minY = minOf(rawMinY, rawMaxY)
@@ -440,7 +438,7 @@ object RegionCommands {
     }
 
     private fun showBounds(player: ServerPlayer): Component {
-        adminGate(player)?.let { return it }
+        RegionsFeature.adminGate(player)?.let { return it }
         val region = RegionTracker.regionOf(player)
             ?: return Paint.error("You must stand in a region to view bounds")
         return Paint(
@@ -450,7 +448,7 @@ object RegionCommands {
     }
 
     private fun locate(player: ServerPlayer, query: String): Component? {
-        adminGate(player)?.let { return it }
+        RegionsFeature.adminGate(player)?.let { return it }
         val server = player.level().server
         val found = RegionsFeature.requireService().search(query) { uuid ->
             RegionsFeature.usernameFor(server, uuid)
