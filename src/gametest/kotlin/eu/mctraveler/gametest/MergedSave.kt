@@ -436,6 +436,82 @@ class MergedSave private constructor(
             }
         }
 
+        // ---- what recorded a place in Secondary --------------------------------
+
+        /** How a save this server keeps spells the dimension Secondary's overworld was. */
+        private val SECONDARY_OVERWORLD: String =
+            WorldLayout.SECONDARY.dimensionId(DimensionRole.OVERWORLD)
+
+        /**
+         * The settler's save, written by vanilla and then renamed into Secondary.
+         *
+         * A player is logged in, stood where they will log out and given the bed
+         * as their respawn point, and vanilla writes the save on the way out — so
+         * every field in it is spelled the way this server spells them rather
+         * than the way a test guessed one of them. Only two strings are then
+         * changed: the dimension the save stands in, and the dimension its
+         * respawn point names. That is the whole difference between this player
+         * in Primary and the same player in Secondary, and it is exactly the
+         * difference the merge is asked to undo.
+         */
+        private fun writeSettlersSave(server: MinecraftServer, levelDir: Path) {
+            val overworld = level(server, Level.OVERWORLD)
+            val settler = TestPlayers.login(server, SETTLER_NAME, SETTLER)
+            try {
+                settler.arriveIn(overworld, STANDING.x, STANDING.y, STANDING.z)
+                settler.setRespawnPosition(
+                    ServerPlayer.RespawnConfig(
+                        LevelData.RespawnData.of(Level.OVERWORLD, BED, 0.0f, 0.0f),
+                        false,
+                    ),
+                    false,
+                )
+            } finally {
+                TestPlayers.logout(settler)
+            }
+
+            val save = NbtIo.readCompressed(
+                server.getWorldPath(LevelResource.PLAYER_DATA_DIR).resolve("$SETTLER.dat"),
+                NbtAccounter.unlimitedHeap(),
+            )
+            save.putString("Dimension", SECONDARY_OVERWORLD)
+            val respawn = checkNotNull(save.getCompound("respawn").orElse(null)) {
+                "vanilla wrote the settler no respawn point, so there is none for the merge to move"
+            }
+            check(respawn.getIntArray("pos").orElse(null)?.toList() == listOf(BED.x, BED.y, BED.z)) {
+                "the settler's respawn point is not the bed the relocation has to carry"
+            }
+            respawn.putString("dimension", SECONDARY_OVERWORLD)
+            val into = levelDir.resolve("playerdata/$SETTLER.dat")
+            Files.createDirectories(into.parent)
+            NbtIo.writeCompressed(save, into)
+        }
+
+        /**
+         * The signpost player's record: last in Primary, with a Per-World Bucket
+         * still holding where they stood in Secondary.
+         *
+         * That way round on purpose. A banked position is the bucket for the
+         * World the player was *not* in, so it is a player last in Primary whose
+         * banked position the merge has to move — and a signpost naming
+         * coordinates that never moved is the failure this fixture exists to be
+         * able to catch.
+         */
+        private fun signpostRecord(): String =
+            """{"lastServer":"primary","worlds":{"secondary":{"dimension":"overworld",""" +
+                """"x":${BANKED.x},"y":${BANKED.y},"z":${BANKED.z},"yaw":0.0,"pitch":0.0}}}"""
+
+        /**
+         * `regions.json` as the live server keeps it, holding one Region over the
+         * homestead recorded against Secondary's own legacy world string — which
+         * is the only thing in the file that tells the sweep it has to move.
+         */
+        private fun regionsJson(): String =
+            """{"regions":{"0":{"title":"$REGION_TITLE","start-x":$REGION_MIN,"start-z":$REGION_MIN,""" +
+                """"end-x":$REGION_MAX,"end-z":$REGION_MAX,""" +
+                """"world":"${WorldLayout.SECONDARY.legacyWorld(DimensionRole.OVERWORLD)}",""" +
+                """"members":["$HOMESTEADER"]}}}"""
+
         private fun level(server: MinecraftServer, dimension: ResourceKey<Level>): ServerLevel =
             checkNotNull(server.getLevel(dimension)) {
                 "${dimension.identifier()} is not loaded on this server"
