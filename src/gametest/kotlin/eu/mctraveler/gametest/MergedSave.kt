@@ -24,6 +24,7 @@ import net.minecraft.resources.ResourceKey
 import net.minecraft.server.MinecraftServer
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
+import net.minecraft.world.entity.ai.village.poi.PoiTypes
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 import net.minecraft.world.level.ChunkPos
@@ -161,14 +162,14 @@ class MergedSave private constructor(
         val HOMESTEAD = ChunkPos(1360, 1360)
 
         /**
-         * The chunk the nether twin stands in — chunk 172, index 12 of region
+         * The chunk the nether twin stands in — chunk 170, index 10 of region
          * file 5, well clear of that file's edges for the same reason.
          *
          * It is where it is because a nether portal links at one eighth of the
          * overworld's coordinates: the homestead's portal scales onto this chunk,
          * and the offset's own ÷8 is what has to keep the pair together.
          */
-        val TWIN = ChunkPos(172, 172)
+        val TWIN = ChunkPos(170, 170)
 
         /** The ground the homestead stands on, and the room cleared above it. */
         const val FLOOR_Y = 64
@@ -210,13 +211,24 @@ class MergedSave private constructor(
         val STANDING = Vec3(21769.5, 65.0, 21771.5)
 
         /**
-         * The nether portal the homestead's own links to, deliberately not at
-         * the scaled position: it sits 33 blocks east and 34 south of where the
-         * overworld portal divides down to, so a vanilla search that failed to
-         * find it and dug a fresh one instead could not land on these
-         * coordinates by chance.
+         * The nether portal the homestead's own links to: eight blocks east and
+         * nine south of the position the overworld portal divides down to.
+         *
+         * Off the scaled position on purpose, so that a search which failed and
+         * dug a fresh portal instead could not land here by accident — and only
+         * *just* off it, because **vanilla looks no further than sixteen blocks
+         * on the nether side** (`PortalForcer.findClosestPortalPosition` searches
+         * 16 in the nether against 128 in the overworld). A twin further out than
+         * that is not a twin vanilla will ever find, whether or not a merge
+         * moved it.
+         *
+         * That asymmetry is the reason the nether's ÷8 has to be exact rather
+         * than approximately right. An offset even slightly off an eighth would
+         * push every existing pair beyond a sixteen-block window, and nothing in
+         * the file tier would notice: the portals would still be there, still
+         * relocated, still paired in the data, and simply never link again.
          */
-        val TWIN_PORTAL = BlockPos(2753, 65, 2754)
+        val TWIN_PORTAL = BlockPos(2728, 65, 2729)
 
         /** Where the signpost player's Secondary base was, before it moved. */
         val BANKED = Vec3(21765.5, 65.0, 21765.5)
@@ -326,6 +338,18 @@ class MergedSave private constructor(
             nether.save(null, true, false)
             carry(server, levelDir, DimensionRole.OVERWORLD, RegionFilePos(HOMESTEAD.regionX, HOMESTEAD.regionZ))
             carry(server, levelDir, DimensionRole.NETHER, RegionFilePos(TWIN.regionX, TWIN.regionZ))
+
+            // The points of interest have to be among what Secondary hands over.
+            // Vanilla finds a portal's twin by searching these records and never
+            // by looking at blocks, so a Secondary whose poi files stayed behind
+            // would make the portal case a question about nothing.
+            val poi = Footprint.storageFolder(levelDir, WorldLayout.SECONDARY.dimension(DimensionRole.NETHER))
+                .resolve("poi")
+                .resolve(RegionFilePos(TWIN.regionX, TWIN.regionZ).fileName)
+            check(Files.exists(poi)) {
+                "Secondary's nether carried no points of interest — $poi is not there, so the portal " +
+                    "pair could not link before the merge either"
+            }
         }
 
         /**
@@ -348,10 +372,23 @@ class MergedSave private constructor(
             overworld.setBlock(STONE, Blocks.STONE.defaultBlockState(), BUILD)
         }
 
-        /** The other end of the homestead's portal, an eighth of the way out. */
+        /**
+         * The other end of the homestead's portal, an eighth of the way out.
+         *
+         * The point-of-interest record is the premise of the whole portal case
+         * and is asserted here rather than discovered as a failure later:
+         * vanilla finds a portal's twin by searching for the record, never by
+         * looking at blocks, so a fixture whose portal was never registered
+         * would send the merge gametest hunting for something that was not there
+         * before the merge either.
+         */
         private fun netherTwin(nether: ServerLevel) {
             clear(nether, TWIN, Blocks.NETHERRACK)
             portal(nether, TWIN_PORTAL)
+            check(nether.poiManager.existsAtPosition(PoiTypes.NETHER_PORTAL, TWIN_PORTAL)) {
+                "the twin at $TWIN_PORTAL registered no point of interest, so nothing about it could " +
+                    "link before the merge either"
+            }
         }
 
         /**

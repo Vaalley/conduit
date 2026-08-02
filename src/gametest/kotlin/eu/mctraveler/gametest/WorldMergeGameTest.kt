@@ -11,17 +11,23 @@ import java.nio.file.StandardCopyOption
 import kotlin.math.abs
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.gametest.framework.GameTestHelper
+import net.minecraft.core.BlockPos
 import net.minecraft.network.protocol.game.ServerboundClientCommandPacket
 import net.minecraft.network.protocol.game.ServerboundPlayerLoadedPacket
 import net.minecraft.resources.ResourceKey
 import net.minecraft.server.MinecraftServer
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
+import net.minecraft.world.entity.ai.village.poi.PoiManager
+import net.minecraft.world.entity.ai.village.poi.PoiTypes
+import net.minecraft.world.entity.item.ItemEntity
+import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 import net.minecraft.world.level.ChunkPos
 import net.minecraft.world.level.GameType
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.Blocks
+import net.minecraft.world.level.block.Portal
 import net.minecraft.world.level.block.entity.ChestBlockEntity
 import net.minecraft.world.level.storage.LevelResource
 
@@ -279,6 +285,103 @@ class WorldMergeGameTest {
     }
 
     /**
+     * A relocated nether portal still leads to its own twin (merge spec, User
+     * Story 9).
+     *
+     * This is what the offset's ÷8 is *for*, and the only test of it that
+     * vanilla gets a vote in. The overworld portal moved 12288 blocks and the
+     * nether one moved 1536, and the pair stays linked only because the second
+     * is exactly an eighth of the first. Vanilla does not check that arithmetic;
+     * it divides the overworld portal's coordinates down, looks for a
+     * point-of-interest record within 128 blocks of the answer, and digs a fresh
+     * portal when it does not find one.
+     *
+     * The twin is deliberately not at the scaled position, so that an exit which
+     * landed there would be visibly a portal vanilla dug rather than the one the
+     * merge carried — and the count of portals is asserted as well as the
+     * landing, because "it found the twin" and "it built a new twin in roughly
+     * the right place" are otherwise the same observation. Nothing may be dug.
+     *
+     * It also proves the point-of-interest records travelled. Vanilla links by
+     * searching those records and never by looking at blocks, so a relocation
+     * that moved every block of a portal and left its POI behind would fail here
+     * and nowhere else in this suite.
+     */
+    @GameTest(maxTicks = 600)
+    fun aRelocatedNetherPortalStillLeadsToItsTwin(helper: GameTestHelper) {
+        val server = helper.level.server
+        MergedSave.of(server)
+        val overworld = level(server, Level.OVERWORLD)
+        val nether = level(server, Level.NETHER)
+        val portal = MergedSave.merged(MergedSave.PORTAL, DimensionRole.OVERWORLD)
+        val twin = MergedSave.merged(MergedSave.TWIN_PORTAL, DimensionRole.NETHER)
+
+        helper.assertTrue(
+            overworld.getBlockState(portal).`is`(Blocks.NETHER_PORTAL),
+            "no lit portal arrived at $portal, where the merge moved the homestead's",
+        )
+        helper.assertTrue(
+            nether.getBlockState(twin).`is`(Blocks.NETHER_PORTAL),
+            "no lit portal arrived at $twin, where the merge moved the twin",
+        )
+        // Vanilla links a pair by searching point-of-interest records rather
+        // than by looking at blocks, so this is the half of the twin that
+        // actually does the work — and the half a relocation could lose while
+        // moving every block correctly.
+        helper.assertTrue(
+            nether.poiManager.existsAtPosition(PoiTypes.NETHER_PORTAL, twin),
+            "the relocated twin at $twin has no point-of-interest record, so nothing vanilla looks " +
+                "for when it links a portal pair arrived with it",
+        )
+
+        val before = portalsAround(nether, twin)
+
+        // A portal's destination is decided by the portal rather than by whoever
+        // steps into it, so a dropped stone asks the same question a player does.
+        val traveller = ItemEntity(
+            overworld,
+            portal.x + 0.5,
+            portal.y.toDouble(),
+            portal.z + 0.5,
+            ItemStack(Items.STONE),
+        )
+        val transition = checkNotNull(
+            (Blocks.NETHER_PORTAL as Portal).getPortalDestination(overworld, traveller, portal),
+        ) { "the relocated portal at $portal leads nowhere at all" }
+
+        helper.assertValueEqual(
+            transition.newLevel().dimension(),
+            Level.NETHER,
+            "where a relocated nether portal leads",
+        )
+        val landing = BlockPos.containing(transition.position())
+        helper.assertTrue(
+            abs(landing.x - twin.x) <= PORTAL_LANDING_RADIUS &&
+                abs(landing.y - twin.y) <= PORTAL_LANDING_RADIUS &&
+                abs(landing.z - twin.z) <= PORTAL_LANDING_RADIUS,
+            "the relocated portal comes out at $landing rather than at its own twin, which the merge " +
+                "moved to $twin — a portal vanilla had to dig for itself would land near " +
+                "${BlockPos(portal.x / NETHER_SCALE, portal.y, portal.z / NETHER_SCALE)}",
+        )
+        helper.assertValueEqual(
+            portalsAround(nether, twin),
+            before,
+            "how many nether portals stand around the twin — a new one means vanilla dug rather " +
+                "than found, which is what an unlinked pair looks like from the player's side",
+        )
+        helper.succeed()
+    }
+
+    /** How many nether portals vanilla can see within its own search of [at]. */
+    private fun portalsAround(nether: ServerLevel, at: BlockPos): Long =
+        nether.poiManager.getInSquare(
+            { it.`is`(PoiTypes.NETHER_PORTAL) },
+            at,
+            NETHER_PORTAL_SEARCH,
+            PoiManager.Occupancy.ANY,
+        ).count()
+
+    /**
      * A real death and the client's own "respawn" press. Returns the fresh
      * [ServerPlayer] the player list swaps in, since respawning replaces the
      * entity.
@@ -309,5 +412,24 @@ class WorldMergeGameTest {
     private companion object {
         /** How far beside a bed vanilla stands a sleeper up, as `RespawnAndPortalsGameTest` measures it. */
         const val BED_STAND_UP_RADIUS = 3.0
+
+        /**
+         * How far from the twin's own blocks a portal exit may land and still be
+         * that twin. Vanilla puts the traveller inside the portal rectangle it
+         * found, so a couple of blocks covers it — and the twin sits far enough
+         * off the scaled position that no larger tolerance would be needed to
+         * tell it from a portal vanilla dug itself.
+         */
+        const val PORTAL_LANDING_RADIUS = 4
+
+        /** The ratio a nether portal links across, for naming where a dug portal would have landed. */
+        const val NETHER_SCALE = 8
+
+        /**
+         * How far vanilla itself looks for a portal on the nether side, from
+         * `PortalForcer.findClosestPortalPosition`. Counting over the same window
+         * is what makes "nothing was dug" the same question vanilla answered.
+         */
+        const val NETHER_PORTAL_SEARCH = 16
     }
 }
