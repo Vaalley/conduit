@@ -111,15 +111,21 @@ data class ChunkAuditReport(
  *   are listed and never touched. One odd command block written in 2019 does not
  *   get to block a cutover at 2am (merge spec, User Story 17).
  *
- * **This phase is not a formality.** MCA Selector 2.8 relocates a chunk's own
- * frame, its block entities and everything inside them, its scheduled ticks, its
- * structures, its entity positions and its point-of-interest records — but it
- * still speaks the block-position spellings 1.21.5's `InlineBlockPosFormatFix`
- * replaced, and it reads a villager's memories one level above where
- * `ExpirableValue` writes them. So a 26.2 save's leashes, item frame and painting
- * tile positions and villager memories arrive in Primary still naming Secondary,
- * and this is what stops the merge over them rather than letting a broken map
- * open. `WorldMergeAuditTest` pins each of those down by name.
+ * **This phase is not a formality, and it is what found the relocation defects.**
+ * The stock MCA Selector 2.8 relocated a chunk's own frame, its block entities and
+ * everything inside them, its scheduled ticks, its structures, its entity positions
+ * and its point-of-interest records — but it still spoke the block-position
+ * spellings 1.21.5's `InlineBlockPosFormatFix` replaced, and it abandoned every
+ * entity before reaching its villager memories at all. So a 26.2 save's leashes,
+ * item frame and painting tile positions and villager memories arrived in Primary
+ * still naming Secondary. This audit is what refused those merges rather than
+ * letting a broken map open, and ticket 16 is what fixed the tool; the merge now
+ * runs a patched build and `WorldMergeAuditTest` asserts each of the four arrives.
+ *
+ * It is still not a formality afterwards. The tool moves an entity's positions from
+ * a list of the entity types that have them, and that list is not complete — a
+ * bee's `hive_pos` is one it does not know — so this remains the thing standing
+ * between an incomplete relocation and a map that opens broken.
  *
  * And one cross-check, because self-consistency is not correctness: a villager
  * remembering a bed, a workstation or a meeting point must find a

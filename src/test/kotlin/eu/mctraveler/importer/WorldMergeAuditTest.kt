@@ -11,6 +11,7 @@ import net.minecraft.server.Bootstrap
 import net.minecraft.world.level.ChunkPos
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeAll
@@ -92,10 +93,11 @@ class WorldMergeAuditTest {
 
     @Test
     fun `a chunk holding one of every coordinate-bearing thing passes the audit`() {
-        // The villager's memories are written where a correct relocation would
-        // have left them; that the relocation does not is the subject of the tests
-        // further down, and this one is about the audit not inventing a leftover.
-        villagerRemembering(merged(CoordinateBearingChunks.BED))
+        // Everything in the fixture is written in Secondary's own coordinates and
+        // relocated for real, so a leftover here would be one the tool actually
+        // left. This is ticket 03's last acceptance criterion, which could not be
+        // met until the relocation learned the four fields ticket 16 taught it.
+        villagerRemembering()
 
         val report = audit()
 
@@ -108,22 +110,31 @@ class WorldMergeAuditTest {
         // The cow's velocity is (0.1, 0.0, -0.2) and its uuid is (1, 2, 3, 4);
         // read as coordinates both fall inside Secondary's old footprint, so an
         // audit that took every triple for a position would refuse this merge
-        // every time. Passing at all is half the claim; the other half is that
-        // neither was quietly rewritten either.
-        villagerRemembering(merged(CoordinateBearingChunks.BED))
+        // every time. That it completes at all is most of the claim.
+        villagerRemembering()
 
         merge()
 
         val cow = entityIn(relocated("entities", "entities"), "minecraft:cow")
+        // A velocity comes through untouched: nothing moves it, and it is the one
+        // list of three doubles in a chunk that is not a place.
         assertEquals(listOf(0.1, 0.0, -0.2), cow.getListOrEmpty("Motion").doubles())
-        assertEquals(listOf(1, 2, 3, 4), cow.getIntArray("UUID").orElseThrow().toList())
+        // The uuid is still four ints and not a place — but it is *not* still
+        // (1, 2, 3, 4). MCA Selector re-rolls every relocated entity's uuid on
+        // purpose, so that a chunk imported into a world that already holds the
+        // same entity cannot collide with it. It had not been doing so here: the
+        // null static field ticket 16 fixed made it abandon each entity before it
+        // got that far, which is the same reason villager memories never moved.
+        val uuid = cow.getIntArray("UUID").orElseThrow().toList()
+        assertEquals(4, uuid.size)
+        assertNotEquals(merged(Block(1, 2, 3)).toList(), uuid.take(3))
     }
 
     // ---- the cosmetic tier: repaired -----------------------------------------
 
     @Test
     fun `a lodestone compass is retargeted however deeply it is buried`() {
-        villagerRemembering(merged(CoordinateBearingChunks.BED))
+        villagerRemembering()
 
         val report = audit()
 
@@ -152,7 +163,7 @@ class WorldMergeAuditTest {
 
     @Test
     fun `a retargeted compass names Primary's dimension, not the one being retired`() {
-        villagerRemembering(merged(CoordinateBearingChunks.BED))
+        villagerRemembering()
 
         merge()
 
@@ -165,7 +176,7 @@ class WorldMergeAuditTest {
 
     @Test
     fun `a compass pointing into Secondary's End is named rather than guessed at`() {
-        villagerRemembering(merged(CoordinateBearingChunks.BED))
+        villagerRemembering()
         putInTheChest(CoordinateBearingChunks.compass(Block(1, 50, 2), "mctraveler:secondary_end"))
 
         val report = audit()
@@ -184,7 +195,7 @@ class WorldMergeAuditTest {
 
     @Test
     fun `a command block naming literal coordinates is listed and never rewritten`() {
-        villagerRemembering(merged(CoordinateBearingChunks.BED))
+        villagerRemembering()
 
         val report = audit()
 
@@ -219,14 +230,19 @@ class WorldMergeAuditTest {
 
     @Test
     fun `one structural coordinate left behind fails the whole merge and writes nothing`() {
-        // A painting's tile position as 26.2 spells it. MCA Selector 2.8 still
-        // moves the pre-1.21.5 `TileX`/`TileY`/`TileZ` and knows nothing of
-        // `block_pos`, so this arrives in Primary still naming a block in
-        // Secondary — the painting would hang on nothing.
-        CoordinateBearingChunks.edit(save.levelDir, save.secondaryDimension(overworld), "entities", "entities") {
-            entityIn(it, "minecraft:painting")
-                .putIntArray("block_pos", CoordinateBearingChunks.PAINTING.toList().toIntArray())
-        }
+        // A bee's memory of its hive. The relocation tool has a case for each entity
+        // type that carries a position, and it has none for a bee, so `hive_pos`
+        // arrives in Primary still naming a block in Secondary — a bee that will
+        // never find its way home. This is the same class of defect ticket 16 fixed
+        // for leashes, tiles and villager memories and a real one still open; it
+        // stands here because a test that proves the merge refuses needs a
+        // coordinate that genuinely does not move, and inventing one would prove
+        // less than finding one.
+        CoordinateBearingChunks.addBee(
+            save.levelDir,
+            save.secondaryDimension(overworld),
+            hive = CoordinateBearingChunks.LEASH_KNOT,
+        )
         val before = save.contents()
 
         val refusal = assertThrows(MigrationRefused::class.java) { merge() }
@@ -239,7 +255,7 @@ class WorldMergeAuditTest {
         )
         assertTrue(
             refusal.message!!.contains(
-                "overworld: in chunk 517, -253: minecraft:painting.block_pos still names 91, 64, 59",
+                "overworld: in chunk 517, -253: minecraft:bee.hive_pos still names 86, 64, 54",
             ),
             refusal.message,
         )
@@ -255,44 +271,94 @@ class WorldMergeAuditTest {
         assertFalse(Files.exists(save.staging))
     }
 
+    // ---- the four fields ticket 16 taught the relocation ---------------------
+
     @Test
-    fun `MCA Selector 2_8 leaves 26_2's inline block positions behind, and this is what catches it`() {
-        // 1.21.5's InlineBlockPosFormatFix renamed `Leash` and the tile positions
-        // to `leash` and `block_pos`; MCA Selector 2.8 still relocates only the
-        // old spellings. Every one of these would arrive pointing at a block in
-        // Secondary — a leash tied to nothing, a frame and a painting hung on air.
+    fun `26_2's inline block positions arrive relocated, alongside the old spellings`() {
+        // 1.21.5's InlineBlockPosFormatFix renamed `Leash` and the tile positions to
+        // `leash` and `block_pos`. The stock 2.8 relocated only the old spellings, so
+        // each of these arrived naming a block in Secondary — a leash tied to
+        // nothing, a frame and a painting hung on air. The fixture carries *both*
+        // spellings on the same entities at once, which is the claim that matters:
+        // Secondary's chunks are a mixture of DataVersions, because vanilla rewrites
+        // a chunk only when it loads one, so a fix that moved the new spelling
+        // instead of the old would strand every chunk nobody has visited.
+        villagerRemembering()
         CoordinateBearingChunks.addTheInlineBlockPositions(save.levelDir, save.secondaryDimension(overworld))
 
-        val refusal = assertThrows(MigrationRefused::class.java) { merge() }
+        merge()
 
-        assertTrue(refusal.message!!.contains("still hold 3 coordinates"), refusal.message)
-        for (leftover in listOf(
-            "minecraft:cow.leash still names 86, 64, 54",
-            "minecraft:item_frame.block_pos still names 90, 64, 58",
-            "minecraft:painting.block_pos still names 91, 64, 59",
-        )) {
-            assertTrue(refusal.message!!.contains(leftover), refusal.message)
-        }
-        assertFalse(Files.exists(save.mergeStamp))
+        val entities = relocated("entities", "entities")
+        val cow = entityIn(entities, "minecraft:cow")
+        val frame = entityIn(entities, "minecraft:item_frame")
+        val painting = entityIn(entities, "minecraft:painting")
+
+        assertEquals(merged(CoordinateBearingChunks.LEASH_KNOT).toList(), intArrayIn(cow, "leash"))
+        assertEquals(merged(CoordinateBearingChunks.ITEM_FRAME).toList(), intArrayIn(frame, "block_pos"))
+        assertEquals(merged(CoordinateBearingChunks.PAINTING).toList(), intArrayIn(painting, "block_pos"))
+
+        // And the spellings they replaced, on the same three entities, moved to
+        // exactly the same places.
+        assertEquals(merged(CoordinateBearingChunks.LEASH_KNOT).toList(), leashCompoundIn(cow))
+        assertEquals(merged(CoordinateBearingChunks.ITEM_FRAME).toList(), tileIn(frame))
+        assertEquals(merged(CoordinateBearingChunks.PAINTING).toList(), tileIn(painting))
     }
 
     @Test
-    fun `MCA Selector 2_8 leaves a villager's memories behind, and this is what catches it`() {
-        // A memory is written through `ExpirableValue`, which wraps it in `value`;
-        // MCA Selector reads `pos` off the memory itself, one level too shallow.
-        // So a villager arrives still remembering Secondary's coordinates.
+    fun `a villager's memories arrive relocated, wrapped in value as 26_2 writes them`() {
+        // A memory is written through `ExpirableValue`, which wraps it in `value`.
+        // The stock 2.8 read `pos` off the memory itself, one level too shallow —
+        // and never got that far anyway, because a static field it dereferences for
+        // every entity was null, so each one was abandoned partway through. So a
+        // villager arrived still remembering Secondary, and its trading hall was
+        // dead. Both are fixed in the patched build (ticket 16).
         villagerRemembering(
-            CoordinateBearingChunks.BED,
+            home = CoordinateBearingChunks.BED,
+            jobSite = CoordinateBearingChunks.WORKSTATION,
+            meetingPoint = CoordinateBearingChunks.MEETING_POINT,
             dimension = CoordinateBearingChunks.SECONDARY_OVERWORLD,
         )
 
-        val refusal = assertThrows(MigrationRefused::class.java) { merge() }
+        merge()
 
-        assertTrue(
-            refusal.message!!.contains(
-                "minecraft:villager.Brain.memories.minecraft:home.value.pos still names 80, 64, 48",
-            ),
-            refusal.message,
+        val villager = entityIn(relocated("entities", "entities"), "minecraft:villager")
+        val memories = villager.getCompoundOrEmpty("Brain").getCompoundOrEmpty("memories")
+        for ((memory, was) in listOf(
+            "minecraft:home" to CoordinateBearingChunks.BED,
+            "minecraft:job_site" to CoordinateBearingChunks.WORKSTATION,
+            "minecraft:meeting_point" to CoordinateBearingChunks.MEETING_POINT,
+        )) {
+            assertEquals(
+                merged(was).toList(),
+                intArrayIn(memories.getCompoundOrEmpty(memory).getCompoundOrEmpty("value"), "pos"),
+                memory,
+            )
+        }
+        // The merge completing is the other half: each of those memories has to
+        // find the point-of-interest record that claims it, and those travelled in
+        // a different file.
+        assertTrue(Files.exists(save.mergeStamp))
+    }
+
+    @Test
+    fun `a memory written before the value wrapper existed still relocates`() {
+        // The same villager, with its memories written flat the way a save old
+        // enough predates `ExpirableValue`'s wrapper. Nothing upgrades a chunk that
+        // nothing loads, so this shape is still on disk in Secondary and the fix for
+        // the wrapped one had to be additive rather than a replacement.
+        CoordinateBearingChunks.addVillagerRememberingFlatly(
+            save.levelDir,
+            save.secondaryDimension(overworld),
+            home = CoordinateBearingChunks.BED,
+        )
+
+        merge()
+
+        val villager = entityIn(relocated("entities", "entities"), "minecraft:villager")
+        assertEquals(
+            merged(CoordinateBearingChunks.BED).toList(),
+            intArrayIn(villager.getCompoundOrEmpty("Brain").getCompoundOrEmpty("memories")
+                .getCompoundOrEmpty("minecraft:home"), "pos"),
         )
     }
 
@@ -303,11 +369,13 @@ class WorldMergeAuditTest {
         // Everything about this villager moved exactly as it should have, and the
         // trading hall is dead anyway: nothing claims the workstation it walks to.
         // That is the invariant no single chunk can establish, which is why it is
-        // asked once the whole dimension has been read.
+        // asked once the whole dimension has been read. The job site is given in
+        // Secondary's coordinates like everything else, and lands at 9000, 64,
+        // -4000 — inside no chunk that travelled, so no record claims it.
         villagerRemembering(
-            home = merged(CoordinateBearingChunks.BED),
-            jobSite = Block(9000, 64, -4000),
-            meetingPoint = merged(CoordinateBearingChunks.MEETING_POINT),
+            home = CoordinateBearingChunks.BED,
+            jobSite = Block(808, 64, 96),
+            meetingPoint = CoordinateBearingChunks.MEETING_POINT,
         )
 
         val refusal = assertThrows(MigrationRefused::class.java) { merge() }
@@ -330,7 +398,7 @@ class WorldMergeAuditTest {
 
     @Test
     fun `the report separates what the merge repaired from what needs an operator`() {
-        villagerRemembering(merged(CoordinateBearingChunks.BED))
+        villagerRemembering()
 
         val report = audit()
 
@@ -367,7 +435,7 @@ class WorldMergeAuditTest {
 
     @Test
     fun `the audit's section sits with the others, behind the placement`() {
-        villagerRemembering(merged(CoordinateBearingChunks.BED))
+        villagerRemembering()
 
         val report = merge()
 
@@ -379,8 +447,19 @@ class WorldMergeAuditTest {
 
     private fun merged(at: Block): Block = at.merged(OFFSET, overworld)
 
+    /**
+     * A villager remembering places in **Secondary's** own coordinates, which the
+     * relocation is what moves.
+     *
+     * These used to be written already offset, because the relocation did not move
+     * a memory at all and a test that wanted to say something about the audit had
+     * to put the villager where a working relocation would have left it. The
+     * patched tool moves them (ticket 16), so the fixture is now the honest one:
+     * everything is written where Secondary has it, and every merged coordinate a
+     * test asserts is one the tool produced.
+     */
     private fun villagerRemembering(
-        home: Block,
+        home: Block = CoordinateBearingChunks.BED,
         jobSite: Block = home,
         meetingPoint: Block = home,
         dimension: String = "minecraft:overworld",
@@ -427,6 +506,18 @@ class WorldMergeAuditTest {
 
     private fun targetOf(compass: CompoundTag): List<Int> =
         trackerIn(compass).getIntArray("pos").orElseThrow().toList()
+
+    /** An inline block position — an int array of three — by key. */
+    private fun intArrayIn(tag: CompoundTag, key: String): List<Int> =
+        tag.getIntArray(key).orElseThrow { AssertionError("no $key in $tag") }.toList()
+
+    /** A leash in the spelling that predates the inline one: a compound of X/Y/Z. */
+    private fun leashCompoundIn(entity: CompoundTag): List<Int> =
+        entity.getCompoundOrEmpty("Leash").let { listOf(it.getIntOr("X", 0), it.getIntOr("Y", 0), it.getIntOr("Z", 0)) }
+
+    /** A hung entity's tile in the spelling that predates the inline one. */
+    private fun tileIn(entity: CompoundTag): List<Int> =
+        listOf(entity.getIntOr("TileX", 0), entity.getIntOr("TileY", 0), entity.getIntOr("TileZ", 0))
 
     private fun ListTag.doubles(): List<Double> = (0 until size).map { getDoubleOr(it, Double.NaN) }
 }

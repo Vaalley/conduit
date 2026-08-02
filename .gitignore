@@ -9,6 +9,11 @@ build/
 run/
 logs/
 
+# MCA Selector's log4j config names its log directory with a property nothing sets,
+# so every merge test that runs the tool leaves a literal ${sys:logDir} behind in
+# whatever directory it was started from. Harmless, and not ours to configure.
+${sys:logDir}/
+
 # IDE
 .idea/
 *.iml

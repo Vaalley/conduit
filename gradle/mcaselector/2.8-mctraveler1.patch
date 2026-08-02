@@ -1,0 +1,205 @@
+diff --git a/build.gradle b/build.gradle
+index a5221320..0d9e57a3 100644
+--- a/build.gradle
++++ b/build.gradle
+@@ -98,6 +98,12 @@ jar {
+ }
+ 
+ shadowJar {
++	// Build the same bytes every time, so the jar can be pinned by checksum by anyone who
++	// builds it rather than only by whoever uploaded it. Without these two, the archive
++	// carries the build's wall clock and the filesystem's directory order, and two builds
++	// of identical source hash differently.
++	preserveFileTimestamps = false
++	reproducibleFileOrder = true
+ 	minimize {
+ 		exclude(dependency('org.apache.logging.log4j:log4j-core:.*'))
+ 		exclude(dependency('org.apache.groovy:groovy-jsr223:.*'))
+diff --git a/src/main/java/net/querz/mcaselector/selection/Selection.java b/src/main/java/net/querz/mcaselector/selection/Selection.java
+index 5e453348..22ea66f5 100644
+--- a/src/main/java/net/querz/mcaselector/selection/Selection.java
++++ b/src/main/java/net/querz/mcaselector/selection/Selection.java
+@@ -72,7 +72,14 @@ public class Selection implements Serializable, Iterable<Long2ObjectMap.Entry<Ch
+ 		return selection;
+ 	}
+ 
+-	public void saveToFile(File csvFile) throws IOException {
++	/**
++	 * Synchronized for the same reason as {@link #merge(Selection)}, and not only to keep
++	 * the map from being read while it is written: acquiring the same monitor after the
++	 * last merge released it is what guarantees this thread sees every merge, rather than
++	 * whichever of them happen to have reached main memory. The CLI writes the selection
++	 * from whichever worker thread finished last, so it is not the thread that merged last.
++	 */
++	public synchronized void saveToFile(File csvFile) throws IOException {
+ 		try (BufferedWriter bw = new BufferedWriter(new FileWriter(csvFile))) {
+ 			if (inverted) {
+ 				bw.write("inverted\n");
+@@ -95,7 +102,8 @@ public class Selection implements Serializable, Iterable<Long2ObjectMap.Entry<Ch
+ 		}
+ 	}
+ 
+-	public String saveToString() {
++	/** Synchronized for the same reason as {@link #saveToFile(File)}. */
++	public synchronized String saveToString() {
+ 		StringBuilder sb = new StringBuilder();
+ 		if (inverted) {
+ 			sb.append("inverted\n");
+@@ -429,7 +437,23 @@ public class Selection implements Serializable, Iterable<Long2ObjectMap.Entry<Ch
+ 		return result;
+ 	}
+ 
+-	public void merge(Selection other) {
++	/**
++	 * Merges {@code other} into this selection.
++	 *
++	 * <p>Synchronized because this is called concurrently. Both {@code ParamExecutor.select}
++	 * and the UI hand {@code Selection::merge} to
++	 * {@link net.querz.mcaselector.io.job.ChunkFilterSelector#selectFilter} as the
++	 * per-region-file callback, so every job in the process pool invokes it on the same
++	 * target selection. {@link #selection} is a {@link Long2ObjectOpenHashMap}, which is not
++	 * thread safe: two jobs rehashing it at once dropped entries, so a select silently
++	 * returned fewer chunks than it matched. It went unnoticed because it loses whole
++	 * regions rather than corrupting the map, and only on some runs — measured at roughly
++	 * one run in twenty at the default thread count, and never with {@code --process-threads 1}.
++	 *
++	 * <p>Only {@code other} is read here, and it is a selection the calling job just built
++	 * for itself, so nothing locks two selections at once.
++	 */
++	public synchronized void merge(Selection other) {
+ 		if (!inverted && !other.inverted) {
+ 
+ 			for (Long2ObjectMap.Entry<ChunkSet> entry : other.selection.long2ObjectEntrySet()) {
+diff --git a/src/main/java/net/querz/mcaselector/version/java_1_14/ChunkFilter_19w11a.java b/src/main/java/net/querz/mcaselector/version/java_1_14/ChunkFilter_19w11a.java
+index 86155618..ad6519ab 100644
+--- a/src/main/java/net/querz/mcaselector/version/java_1_14/ChunkFilter_19w11a.java
++++ b/src/main/java/net/querz/mcaselector/version/java_1_14/ChunkFilter_19w11a.java
+@@ -8,6 +8,7 @@ import net.querz.nbt.CompoundTag;
+ import net.querz.nbt.DoubleTag;
+ import net.querz.nbt.IntArrayTag;
+ import net.querz.nbt.ListTag;
++import net.querz.nbt.Tag;
+ 
+ import static net.querz.mcaselector.util.validation.ValidationHelper.attempt;
+ 
+@@ -103,11 +104,34 @@ public class ChunkFilter_19w11a {
+ 			Helper.fixEntityUUID(entity);
+ 		}
+ 
++		/**
++		 * Applies the offset to a villager's memory of a place.
++		 *
++		 * <p>A memory is serialized through {@code ExpirableValue}, which wraps whatever it
++		 * holds in {@code value}, so the position of a {@code minecraft:home},
++		 * {@code minecraft:job_site} or {@code minecraft:meeting_point} sits one level below
++		 * the memory rather than on it. Looking only at the memory left every such villager
++		 * remembering where it used to live.
++		 *
++		 * <p>Both shapes are offset rather than one replacing the other. A world is a mixture
++		 * of DataVersions, because a chunk is only rewritten when something loads it, so a
++		 * save can hold memories in either shape at the same time and a fix that swapped one
++		 * for the other would strand the chunks nobody has visited.
++		 */
+ 		protected void applyOffsetToVillagerMemory(CompoundTag memory, Point3i offset) {
+-			IntArrayTag mPos = Helper.tagFromCompound(memory, "pos");
++			applyOffsetToMemoryPos(memory, offset);
++			Tag value = Helper.tagFromCompound(memory, "value");
++			if (value instanceof CompoundTag wrapped) {
++				applyOffsetToMemoryPos(wrapped, offset);
++			}
++		}
++
++		/** The {@code pos} directly on {@code holder}, in either of the shapes it is written in. */
++		private void applyOffsetToMemoryPos(CompoundTag holder, Point3i offset) {
++			IntArrayTag mPos = Helper.tagFromCompound(holder, "pos");
+ 			Helper.applyOffsetToIntArrayPos(mPos, offset);
+ 			if (mPos == null) {
+-				ListTag lPos = Helper.tagFromCompound(memory, "pos");
++				ListTag lPos = Helper.tagFromCompound(holder, "pos");
+ 				Helper.applyOffsetToIntListPos(lPos, offset);
+ 			}
+ 		}
+diff --git a/src/main/java/net/querz/mcaselector/version/java_1_18/ChunkFilter_21w37a.java b/src/main/java/net/querz/mcaselector/version/java_1_18/ChunkFilter_21w37a.java
+index 01bc608f..eefcd036 100644
+--- a/src/main/java/net/querz/mcaselector/version/java_1_18/ChunkFilter_21w37a.java
++++ b/src/main/java/net/querz/mcaselector/version/java_1_18/ChunkFilter_21w37a.java
+@@ -557,9 +557,12 @@ public class ChunkFilter_21w37a {
+ 				entityPos.set(2, DoubleTag.valueOf(entityPos.getDouble(2) + offset.getZ()));
+ 			}
+ 
+-			// leashed entities
++			// leashed entities, in both the compound and the inlined spelling. This
++			// implementation covers up to 4421, which includes the 1.21.5 releases that
++			// renamed Leash to leash and made it an int array.
+ 			CompoundTag leash = Helper.tagFromCompound(entity, "Leash");
+ 			Helper.applyIntOffsetIfRootPresent(leash, "X", "Y", "Z", offset);
++			Helper.applyOffsetToIntArrayPos(entity.getIntArrayTag("leash"), offset);
+ 
+ 			// projectiles
+ 			if (attempt(() -> Helper.applyIntOffsetIfRootPresent(entity, "xTile", "yTile", "zTile", offset))) {
+@@ -604,7 +607,10 @@ public class ChunkFilter_21w37a {
+ 				break;
+ 			case "minecraft:item_frame":
+ 			case "minecraft:painting":
++				// The block the thing hangs on, in both spellings: TileX/TileY/TileZ
++				// before 1.21.5 inlined it, block_pos after.
+ 				Helper.applyIntOffsetIfRootPresent(entity, "TileX", "TileY", "TileZ", offset);
++				Helper.applyOffsetToIntArrayPos(entity.getIntArrayTag("block_pos"), offset);
+ 				break;
+ 			case "minecraft:villager":
+ 				CompoundTag memories = Helper.tagFromCompound(Helper.tagFromCompound(entity, "Brain"), "memories");
+diff --git a/src/main/java/net/querz/mcaselector/version/java_1_21/ChunkFilter_25w15a.java b/src/main/java/net/querz/mcaselector/version/java_1_21/ChunkFilter_25w15a.java
+index 3a7d483d..fc4b2bb5 100644
+--- a/src/main/java/net/querz/mcaselector/version/java_1_21/ChunkFilter_25w15a.java
++++ b/src/main/java/net/querz/mcaselector/version/java_1_21/ChunkFilter_25w15a.java
+@@ -30,9 +30,12 @@ public class ChunkFilter_25w15a {
+ 				entityPos.set(2, DoubleTag.valueOf(entityPos.getDouble(2) + offset.getZ()));
+ 			}
+ 
+-			// leashed entities
++			// leashed entities, in both the compound and the inlined spelling. 1.21.5's
++			// InlineBlockPosFormatFix renamed Leash to leash and made it an int array; a
++			// chunk nothing has loaded since still carries the old one, so both are moved.
+ 			CompoundTag leash = Helper.tagFromCompound(entity, "Leash");
+ 			Helper.applyIntOffsetIfRootPresent(leash, "X", "Y", "Z", offset);
++			Helper.applyOffsetToIntArrayPos(entity.getIntArrayTag("leash"), offset);
+ 
+ 			// projectiles
+ 			if (attempt(() -> Helper.applyIntOffsetIfRootPresent(entity, "xTile", "yTile", "zTile", offset))) {
+@@ -77,7 +80,10 @@ public class ChunkFilter_25w15a {
+ 					break;
+ 				case "minecraft:item_frame":
+ 				case "minecraft:painting":
++					// The block the thing hangs on, in both spellings: TileX/TileY/TileZ
++					// before 1.21.5 inlined it, block_pos after.
+ 					Helper.applyIntOffsetIfRootPresent(entity, "TileX", "TileY", "TileZ", offset);
++					Helper.applyOffsetToIntArrayPos(entity.getIntArrayTag("block_pos"), offset);
+ 					break;
+ 				case "minecraft:villager":
+ 					CompoundTag memories = Helper.tagFromCompound(Helper.tagFromCompound(entity, "Brain"), "memories");
+@@ -149,11 +155,20 @@ public class ChunkFilter_25w15a {
+ 
+ 	protected static class Relocate extends ChunkFilter_21w06a.Relocate {
+ 
+-		static Relocate instance;
+-
+-		public Relocate() {
+-			instance = this;
+-		}
++		/**
++		 * Constructed here rather than by {@code VersionHandler}, which only instantiates the
++		 * classes it registers and so left this field null — and {@link RelocateEntities}
++		 * above dereferences it for every entity it relocates. The NPE was swallowed by the
++		 * per-entity {@code catchAndLog}, so a relocation reported success having silently
++		 * abandoned each entity partway through: villagers kept the memories they had before
++		 * the move, and falling blocks kept their tile entity data.
++		 *
++		 * <p>Registering the class instead would be wrong. It extends a 1.17-era
++		 * {@code Relocate}, so annotating it would also make it the <em>terrain</em>
++		 * implementation from 4422 onwards, ahead of {@code ChunkFilter_24w10a.Relocate}.
++		 * It exists only so {@link RelocateEntities} can reach the inherited helpers.
++		 */
++		static Relocate instance = new Relocate();
+ 
+ 		@Override
+ 		protected void applyOffsetToVillagerMemory(CompoundTag memory, Point3i offset) {
