@@ -47,6 +47,9 @@ leaving it describing two Worlds is leaving a trap.
 - [ ] It records that the relocation tool is a **patched** MCA Selector, why, and how to
       rebuild it from `gradle/mcaselector/2.8-mctraveler1.patch` — ticket 16 wrote the
       material into its own Comments because this runbook did not exist yet
+- [ ] The rehearsal step says to check the searched offset against Secondary's own footprint
+      as well as against Primary's — ticket 18 wrote the material into the Comments below,
+      because this runbook did not exist yet either
 
 ## Comments
 
@@ -192,3 +195,45 @@ report, so the count is the only warning there will be.
 - *"a merge offset must be a multiple of 4096 blocks"* and *"Secondary's border must be at
   least 512 blocks from the origin"* — both are argument mistakes, refused before the merge
   reads anything.
+
+### From ticket 18 — the rehearsal step for Secondary's own ground
+
+**The rehearsal must check the searched offset against Secondary's own footprint as well as
+against Primary's.** The plan prints both, per dimension, and they are the two lines to read
+together:
+
+```
+  Secondary's footprint  : x 0…50175  z 0…511  (98 region files)
+  lands at               : x 8192…58367  z -4096…-3585
+```
+
+`lands at` must not overlap `Secondary's footprint` on **both** axes at once, in the overworld
+and in the nether. Above it does not: the X ranges overlap heavily, and the Z ranges do not
+meet at all, so no landed coordinate can be mistaken for one that stayed. Where they overlap, the audit cannot tell a coordinate that moved from one
+that never left — it decides that question by asking whether a coordinate still points into
+Secondary's old footprint, and inside the overlap the answer is the same either way.
+
+The merge enforces this itself now: a slot is only a candidate when it clears Secondary's own
+ground as well as Primary's chunk data, and an `--offset` that does not is refused by name.
+The rehearsal step exists to **confirm** that rather than to trust it — this is the one check
+that protects the audit itself, so a merge whose audit is unreadable would otherwise report
+success.
+
+**Two refusals it can produce**, and neither is cleared by asking for less clearance:
+
+- *"the offset x +8192, z +0 would set Secondary's nether back down on ground it already
+  covers …"* — the offset is too small. Throw the landmass further; the nether is usually the
+  dimension that fails first, because it moves one region file per lattice step where the
+  overworld moves eight.
+- *"no 4096-aligned slot within N blocks of the origin can take Secondary — M slots tried, A
+  of them ruled out by the ground Secondary is being moved off and B by Primary's chunk data
+  …"* — read the two numbers. A large `A` means `--search-limit` is too small for how wide
+  Secondary is; a large `B` means the clearance is too large for how much of Primary's map is
+  generated.
+
+**Why this is unlikely to bite in production, and why it is checked anyway.** Primary has
+years of play behind it, so its chunk data almost certainly covers the ground Secondary sits
+on, and the clearance measured in nether blocks pushes the offset past 90,000 blocks. But the
+merge is one-shot and irreversible, so "almost certainly" is not the standard, and the search
+is against a *small* Primary in every rehearsal fixture — which is exactly the shape that
+fails.

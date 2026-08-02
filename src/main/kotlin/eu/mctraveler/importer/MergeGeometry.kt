@@ -190,6 +190,15 @@ data class RegionFileArea(val minX: Int, val minZ: Int, val maxX: Int, val maxZ:
     fun grownBy(files: Int): RegionFileArea =
         RegionFileArea(minX - files, minZ - files, maxX + files, maxZ + files)
 
+    /**
+     * True when this area and [other] share so much as one region file.
+     *
+     * Touching along an edge is not overlapping: two areas a single file apart
+     * have no file in common, which is the question every caller is asking.
+     */
+    fun overlaps(other: RegionFileArea): Boolean =
+        minX <= other.maxX && other.minX <= maxX && minZ <= other.maxZ && other.minZ <= maxZ
+
     /** Where this area lands once [offset] has moved [role]. */
     fun movedBy(offset: MergeOffset, role: DimensionRole): RegionFileArea {
         val shiftX = offset.regionFileShiftX(role)

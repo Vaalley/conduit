@@ -135,5 +135,10 @@ failures rather than test failures:
   arriving coordinate as one that never left. `WorldMergeBorderClipTest` passes an explicit
   offset for that reason. **A rehearsal against production must check the searched offset
   against Secondary's own footprint**, not only against Primary's.
+
+  *Ticket 18 closed this, taking the finding as its whole brief: the search now tests every
+  slot against Secondary's own footprint as well as Primary's, in both relocated dimensions,
+  and refuses a supplied `--offset` that overlaps it. The rehearsal step stands — it is now a
+  confirmation of an enforced condition rather than a check nothing else was making.*
 - **What the runbook must say about `--border` and `--bleed`** is written into ticket 12's
   Comments, because `docs/merge.md` is ticket 12's to create and does not exist yet.

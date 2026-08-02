@@ -218,6 +218,42 @@ class WorldMergeTest {
         assertEquals(MergeOffset(0, 8192), merge().offset)
     }
 
+    // ---- landing clear of Secondary's own ground ----------------------------
+    //
+    // The audit asks "does this coordinate still point into Secondary's old
+    // footprint?" to decide whether it moved, and inside an overlap between the
+    // landed footprint and the old one that question has no answer. So a slot
+    // that lands Secondary on itself is not a slot, however clear of Primary it
+    // is (ticket 03's judgement call 5; ticket 18).
+
+    @Test
+    fun `a slot that lands Secondary's overworld back on itself is not a slot`() {
+        // Secondary's overworld now spans region files 0…16, and the overworld
+        // moves 8 region files per lattice step — so (2, 0), the ninth slot and
+        // the first one clear of Primary, lands it on files 16…32 and overlaps
+        // the file it came from. The search goes on to (0, 2), which does not.
+        save.secondary(DimensionRole.OVERWORLD, "region", 16 to 0)
+
+        val placement = merge()
+
+        assertEquals(MergeOffset(0, 8192), placement.offset)
+        assertEquals(10, placement.slotsConsidered)
+    }
+
+    @Test
+    fun `a slot that lands Secondary's nether back on itself is not a slot either`() {
+        // The same argument in the nether, which moves one region file per step:
+        // spanning files 0…5 there is enough for (2, 0) to land on 2…7. The
+        // overworld clears its own ground at that slot, so the nether rules it
+        // out alone.
+        save.secondary(DimensionRole.NETHER, "region", 5 to 0)
+
+        val placement = merge()
+
+        assertEquals(MergeOffset(0, 8192), placement.offset)
+        assertEquals(10, placement.slotsConsidered)
+    }
+
     // ---- an offset the operator supplies -------------------------------------
 
     @Test
@@ -245,6 +281,24 @@ class WorldMergeTest {
     }
 
     @Test
+    fun `a supplied offset that lands Secondary on its own ground is refused by name`() {
+        // Clear of Primary — the search itself would have taken this offset
+        // before ticket 18 — and still not far enough to have left.
+        save.secondary(DimensionRole.NETHER, "region", 5 to 0)
+
+        val refusal = assertThrows(MigrationRefused::class.java) { merge(offset = MergeOffset(8192, 0)) }
+
+        assertEquals(
+            "the offset x +8192, z +0 would set Secondary's nether back down on ground it already " +
+                "covers: it lands on x 1024…4095  z 0…511, and Secondary's nether is at " +
+                "x 0…3071  z 0…511. Inside that overlap the audit cannot tell a coordinate that " +
+                "moved from one that never left, so the landmass has to clear the place it is " +
+                "being moved off",
+            refusal.message,
+        )
+    }
+
+    @Test
     fun `an offset that would leave Secondary where it is refuses`() {
         val refusal = assertThrows(MigrationRefused::class.java) { merge(offset = MergeOffset(0, 0)) }
 
@@ -262,10 +316,35 @@ class WorldMergeTest {
             merge(clearance = 100_000, searchLimit = 2)
         }
 
+        // Every slot was lost to Primary and none to Secondary's own ground, and
+        // the tally says so: this is the operator's evidence that less clearance
+        // is the lever to pull.
         assertEquals(
-            "no 4096-aligned slot within 8192 blocks of the origin clears 100000 nether blocks of " +
-                "Primary's chunk data — 24 slots tried, and Primary's overworld reaches " +
-                "x -512…511  z -512…511; Primary's nether reaches x 0…511  z 0…511. " +
+            "no 4096-aligned slot within 8192 blocks of the origin can take Secondary — 24 slots " +
+                "tried, 0 of them ruled out by the ground Secondary is being moved off and 24 by " +
+                "Primary's chunk data (100000 nether blocks of clearance), and Primary's overworld " +
+                "reaches x -512…511  z -512…511; Primary's nether reaches x 0…511  z 0…511. " +
+                "Ask for less clearance, or search further out",
+            refusal.message,
+        )
+    }
+
+    @Test
+    fun `no slot clear of Secondary's own ground refuses, and says that is what it ran out of`() {
+        // Secondary's nether now spans region files (0,0)…(5,5), so every slot
+        // within one step of the origin — the nether moves one region file per
+        // step — would set it back down on top of itself. None of the eight is
+        // ruled out by Primary at all, and the tally is what tells the operator
+        // that asking for less clearance would change nothing.
+        save.secondary(DimensionRole.NETHER, "region", 5 to 5)
+
+        val refusal = assertThrows(MigrationRefused::class.java) { merge(searchLimit = 1) }
+
+        assertEquals(
+            "no 4096-aligned slot within 4096 blocks of the origin can take Secondary — 8 slots " +
+                "tried, 8 of them ruled out by the ground Secondary is being moved off and 0 by " +
+                "Primary's chunk data (512 nether blocks of clearance), and Primary's overworld " +
+                "reaches x -512…511  z -512…511; Primary's nether reaches x 0…511  z 0…511. " +
                 "Ask for less clearance, or search further out",
             refusal.message,
         )

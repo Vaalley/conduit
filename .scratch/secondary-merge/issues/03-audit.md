@@ -137,9 +137,19 @@ completion pass — the End is discarded, so there is nowhere to point it.
 5. **A leftover is a coordinate inside Secondary's old footprint**, measured with
    `RegionFileArea.containsBlock` as ticket 01 endorsed — over-inclusive at region-file
    granularity, which errs safe. The one case it cannot answer is an offset small enough
-   that the landed footprint overlaps the old one; the placement search makes that
-   unreachable in practice, because it only ever lands Secondary clear of Primary's chunk
-   data and Primary's data is what covers Secondary's old ground.
+   that the landed footprint overlaps the old one: a coordinate inside the overlap reads
+   identically whether it travelled or not.
+
+   *This was originally accepted as unreachable, on the grounds that the placement search
+   only ever lands Secondary clear of Primary's chunk data and Primary's data is what covers
+   Secondary's old ground. **Ticket 13 found that reasoning does not hold** — clipped to its
+   border Secondary spans about a hundred region files, and against a small Primary the
+   nearest slot clear of Primary can sit inside the box Secondary used to occupy.* **Ticket
+   18 turned the assumption into a condition:** `PlacementSearch` now tests every slot
+   against Secondary's own source footprint as well as against Primary's chunk data, in both
+   relocated dimensions, and refuses an operator's `--offset` that overlaps it by name. So
+   the audit's blind spot is enforced away rather than hoped away, and the case above cannot
+   arrive here at all.
 6. **The command-block detector is deliberately generous.** Three coordinate tokens in a
    row with at least one absolute — vanilla's own grammar, so `/tp @p 85 64 53` is caught
    and `/setblock ~ ~-1 ~ stone` is not. A wrong guess costs one extra line in a report and
