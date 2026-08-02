@@ -41,6 +41,7 @@ data class MergeReport(
     val offset: MergeOffset get() = placement.offset
 
     val relocation: RelocationReport get() = section()
+    val audit: ChunkAuditReport get() = section()
     val regions: MergeRegionsReport get() = section()
     val players: PlayerSweepReport get() = section()
 
@@ -114,10 +115,11 @@ class MergeStaging(
                 offset = placement.offset,
                 tool = tool,
             ).run()
+            val audit = ChunkAudit(stagedLevelDir, placement).run()
             val regions = MergeRegions(plan.targetDir, this, placement.offset).sweep()
             val players = PlayerSweep(plan, placement.offset).sweep(this)
             stampAsMerged(placement)
-            MergeReport(placement, listOf(relocation, regions, players))
+            MergeReport(placement, listOf(relocation, audit, regions, players))
         } catch (failure: Throwable) {
             // The merge only ever copies — `--worlds move` is deliberately not
             // offered — so nothing here is the last copy of anything, and the
