@@ -39,6 +39,10 @@ object WorldMergeMain {
                                 Both axes must be multiples of ${MergeGeometry.OFFSET_ALIGNMENT}
           --search-limit <n>    how many ${MergeGeometry.OFFSET_ALIGNMENT}-block steps out to look
                                                                        [default: ${WorldMerge.DEFAULT_SEARCH_LIMIT}]
+          --sample <n>          relocated chunks of EACH dimension to compare block for block
+                                against the chunks they came from. A mismatch fails the merge;
+                                0 compares nothing and proves nothing
+                                                                       [default: ${WorldMerge.DEFAULT_SAMPLE}]
     """.trimIndent()
 
     @JvmStatic
@@ -103,6 +107,7 @@ object WorldMergeMain {
         searchLimit = options["search-limit"]?.let { number("search-limit", it) }
             ?: WorldMerge.DEFAULT_SEARCH_LIMIT,
         planOnly = options.containsKey("plan-only"),
+        sample = options["sample"]?.let { number("sample", it) } ?: WorldMerge.DEFAULT_SAMPLE,
     )
 
     /**
