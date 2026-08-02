@@ -20,6 +20,7 @@ import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.nbt.NbtAccounter
 import net.minecraft.nbt.NbtIo
+import net.minecraft.resources.ResourceKey
 import net.minecraft.server.MinecraftServer
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
@@ -173,6 +174,22 @@ class MergedSave private constructor(
         const val FLOOR_Y = 64
         const val HEADROOM = 6
 
+        /** A nether portal's opening, in blocks. */
+        private const val PORTAL_WIDTH = 2
+        private const val PORTAL_HEIGHT = 3
+
+        /**
+         * How every block of the fixture is placed: the clients are told, and
+         * nothing else happens.
+         *
+         * Shape updates are suppressed throughout, because the fixture is built
+         * one block at a time and several of the things in it are only valid
+         * once they are whole. Half a bed is a bed vanilla breaks and half a lit
+         * portal is not a portal at all, so the first block of each would be
+         * taken back out as the second went in.
+         */
+        private val BUILD = Block.UPDATE_CLIENTS or Block.UPDATE_KNOWN_SHAPE
+
         // Secondary's own coordinates. Everything below is what the merge is
         // handed; what the cases assert is each of these put through [merged].
 
@@ -284,6 +301,145 @@ class MergedSave private constructor(
             merged.layIntoThisServer(server)
             return merged
         }
+
+        // ---- Secondary, built by the server that will have to read it back ----
+
+        /**
+         * Secondary's chunk data: a homestead and a lit nether portal built in
+         * this server's own dimensions, saved through vanilla's own writer, and
+         * copied into [levelDir] as Secondary's.
+         *
+         * Building them rather than assembling chunk NBT by hand is what makes
+         * "a relocated chunk loads" worth asserting. Invented chunk data can
+         * satisfy every file-level comparison the merge makes and still be
+         * something the game cannot open, and a fixture that could not have been
+         * loaded before the merge either would say nothing about the merge.
+         */
+        private fun writeSecondarysChunks(server: MinecraftServer, levelDir: Path) {
+            val overworld = level(server, Level.OVERWORLD)
+            val nether = level(server, Level.NETHER)
+            homestead(overworld)
+            netherTwin(nether)
+            // Vanilla's own flush, so what is copied below is what a stopped
+            // server would have left on disk for the merge to find.
+            overworld.save(null, true, false)
+            nether.save(null, true, false)
+            carry(server, levelDir, DimensionRole.OVERWORLD, RegionFilePos(HOMESTEAD.regionX, HOMESTEAD.regionZ))
+            carry(server, levelDir, DimensionRole.NETHER, RegionFilePos(TWIN.regionX, TWIN.regionZ))
+        }
+
+        /**
+         * The homestead: cleared ground, a lit portal, a chest with something
+         * worth losing in it, a bed, and a block for a stranger to try to break.
+         */
+        private fun homestead(overworld: ServerLevel) {
+            clear(overworld, HOMESTEAD, Blocks.STONE)
+            portal(overworld, PORTAL)
+            overworld.setBlock(CHEST, Blocks.CHEST.defaultBlockState(), BUILD)
+            val chest = checkNotNull(overworld.getBlockEntity(CHEST) as? ChestBlockEntity) {
+                "the homestead's chest was placed with no block entity to fill"
+            }
+            chest.setItem(0, ItemStack(Items.DIAMOND, DIAMONDS))
+            chest.setChanged()
+            val bed = Blocks.BED.red().defaultBlockState()
+                .setValue(HorizontalDirectionalBlock.FACING, Direction.NORTH)
+            overworld.setBlock(BED, bed.setValue(BedBlock.PART, BedPart.FOOT), BUILD)
+            overworld.setBlock(BED.north(), bed.setValue(BedBlock.PART, BedPart.HEAD), BUILD)
+            overworld.setBlock(STONE, Blocks.STONE.defaultBlockState(), BUILD)
+        }
+
+        /** The other end of the homestead's portal, an eighth of the way out. */
+        private fun netherTwin(nether: ServerLevel) {
+            clear(nether, TWIN, Blocks.NETHERRACK)
+            portal(nether, TWIN_PORTAL)
+        }
+
+        /**
+         * [chunk] generated to the status vanilla calls finished, floored with
+         * [floor] and cleared above it.
+         *
+         * Asking for the chunk is what generates it, and that matters twice
+         * over: a chunk generated to anything less than full is one the merge
+         * deliberately leaves behind (merge spec, User Story 14), so this is
+         * also what makes these the chunks that travel.
+         */
+        private fun clear(level: ServerLevel, chunk: ChunkPos, floor: Block) {
+            level.getChunk(chunk.x, chunk.z)
+            for (x in chunk.minBlockX..chunk.maxBlockX) {
+                for (z in chunk.minBlockZ..chunk.maxBlockZ) {
+                    level.setBlock(BlockPos(x, FLOOR_Y, z), floor.defaultBlockState(), BUILD)
+                    for (y in FLOOR_Y + 1..FLOOR_Y + HEADROOM) {
+                        level.setBlock(BlockPos(x, y, z), Blocks.AIR.defaultBlockState(), BUILD)
+                    }
+                }
+            }
+        }
+
+        /**
+         * A nether portal a player could have lit: an obsidian frame with the
+         * portal burning inside it, [at] being its bottom-west block.
+         *
+         * The frame goes in whole before the portal does, because a portal
+         * standing in a frame that is not finished is not a shape vanilla
+         * recognises.
+         */
+        private fun portal(level: ServerLevel, at: BlockPos) {
+            for (dx in -1..PORTAL_WIDTH) {
+                level.setBlock(at.offset(dx, -1, 0), Blocks.OBSIDIAN.defaultBlockState(), BUILD)
+                level.setBlock(at.offset(dx, PORTAL_HEIGHT, 0), Blocks.OBSIDIAN.defaultBlockState(), BUILD)
+            }
+            for (dy in 0 until PORTAL_HEIGHT) {
+                level.setBlock(at.offset(-1, dy, 0), Blocks.OBSIDIAN.defaultBlockState(), BUILD)
+                level.setBlock(at.offset(PORTAL_WIDTH, dy, 0), Blocks.OBSIDIAN.defaultBlockState(), BUILD)
+            }
+            val burning = Blocks.NETHER_PORTAL.defaultBlockState()
+                .setValue(NetherPortalBlock.AXIS, Direction.Axis.X)
+            for (dx in 0 until PORTAL_WIDTH) {
+                for (dy in 0 until PORTAL_HEIGHT) {
+                    level.setBlock(at.offset(dx, dy, 0), burning, BUILD)
+                }
+            }
+        }
+
+        /**
+         * [file] copied out of this server's own [role] and into [levelDir] as
+         * Secondary's.
+         *
+         * Which dimension a chunk is in is a fact about the folder it sits in
+         * and about nothing inside it, so this copy is the whole of what makes
+         * these chunks Secondary's — and it is also exactly how they got to be
+         * Secondary's in production, where the Portal cutover filed a second
+         * vanilla server's region files under Secondary's dimension folders.
+         */
+        private fun carry(
+            server: MinecraftServer,
+            levelDir: Path,
+            role: DimensionRole,
+            file: RegionFilePos,
+        ) {
+            val from = Footprint.storageFolder(
+                server.getWorldPath(LevelResource.ROOT),
+                WorldLayout.PRIMARY.dimension(role),
+            )
+            val into = Footprint.storageFolder(levelDir, WorldLayout.SECONDARY.dimension(role))
+            var carried = 0
+            for (folder in Footprint.CHUNK_DIRECTORIES) {
+                val source = from.resolve(folder).resolve(file.fileName)
+                if (Files.notExists(source)) continue
+                val destination = into.resolve(folder).resolve(file.fileName)
+                Files.createDirectories(destination.parent)
+                Files.copy(source, destination, StandardCopyOption.REPLACE_EXISTING)
+                carried++
+            }
+            check(carried > 0) {
+                "this server wrote no ${file.fileName} in ${role.id} for Secondary to be built out of"
+            }
+        }
+
+        private fun level(server: MinecraftServer, dimension: ResourceKey<Level>): ServerLevel =
+            checkNotNull(server.getLevel(dimension)) {
+                "${dimension.identifier()} is not loaded on this server"
+            }
 
         private fun deleteRecursively(directory: Path) {
             if (Files.notExists(directory)) return
