@@ -42,6 +42,10 @@ object WorldMergeMain {
           ${MergeEnd.OPT_IN}    go ahead even though Regions, players or Embassy destinations
                                 are still anchored in Secondary's End. Their builds there are
                                 DELETED. Run without it first and read what it names
+          --sample <n>          relocated chunks of EACH dimension to compare block for block
+                                against the chunks they came from. A mismatch fails the merge;
+                                0 compares nothing and proves nothing
+                                                                       [default: ${WorldMerge.DEFAULT_SAMPLE}]
     """.trimIndent()
 
     @JvmStatic
@@ -107,6 +111,7 @@ object WorldMergeMain {
             ?: WorldMerge.DEFAULT_SEARCH_LIMIT,
         planOnly = options.containsKey("plan-only"),
         acceptEndLoss = options.containsKey(MergeEnd.OPT_IN.removePrefix("--")),
+        sample = options["sample"]?.let { number("sample", it) } ?: WorldMerge.DEFAULT_SAMPLE,
     )
 
     /**

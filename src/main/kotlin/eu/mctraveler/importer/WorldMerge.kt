@@ -37,9 +37,18 @@ data class MergePlan(
      * happens to them (merge spec, "The End"). See [MergeEnd].
      */
     val acceptEndLoss: Boolean = false,
+
+    /**
+     * How many relocated chunks of each dimension are compared block for block
+     * against the chunks they came from before the merge commits. The operator's
+     * to choose, because it is rehearsal time traded against confidence (merge
+     * spec, User Story 19); see [SampledDiff].
+     */
+    val sample: Int = WorldMerge.DEFAULT_SAMPLE,
 ) {
     init {
         require(clearance >= 0) { "the clearance cannot be negative, got $clearance" }
+        require(sample >= 0) { "the sample size cannot be negative, got $sample" }
         require(searchLimit in 1..WorldMerge.MAX_SEARCH_LIMIT) {
             "the search limit must be between 1 and ${WorldMerge.MAX_SEARCH_LIMIT} steps of " +
                 "${MergeGeometry.OFFSET_ALIGNMENT} blocks, got $searchLimit"
@@ -394,6 +403,14 @@ class WorldMerge(private val plan: MergePlan) {
 
         /** Lattice steps the search looks out to by default: 64 × 4096 blocks, well inside the world border. */
         const val DEFAULT_SEARCH_LIMIT = 64
+
+        /**
+         * Chunks of each relocated dimension compared against their source
+         * unless the operator says otherwise. Enough that a relocation which
+         * lost a region file cannot hide behind the ones that landed, cheap
+         * enough that nobody is tempted to turn it off to save a minute.
+         */
+        const val DEFAULT_SAMPLE = 64
 
         /** As far as the search will ever be asked to look, so a slip cannot ask for millions of slots. */
         const val MAX_SEARCH_LIMIT = 256

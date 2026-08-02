@@ -41,6 +41,7 @@ data class MergeReport(
     val offset: MergeOffset get() = placement.offset
 
     val relocation: RelocationReport get() = section()
+    val sampled: SampledDiffReport get() = section()
     val audit: ChunkAuditReport get() = section()
     val regions: MergeRegionsReport get() = section()
     val players: PlayerSweepReport get() = section()
@@ -115,13 +116,18 @@ class MergeStaging(
                 offset = placement.offset,
                 tool = tool,
             ).run()
+            // The diff before the audit, deliberately: it compares the staged
+            // chunks against their sources, and the audit repairs lodestone
+            // targets in place — so an audit that ran first would leave changes
+            // the diff could only read as the relocation having gone wrong.
+            val sampled = SampledDiff(levelDir, stagedLevelDir, placement.offset, plan.sample).verify()
             val audit = ChunkAudit(stagedLevelDir, placement).run()
             val regions = MergeRegions(plan.targetDir, this, placement.offset).sweep()
             val players = PlayerSweep(plan, placement.offset).sweep(this)
             val end = MergeEnd(plan, this, placement.offset, players.anchoredInSecondaryEnd).close()
             val respawns = RespawnBeds(plan, this, stagedLevelDir).check()
             stampAsMerged(placement)
-            MergeReport(placement, listOf(relocation, audit, regions, players, end, respawns))
+            MergeReport(placement, listOf(relocation, sampled, audit, regions, players, end, respawns))
         } catch (failure: Throwable) {
             // The merge only ever copies — `--worlds move` is deliberately not
             // offered — so nothing here is the last copy of anything, and the

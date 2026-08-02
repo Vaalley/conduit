@@ -23,8 +23,14 @@ import java.nio.file.Path
  * The jobs below are the only two the merge asks for, spelled out as the tool's
  * own flags so that what runs on the night can be read off the source and typed
  * by hand if it ever has to be.
+ *
+ * It is the merge's one narrow seam onto something we did not write (merge spec,
+ * "Relocation"), and it is substitutable in both directions on purpose: the tests
+ * drive the real thing, and a test that has to prove a *later* phase catches what
+ * the tool got wrong can stand in for it rather than wait for the tool to go
+ * wrong on its own.
  */
-class McaSelector(private val jar: Path, private val java: Path = currentJava()) {
+open class McaSelector(private val jar: Path, private val java: Path = currentJava()) {
 
     /**
      * The chunks under [from] that vanilla has finished generating, written to
@@ -47,6 +53,17 @@ class McaSelector(private val jar: Path, private val java: Path = currentJava())
         "--world", from.toString(),
         "--query", "Status = $FULL_STATUS",
         "--output", into.toString(),
+        // Single-threaded, because the tool's selection races: `Selection.merge`
+        // is handed to `ChunkFilterSelector.selectFilter` as a per-job callback
+        // and mutates a non-thread-safe map, so about one run in twenty silently
+        // loses a whole region file's worth of chunks — player builds left behind
+        // in Secondary, with the merge reporting success. One thread was stable
+        // in 120 of 120 runs where the default lost 5.
+        //
+        // This is a stopgap the merge can afford: selecting is a header scan, so
+        // the cost is small beside the relocation it feeds. Ticket 16 fixes the
+        // race in a patched build of the tool, and this line goes with it.
+        "--process-threads", "1",
     )
 
     /**
@@ -68,7 +85,7 @@ class McaSelector(private val jar: Path, private val java: Path = currentJava())
      * "no files" and returns **successfully** having done nothing, so callers
      * must check what arrived rather than trust the exit status.
      */
-    fun relocate(from: Path, into: Path, selection: Path, chunksX: Int, chunksZ: Int): String = run(
+    open fun relocate(from: Path, into: Path, selection: Path, chunksX: Int, chunksZ: Int): String = run(
         "relocating $from into $into",
         "--mode", "import",
         "--world", into.toString(),
