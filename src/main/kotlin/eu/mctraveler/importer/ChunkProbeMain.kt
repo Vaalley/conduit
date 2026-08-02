@@ -88,6 +88,40 @@ object ChunkProbeMain {
         }
         println("  xPos/zPos        : ${fields.getIntOr("xPos", 999999)}, ${fields.getIntOr("zPos", 999999)}")
         println("  sections         : ${sections.size}")
+
+        // Anything carrying an id, with wherever it says it is. The audit reports
+        // entity ids, so this is what lets a refusal be traced back to a thing.
+        for (list in listOf("block_entities", "TileEntities", "Entities")) {
+            val found = fields.getListOrEmpty(list)
+            if (found.isEmpty()) continue
+            println("  $list: ${found.size}")
+            for (i in 0 until minOf(found.size, 40)) {
+                val it = found.getCompoundOrEmpty(i)
+                val id = it.getStringOr("id", "?")
+                if (!id.contains("bee", ignoreCase = true) && !it.contains("bees")) continue
+                val pos = it.getListOrEmpty("Pos")
+                val at = if (pos.isEmpty) {
+                    "x/y/z ${it.getIntOr("x", 0)},${it.getIntOr("y", 0)},${it.getIntOr("z", 0)}"
+                } else {
+                    "Pos ${pos.getDoubleOr(0, 0.0)},${pos.getDoubleOr(1, 0.0)},${pos.getDoubleOr(2, 0.0)}"
+                }
+                println("      $id  $at  keys=${it.keySet().sorted()}")
+                val bees = it.getListOrEmpty("bees")
+                for (b in 0 until bees.size) {
+                    val bee = bees.getCompoundOrEmpty(b)
+                    println("        bees[$b] keys=${bee.keySet().sorted()}")
+                    for (nested in listOf("entity_data", "EntityData")) {
+                        val data = bee.getCompoundOrEmpty(nested)
+                        if (data.isEmpty) continue
+                        val p = data.getListOrEmpty("Pos")
+                        println(
+                            "          $nested id=${data.getStringOr("id", "?")} " +
+                                "Pos=${(0 until p.size).map { p.getDoubleOr(it, 0.0) }}",
+                        )
+                    }
+                }
+            }
+        }
         val ys = (0 until sections.size).map { sections.getCompoundOrEmpty(it) }
         println("  section Y values : ${ys.map { it.getIntOr("Y", -999) }.sorted()}")
         for (section in ys.sortedBy { it.getIntOr("Y", -999) }) {
