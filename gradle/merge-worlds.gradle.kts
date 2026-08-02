@@ -133,9 +133,12 @@ val provideMcaSelector = tasks.register("provideMcaSelector") {
 
 // ---- the command and its tests ---------------------------------------------
 
-// Both the command and the tests run the *same* verified jar, which is what makes
+// The command and *both* test tiers run the same verified jar, which is what makes
 // the merge tests evidence: no test stubs the relocation (merge spec, "Testing
-// Decisions").
+// Decisions"). The gametest tier is here for the same reason as the unit one — it
+// runs a real merge and then boots this server on what came out of it (ticket 11),
+// so a stand-in there would prove the game reads a fixture rather than the merge's
+// own output.
 val mcaSelectorProperty = "mctraveler.mcaSelectorJar"
 
 /** How many times McaSelectorSelectionTest asks for the same selection. */
@@ -164,4 +167,13 @@ tasks.named<Test>("test") {
     providers.systemProperty(selectionRunsProperty).orNull?.let {
         systemProperty(selectionRunsProperty, it)
     }
+}
+
+// WorldMergeGameTest runs a whole merge inside the booted server and then reads its
+// output back through the live code, so the gametest JVM needs the tool exactly as
+// the unit tier and the command do. Without this the gametest would have to stand in
+// for the relocation, and a merge gametest driving a stub is a gametest about a stub.
+tasks.named<JavaExec>("runGameTest") {
+    inputs.files(provideMcaSelector)
+    systemProperty(mcaSelectorProperty, mcaSelectorJar.get().asFile.absolutePath)
 }
