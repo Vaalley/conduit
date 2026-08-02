@@ -369,15 +369,21 @@ class SampledDiff(
     private fun blocksDiffer(source: CompoundTag, landed: CompoundTag): String? {
         val from = fieldsOf(source)
         val to = fieldsOf(landed)
-        val was = from.of.getListOrEmpty(from.sections)
-        val now = to.of.getListOrEmpty(to.sections)
-        if (was.size != now.size) {
-            return "its blocks did not all arrive: the source has ${was.size} section" +
-                "${plural(was.size)} and ${now.size} arrived"
+        val was = blockBearing(from)
+        val now = blockBearing(to)
+        val missing = (was.keys - now.keys).sorted()
+        if (missing.isNotEmpty()) {
+            return "its blocks did not all arrive: section${plural(missing.size)} y " +
+                "${missing.joinToString(", ")} of the source ${if (missing.size == 1) "is" else "are"} " +
+                "not there"
         }
-        val differing = (0 until was.size).firstOrNull { was[it] != now[it] } ?: return null
-        return "its blocks differ: section y ${was.getCompoundOrEmpty(differing).getIntOr(SECTION_Y, 0)} " +
-            "is not the section the source has there"
+        val extra = (now.keys - was.keys).sorted()
+        if (extra.isNotEmpty()) {
+            return "it has blocks the source does not: section${plural(extra.size)} y " +
+                "${extra.joinToString(", ")} arrived from nowhere"
+        }
+        val differing = was.keys.sorted().firstOrNull { was[it] != now[it] } ?: return null
+        return "its blocks differ: section y $differing is not the section the source has there"
     }
 
     /**
@@ -457,6 +463,28 @@ class SampledDiff(
      */
     private class Fields(val of: CompoundTag, val sections: String, val blockEntities: String)
 
+    /**
+     * The sections that actually hold blocks, by the height they sit at.
+     *
+     * A save carries sections that hold nothing but their own index — the live
+     * Secondary has chunks whose lowest section is exactly `{Y: -1}`, with no
+     * palette, no block states and no light. Vanilla reads an absent section as
+     * air and so reads one of these as air too, and the relocation drops them on
+     * the way through.
+     *
+     * That is a normalisation rather than a loss, and comparing raw section
+     * *lists* could not tell the two apart: it read one stub going missing as
+     * "its blocks did not all arrive" and refused a merge over ground that is not
+     * there in either copy. Keying by Y and comparing only what carries blocks
+     * says the thing actually meant — every block the source had is a block that
+     * arrived, at the height it was at — and it still fails, loudly, on a section
+     * that holds something and goes missing.
+     */
+    private fun blockBearing(fields: Fields): Map<Int, CompoundTag> =
+        compounds(fields.of.getListOrEmpty(fields.sections))
+            .filter { section -> BLOCK_DATA.any(section::contains) }
+            .associateBy { it.getIntOr(SECTION_Y, Int.MIN_VALUE) }
+
     private fun fieldsOf(chunk: CompoundTag): Fields {
         val level = chunk.getCompoundOrEmpty(LEVEL)
         return if (level.isEmpty) {
@@ -492,6 +520,12 @@ class SampledDiff(
         const val LEVEL = "Level"
         const val LEGACY_SECTIONS = "Sections"
         const val LEGACY_BLOCK_ENTITIES = "TileEntities"
+
+        /**
+         * What makes a section a section rather than a placeholder — in either
+         * layout, since both spellings turn up in one save.
+         */
+        val BLOCK_DATA = listOf("block_states", "BlockStates", "Palette")
         const val SECTION_Y = "Y"
         const val BLOCK_ENTITIES = "block_entities"
         const val ENTITY_LIST = "Entities"
