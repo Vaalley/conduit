@@ -2,17 +2,40 @@ package eu.mctraveler.gametest
 
 import eu.mctraveler.importer.Footprint
 import eu.mctraveler.importer.MergeOffset
+import eu.mctraveler.importer.MergePlan
 import eu.mctraveler.importer.MergeReport
+import eu.mctraveler.importer.RegionFilePos
 import eu.mctraveler.importer.WorldLayout
+import eu.mctraveler.importer.WorldMerge
 import eu.mctraveler.region.Region
 import eu.mctraveler.region.RegionService
 import eu.mctraveler.worlds.BankedPositions
 import eu.mctraveler.worlds.DimensionRole
+import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
+import java.util.Comparator
 import java.util.UUID
 import net.minecraft.core.BlockPos
+import net.minecraft.core.Direction
+import net.minecraft.nbt.NbtAccounter
+import net.minecraft.nbt.NbtIo
 import net.minecraft.server.MinecraftServer
+import net.minecraft.server.level.ServerLevel
+import net.minecraft.server.level.ServerPlayer
+import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.Items
 import net.minecraft.world.level.ChunkPos
+import net.minecraft.world.level.Level
+import net.minecraft.world.level.block.BedBlock
+import net.minecraft.world.level.block.Block
+import net.minecraft.world.level.block.Blocks
+import net.minecraft.world.level.block.HorizontalDirectionalBlock
+import net.minecraft.world.level.block.NetherPortalBlock
+import net.minecraft.world.level.block.entity.ChestBlockEntity
+import net.minecraft.world.level.block.state.properties.BedPart
+import net.minecraft.world.level.storage.LevelData
+import net.minecraft.world.level.storage.LevelResource
 import net.minecraft.world.phys.Vec3
 
 /**
@@ -71,6 +94,46 @@ class MergedSave private constructor(
 
     /** [uuid]'s save as the player sweep rewrote it. */
     fun playerSave(uuid: UUID): Path = levelDir.resolve("playerdata/$uuid.dat")
+
+    /**
+     * The relocated chunk data copied into the dimensions this server actually
+     * has, which is the whole of what "booting on a merged save" can mean inside
+     * a gametest: there is one server and it is already running, so the merged
+     * save is brought to it rather than the other way round. `MigrationGameTest`
+     * and `OrphanedSaveClaimGameTest` reach a live server the same way.
+     *
+     * Only Primary's dimensions are copied, because only Primary's exist here.
+     * Secondary's folders stay in [runDir] untouched, which is the trap in the
+     * class note made harmless: what this server is given is exactly the half of
+     * the merged save it is able to read.
+     *
+     * A merge that relocated nothing would leave nothing to copy, and this
+     * refuses rather than letting every case below quietly assert things about
+     * terrain the server generated for itself.
+     */
+    private fun layIntoThisServer(server: MinecraftServer) {
+        val liveLevelDir = server.getWorldPath(LevelResource.ROOT)
+        var copied = 0
+        for (role in listOf(DimensionRole.OVERWORLD, DimensionRole.NETHER)) {
+            val into = Footprint.storageFolder(liveLevelDir, WorldLayout.PRIMARY.dimension(role))
+            for (folder in Footprint.CHUNK_DIRECTORIES) {
+                val from = primaryStorage(role).resolve(folder)
+                if (!Files.isDirectory(from)) continue
+                Files.newDirectoryStream(from, "r.*.mca").use { files ->
+                    for (file in files) {
+                        val destination = into.resolve(folder).resolve(file.fileName.toString())
+                        Files.createDirectories(destination.parent)
+                        Files.copy(file, destination, StandardCopyOption.REPLACE_EXISTING)
+                        copied++
+                    }
+                }
+            }
+        }
+        check(copied > 0) {
+            "the merge left no relocated chunk data in $levelDir to lay into this server, so nothing " +
+                "the cases read back could have come from it"
+        }
+    }
 
     companion object {
 
@@ -177,6 +240,56 @@ class MergedSave private constructor(
         fun of(server: MinecraftServer): MergedSave =
             merged ?: build(server).also { merged = it }
 
-        private fun build(server: MinecraftServer): MergedSave = TODO("filled in below")
+        /**
+         * The whole operation: a two-World save assembled out of chunks this
+         * server wrote, the merge run against it, and what came out laid into
+         * this server's own dimensions.
+         *
+         * The order is the cutover's own. Everything Secondary is put on disk
+         * first, because the merge reads a stopped server's run directory and
+         * has to find one; the merge runs; and only then is anything handed to
+         * the live server, which is the point at which the game gets to have an
+         * opinion about what the tool produced.
+         */
+        private fun build(server: MinecraftServer): MergedSave {
+            val root = Files.createTempDirectory("mctraveler-merge-gametest")
+            // Cleaned up when the run ends rather than when a case does: one
+            // merge serves every case, so no case owns it, and a JVM that dies
+            // mid-suite leaves the whole thing standing for a post-mortem —
+            // which is what the merge's own staging discipline does too.
+            Runtime.getRuntime().addShutdownHook(Thread { deleteRecursively(root) })
+
+            val runDir = root.resolve("run")
+            Files.createDirectories(runDir.resolve("mctraveler/players"))
+            Files.writeString(runDir.resolve("regions.json"), regionsJson())
+            val levelDir = runDir.resolve("world")
+
+            writeSecondarysChunks(server, levelDir)
+            writeSettlersSave(server, levelDir)
+            Files.writeString(runDir.resolve("mctraveler/players/$SIGNPOST.json"), signpostRecord())
+
+            // The claim the whole suite rests on, asserted rather than assumed:
+            // Primary's dimensions hold nothing at all going in, so anything a
+            // booted server reads out of them afterwards was put there by the
+            // merge and by nothing else.
+            for (role in listOf(DimensionRole.OVERWORLD, DimensionRole.NETHER)) {
+                val primary = Footprint.storageFolder(levelDir, WorldLayout.PRIMARY.dimension(role))
+                check(Files.notExists(primary)) {
+                    "$primary already holds chunk data before the merge has run, so nothing below " +
+                        "would be evidence that the merge put it there"
+                }
+            }
+
+            val merged = MergedSave(runDir, WorldMerge(MergePlan(targetDir = runDir, offset = OFFSET)).run())
+            merged.layIntoThisServer(server)
+            return merged
+        }
+
+        private fun deleteRecursively(directory: Path) {
+            if (Files.notExists(directory)) return
+            Files.walk(directory).use { paths ->
+                paths.sorted(Comparator.reverseOrder()).forEach(Files::deleteIfExists)
+            }
+        }
     }
 }
