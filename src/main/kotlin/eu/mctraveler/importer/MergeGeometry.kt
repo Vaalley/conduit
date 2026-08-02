@@ -108,14 +108,17 @@ data class MergeOffset(val x: Int, val z: Int) {
     fun mergedZ(z: Int, role: DimensionRole): Int = z + shiftZ(role)
 
     /**
-     * The merged X a Secondary X becomes, in [role], for the coordinates that are
-     * a *position* rather than a block: a saved embassy destination, a player's
-     * stance, an entity. Exactly the same move — it lives here rather than at the
-     * call sites so that nothing outside this type ever adds a shift by hand.
+     * The merged X a Secondary X becomes, in [role], for the places a save
+     * records to the fraction of a block: a player's own position, the vehicle
+     * they logged out inside, the point they entered the nether from, a saved
+     * embassy destination. The shift is a whole number of blocks, so the
+     * fraction survives it exactly and a player logs in standing where they
+     * logged out rather than snapped to a block corner. It lives here rather
+     * than at the call sites so nothing outside this type adds a shift by hand.
      */
     fun mergedX(x: Double, role: DimensionRole): Double = x + shiftX(role)
 
-    /** The merged Z a Secondary Z becomes, in [role]. See the [Double] [mergedX]. */
+    /** The merged Z a Secondary Z becomes, to the fraction of a block; see [mergedX]. */
     fun mergedZ(z: Double, role: DimensionRole): Double = z + shiftZ(role)
 
     /**

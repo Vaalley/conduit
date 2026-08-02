@@ -42,6 +42,7 @@ data class MergeReport(
 
     val relocation: RelocationReport get() = section()
     val regions: MergeRegionsReport get() = section()
+    val players: PlayerSweepReport get() = section()
 
     fun lines(): List<String> = placement.lines() + sections.flatMap(MergeSection::lines)
 
@@ -114,8 +115,9 @@ class MergeStaging(
                 tool = tool,
             ).run()
             val regions = MergeRegions(plan.targetDir, this, placement.offset).sweep()
+            val players = PlayerSweep(plan, placement.offset).sweep(this)
             stampAsMerged(placement)
-            MergeReport(placement, listOf(relocation, regions))
+            MergeReport(placement, listOf(relocation, regions, players))
         } catch (failure: Throwable) {
             // The merge only ever copies — `--worlds move` is deliberately not
             // offered — so nothing here is the last copy of anything, and the

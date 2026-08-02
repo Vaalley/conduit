@@ -3,6 +3,10 @@ package eu.mctraveler.importer
 import eu.mctraveler.worlds.DimensionRole
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.UUID
+import net.minecraft.nbt.CompoundTag
+import net.minecraft.nbt.NbtAccounter
+import net.minecraft.nbt.NbtIo
 
 /**
  * The live server's run directory as the merge finds it on the night: one save
@@ -131,6 +135,47 @@ class MergedDeploymentFixture(val root: Path) {
 
     /** The stamp a completed merge leaves behind, as a later run must refuse to see. */
     fun stampAsMerged(json: String = """{"mergedAt":"2026-01-01T00:00:00Z"}""") = write(mergeStamp, json)
+
+    // ---- players ------------------------------------------------------------
+    //
+    // A player is two files in two different places — vanilla's own save inside
+    // the level, and the mod's record beside it — and the merge has to agree with
+    // itself about both. Written and read back here by their real spellings, so a
+    // test asserts on what a booting server would actually find.
+
+    /** Vanilla's save for [uuid], as `PlayerDataStorage` writes it. */
+    fun playerSave(uuid: UUID, tag: CompoundTag) {
+        val file = playerdata(uuid, ".dat")
+        Files.createDirectories(file.parent)
+        NbtIo.writeCompressed(tag, file)
+    }
+
+    /** Vanilla's backup of [uuid]'s save — the file `PlayerDataStorage.load` falls back to. */
+    fun playerSaveBackup(uuid: UUID, tag: CompoundTag) {
+        val file = playerdata(uuid, ".dat_old")
+        Files.createDirectories(file.parent)
+        NbtIo.writeCompressed(tag, file)
+    }
+
+    /** The mod's record for [uuid], verbatim — so a test can put legacy fields in it. */
+    fun playerRecord(uuid: UUID, json: String) = write(recordFile(uuid), json)
+
+    fun savedPlayer(uuid: UUID): CompoundTag =
+        NbtIo.readCompressed(playerdata(uuid, ".dat"), NbtAccounter.unlimitedHeap())
+
+    fun savedPlayerBackup(uuid: UUID): CompoundTag =
+        NbtIo.readCompressed(playerdata(uuid, ".dat_old"), NbtAccounter.unlimitedHeap())
+
+    fun savedRecord(uuid: UUID): String = Files.readString(recordFile(uuid))
+
+    /** The banked positions the merge left for the signpost, or null if it wrote none. */
+    fun bankedPositions(): String? =
+        targetDir.resolve("mctraveler/banked-positions.json").takeIf(Files::exists)?.let(Files::readString)
+
+    private fun playerdata(uuid: UUID, suffix: String): Path =
+        levelDir.resolve("playerdata/$uuid$suffix")
+
+    private fun recordFile(uuid: UUID): Path = targetDir.resolve("mctraveler/players/$uuid.json")
 
     /** Every file in the run directory, by path and size — the whole of what "wrote nothing" means. */
     fun contents(): Map<String, Long> {

@@ -117,7 +117,8 @@ val mcaSelectorProperty = "mctraveler.mcaSelectorJar"
 
 tasks.register<JavaExec>("mergeWorlds") {
     group = "migration"
-    description = "Merges Secondary's landmass into Primary in a stopped server's run directory."
+    description = "Moves Secondary's landmass into Primary in a stopped server's run directory, " +
+        "sweeping everything that named a place in it."
     // The mod's own runtime classpath: the merge reuses the live region service,
     // player store and World layout rather than reimplementing any of them.
     classpath = sourceSets["main"].runtimeClasspath
