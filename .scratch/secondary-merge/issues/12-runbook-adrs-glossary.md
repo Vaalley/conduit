@@ -77,3 +77,59 @@ not on it. The audit refuses on those, naming the bee and the chunk, so it is a 
 than a silent loss — but it *is* a refusal the operator cannot clear, and a rehearsal against
 production is what will say whether Secondary has any bees in a relocated chunk. That is worth
 finding out before the downtime window rather than during it.
+
+### From ticket 13 — what the runbook must say about the border and the bleed
+
+**The two options, and what they mean.**
+
+```
+--border <blocks>   Secondary's world border, in blocks from the origin on each
+                    horizontal axis.                              [default: 50000]
+--bleed <blocks>    how far past it terrain is still carried.       [default: 512]
+```
+
+`--border 50000` is the border Secondary actually ran, given by the operator. It is not a
+number the tool can measure, so if it is wrong nothing will say so — it is the one value in
+the merge that has to be checked against the server's own configuration before the night.
+Chunks past the border are **left behind**: not moved, not deleted, still in Secondary's
+folders after the merge, and gone for good when ticket 09 removes those folders.
+
+`--bleed 512` is one region file. It exists so the ground does not end at a visible wall at
+the border, and it is the smallest value that can do anything at all, because the clip
+carries whole region files.
+
+**Both are echoed in every plan**, as `Secondary's border` and `left outside the border`, so
+a rehearsal and the real run can be compared line for line. Rehearse first and read those two
+lines: `left outside the border : nothing` is the expected answer, and anything else is a
+number to look at before the downtime window rather than during it.
+
+**Reading `left outside the border`.** It names region files, not chunks, and states how far
+past the border the furthest one reached. Tens of thousands of blocks out is a stray teleport
+or an admin excursion and is exactly what the clip is for. A few hundred blocks past the
+border, or a lot of files, is somebody's base — stop and find out whose before running the
+merge, because the clip will leave it behind and the merge will not say so again.
+
+**The border is not divided by eight in the nether.** It is a vanilla world border, which
+applies at the same coordinates in every dimension, so the nether is clipped at ±50,000
+*nether* blocks. That is deliberate and is what catches a stray in the nether at all.
+
+**Three things are counted rather than refused over**, all in the report, all consequences of
+the operator's own decision that a merge should not be gated on them:
+
+- `Regions outside border` and `destinations outside it` — swept onto Primary like any other,
+  but the chunks under them stayed in Secondary, so they will protect terrain regenerated
+  from Primary's seed.
+- `players outside border` — moved like everyone else, and they will log in somewhere that
+  looks nothing like where they logged out.
+- `beds outside the border` — their owners will respawn at the world spawn instead.
+
+If any of those is non-zero, the people concerned need telling. They are named in no other
+report, so the count is the only warning there will be.
+
+**Two refusals the border can produce:**
+
+- *"Secondary's border of ±N blocks … carries none of Secondary's chunk data"* — `--border`
+  or `--bleed` is wrong, or the target is not the save you think it is. Nothing was written.
+- *"a merge offset must be a multiple of 4096 blocks"* and *"Secondary's border must be at
+  least 512 blocks from the origin"* — both are argument mistakes, refused before the merge
+  reads anything.

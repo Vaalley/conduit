@@ -14,14 +14,34 @@ data class DimensionRelocation(
     val dropped: Int,
     val files: Int,
     val bytes: Long,
+    /**
+     * Chunks left behind because they sit outside Secondary's world border and
+     * the bleed past it (ticket 13). Nothing to do with [dropped]: these are
+     * chunks vanilla finished, in region files the clip does not carry, and the
+     * two counts never overlap.
+     */
+    val outsideBorder: Int = 0,
 ) {
     fun lines(): List<String> = listOf(
         role.id,
         reportLine("  chunks relocated", "$relocated"),
         reportLine("  chunks dropped", "$dropped (not fully generated)"),
+    ) + outsideBorderLine() + listOf(
         reportLine("  files written", "$files"),
         reportLine("  bytes transferred", "$bytes"),
     )
+
+    /**
+     * Said only when there were any, because on a Secondary that never generated
+     * anything past its border there is nothing here to report — and a merge that
+     * printed a zero would invite the operator to wonder what it had thrown away.
+     * [BorderClipReport] states the border itself either way.
+     */
+    private fun outsideBorderLine(): List<String> = if (outsideBorder == 0) {
+        emptyList()
+    } else {
+        listOf(reportLine("  chunks outside border", "$outsideBorder (past Secondary's world border)"))
+    }
 }
 
 /** Something of Secondary's the merge deliberately did not carry across. */
@@ -35,6 +55,9 @@ data class RelocationReport(
     val relocated: Int get() = dimensions.sumOf { it.relocated }
     val dropped: Int get() = dimensions.sumOf { it.dropped }
     val bytes: Long get() = dimensions.sumOf { it.bytes }
+
+    /** Chunks the border clip left in Secondary, across every relocated dimension (ticket 13). */
+    val outsideBorder: Int get() = dimensions.sumOf { it.outsideBorder }
 
     fun dimension(role: DimensionRole): DimensionRelocation = dimensions.first { it.role == role }
 
@@ -73,6 +96,12 @@ data class RelocationReport(
  * (merge spec, "The End"), as is Secondary's level-wide saved data, which was
  * never imported at the Portal cutover either — both are counted and named in
  * the report so the loss is stated rather than silent.
+ *
+ * [SecondaryBorder] narrows the first of those two passes. The selection the tool
+ * produces is filtered down to the region files inside Secondary's world border
+ * plus its bleed before it is handed back to the tool to import, so a chunk out
+ * beyond the border is never written anywhere — the same shape as the frontier
+ * drop above, and for the same reason.
  */
 class ChunkRelocation(
     private val levelDir: Path,
@@ -81,6 +110,8 @@ class ChunkRelocation(
     /** Scratch space for the tool's own files, inside staging and never committed. */
     private val workDir: Path,
     private val offset: MergeOffset,
+    /** How much of Secondary comes across at all; see [SecondaryBorder] and ticket 13. */
+    private val border: SecondaryBorder,
     private val tool: McaSelector,
 ) {
 
@@ -95,23 +126,38 @@ class ChunkRelocation(
      */
     private fun relocate(role: DimensionRole): DimensionRelocation? {
         val from = Footprint.storageFolder(levelDir, WorldLayout.SECONDARY.dimension(role))
-        val sourceFiles = regionFilesIn(from.resolve(TERRAIN))
+        val terrain = from.resolve(TERRAIN)
+        val sourceFiles = regionFilesIn(terrain).mapNotNull { RegionFilePos.parse(it.name) }
         if (sourceFiles.isEmpty()) return null
 
+        // Everything the border keeps out is counted off disk, the same way every
+        // other count here is, rather than inferred from what the tool said.
+        val (carried, outside) = sourceFiles.partition(border::keeps)
+        val outsideBorder = outside.sumOf { chunksIn(terrain.resolve(it.fileName)) }
+
         val into = Footprint.storageFolder(stagedLevelDir, WorldLayout.PRIMARY.dimension(role))
-        prepareDestination(into, sourceFiles, role)
+        prepareDestination(into, carried, role)
 
         Files.createDirectories(workDir)
         val selection = workDir.resolve("finished-${role.id}.csv")
         tool.select(from, selection)
-        val selected = chunksNamedBy(selection)
-        val output = tool.relocate(
-            from = from,
-            into = into,
-            selection = selection,
-            chunksX = offset.shiftX(role) / BLOCKS_PER_CHUNK,
-            chunksZ = offset.shiftZ(role) / BLOCKS_PER_CHUNK,
-        )
+        val inside = workDir.resolve("inside-the-border-${role.id}.csv")
+        val selected = clipToTheBorder(selection, inside, carried.toSet())
+
+        // Nothing survived the clip in this dimension, so there is no import to
+        // ask for — and asking anyway would be asking the tool to prove a
+        // negative it answers "no files" to either way.
+        val output = if (selected == 0) {
+            ""
+        } else {
+            tool.relocate(
+                from = from,
+                into = into,
+                selection = inside,
+                chunksX = offset.shiftX(role) / BLOCKS_PER_CHUNK,
+                chunksZ = offset.shiftZ(role) / BLOCKS_PER_CHUNK,
+            )
+        }
 
         dropEmptyFiles(into)
         val relocated = chunksUnder(into.resolve(TERRAIN))
@@ -128,10 +174,49 @@ class ChunkRelocation(
         return DimensionRelocation(
             role = role,
             relocated = relocated,
-            dropped = chunksUnder(from.resolve(TERRAIN)) - relocated,
+            // What is left over once the arrivals and the border's exiles are
+            // taken off the source count is exactly the frontier, so "dropped"
+            // goes on meaning what it has always meant.
+            dropped = chunksUnder(terrain) - relocated - outsideBorder,
             files = staged.size,
             bytes = staged.sumOf(Files::size),
+            outsideBorder = outsideBorder,
         )
+    }
+
+    /**
+     * [selection] with every chunk outside the border struck out, written to
+     * [into] and counted (ticket 13).
+     *
+     * MCA Selector writes one line per chunk as `region x;region z;chunk x;chunk
+     * z`, and a two-field line when a whole region file was selected — so the
+     * first two fields name the file either way, and are all the clip has to
+     * read to decide a line's fate.
+     *
+     * Filtering the tool's own selection rather than asking it a narrower
+     * question is what keeps the clip from being a second opinion about which
+     * chunks are finished: the selection that reaches the import is the one the
+     * tool produced, minus whole region files. [carried] is a set of region file
+     * positions for exactly that reason — the clip's unit is the file, so a line
+     * is kept or struck by which file it names and never by the chunk.
+     */
+    private fun clipToTheBorder(selection: Path, into: Path, carried: Set<RegionFilePos>): Int {
+        if (Files.notExists(selection)) return 0
+        var chunks = 0
+        val kept = mutableListOf<String>()
+        for (line in Files.readAllLines(selection)) {
+            if (line.isBlank()) continue
+            val fields = line.split(';')
+            require(line != "inverted") {
+                "MCA Selector wrote an inverted selection to $selection, which the merge cannot count"
+            }
+            val file = RegionFilePos(fields[0].trim().toInt(), fields[1].trim().toInt())
+            if (file !in carried) continue
+            kept += line
+            chunks += if (fields.size == 2) CHUNKS_PER_REGION_FILE else 1
+        }
+        Files.write(into, kept)
+        return chunks
     }
 
     /**
@@ -144,9 +229,14 @@ class ChunkRelocation(
      * to fill is therefore not a convenience but the thing that makes the
      * relocation happen, and it is only possible to know them in advance because
      * the offset moves whole region files.
+     *
+     * Only the files that are actually coming across get one. A destination
+     * prepared for a source file the border keeps out would be an empty region
+     * file staged for no reason, and [dropEmptyFiles] would have to clean it up
+     * again to stop it reaching Primary.
      */
-    private fun prepareDestination(into: Path, sourceFiles: List<Path>, role: DimensionRole) {
-        val destinations = sourceFiles.mapNotNull { RegionFilePos.parse(it.name) }
+    private fun prepareDestination(into: Path, sourceFiles: List<RegionFilePos>, role: DimensionRole) {
+        val destinations = sourceFiles
             .map { RegionFilePos(it.x + offset.regionFileShiftX(role), it.z + offset.regionFileShiftZ(role)) }
         for (folder in CHUNK_DIRECTORIES) {
             val directory = into.resolve(folder)
@@ -233,24 +323,6 @@ class ChunkRelocation(
             // An all-zero entry means nothing is stored at that position; what the
             // sector offset and length say when it is non-zero does not matter here.
             if ((0 until LOCATION_BYTES).any { header[at + it].toInt() != 0 }) chunks++
-        }
-        return chunks
-    }
-
-    /**
-     * How many chunks a selection names. MCA Selector writes one line per chunk
-     * as `region x;region z;chunk x;chunk z`, or a two-field line when a whole
-     * region file was selected.
-     */
-    private fun chunksNamedBy(selection: Path): Int {
-        if (Files.notExists(selection)) return 0
-        var chunks = 0
-        for (line in Files.readAllLines(selection)) {
-            if (line.isBlank()) continue
-            require(line != "inverted") {
-                "MCA Selector wrote an inverted selection to $selection, which the merge cannot count"
-            }
-            chunks += if (line.split(';').size == 2) CHUNKS_PER_REGION_FILE else 1
         }
         return chunks
     }

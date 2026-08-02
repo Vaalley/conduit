@@ -29,9 +29,10 @@ interface MergeSection {
  * reads as the beginning of the real run. Everything the phases did follows it,
  * in the order they ran.
  *
- * A plan carries no sections at all, so asking one for a phase's counts is a
- * question about work that never happened and [section] says so rather than
- * inventing a zero.
+ * A plan carries only the sections that were decided before anything was
+ * written — today [BorderClipReport], which states what of Secondary is coming
+ * across at all — so asking one for a *phase's* counts is a question about work
+ * that never happened, and [section] says so rather than inventing a zero.
  */
 data class MergeReport(
     val placement: MergePlacement,
@@ -40,6 +41,7 @@ data class MergeReport(
 ) {
     val offset: MergeOffset get() = placement.offset
 
+    val clip: BorderClipReport get() = section()
     val relocation: RelocationReport get() = section()
     val sampled: SampledDiffReport get() = section()
     val audit: ChunkAuditReport get() = section()
@@ -114,15 +116,17 @@ class MergeStaging(
                 stagedLevelDir = stagedLevelDir,
                 workDir = staging.resolve(WORK_DIRECTORY),
                 offset = placement.offset,
+                border = plan.border,
                 tool = tool,
             ).run()
             // The diff before the audit, deliberately: it compares the staged
             // chunks against their sources, and the audit repairs lodestone
             // targets in place — so an audit that ran first would leave changes
             // the diff could only read as the relocation having gone wrong.
-            val sampled = SampledDiff(levelDir, stagedLevelDir, placement.offset, plan.sample).verify()
+            val sampled =
+                SampledDiff(levelDir, stagedLevelDir, placement.offset, plan.sample, plan.border).verify()
             val audit = ChunkAudit(stagedLevelDir, placement).run()
-            val regions = MergeRegions(plan.targetDir, this, placement.offset).sweep()
+            val regions = MergeRegions(plan.targetDir, this, placement.offset, plan.border).sweep()
             val players = PlayerSweep(plan, placement.offset).sweep(this)
             val end = MergeEnd(plan, this, placement.offset, players.anchoredInSecondaryEnd).close()
             val respawns = RespawnBeds(plan, this, stagedLevelDir).check()

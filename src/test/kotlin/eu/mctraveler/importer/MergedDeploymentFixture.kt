@@ -79,6 +79,7 @@ class MergedDeploymentFixture(val root: Path) {
         searchLimit: Int = WorldMerge.DEFAULT_SEARCH_LIMIT,
         planOnly: Boolean = true,
         acceptEndLoss: Boolean = false,
+        border: SecondaryBorder = SecondaryBorder(),
     ) = MergePlan(
         targetDir = targetDir,
         clearance = clearance,
@@ -86,6 +87,7 @@ class MergedDeploymentFixture(val root: Path) {
         searchLimit = searchLimit,
         planOnly = planOnly,
         acceptEndLoss = acceptEndLoss,
+        border = border,
     )
 
     /**
@@ -100,10 +102,11 @@ class MergedDeploymentFixture(val root: Path) {
      */
     fun withRealSecondaryChunks(
         overworld: List<SyntheticChunks.Chunk> = SECONDARY_OVERWORLD,
+        nether: List<SyntheticChunks.Chunk> = SECONDARY_NETHER,
     ): MergedDeploymentFixture {
         SECONDARY_FOLDERS.values.forEach { deleteRecursively(levelDir.resolve("dimensions/$it")) }
         SyntheticChunks.write(levelDir, secondaryDimension(DimensionRole.OVERWORLD), overworld)
-        SyntheticChunks.write(levelDir, secondaryDimension(DimensionRole.NETHER), SECONDARY_NETHER)
+        SyntheticChunks.write(levelDir, secondaryDimension(DimensionRole.NETHER), nether)
         // Discarded rather than relocated, so it never has to be readable.
         secondary(DimensionRole.END, "region", 0 to 0)
         // Maps and raids, which were never imported at the Portal cutover either.

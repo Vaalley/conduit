@@ -251,6 +251,17 @@ class Footprint private constructor(
         files.asSequence().filter { it in area }.take(limit).toList()
 
     /**
+     * This footprint with everything [border] does not carry removed — the
+     * measurement the placement search sizes Secondary's slot from (ticket 13).
+     *
+     * A subset by construction, never a superset, so a Secondary that generated
+     * nothing near its border comes back the same footprint it went in as. It is
+     * expressible at all only because the clip works in whole region files, which
+     * is the unit a footprint is measured in.
+     */
+    fun clippedTo(border: SecondaryBorder): Footprint = Footprint(files.filter(border::keeps))
+
+    /**
      * The empty space in blocks between [area] and the nearest chunk data here,
      * or null when there is none to be near. Negative would mean an overlap,
      * which every caller has already ruled out.
