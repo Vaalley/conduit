@@ -515,12 +515,179 @@ refused over** — the report says how many. So is a bed left outside the border
 
 ## After it runs
 
-PLACEHOLDER verification and the deploy gate.
+**Keep the report.** The End section is the only record of whose builds were deleted and whose
+Embassy plots stopped working, and the `outside border` counts are the only warning those people
+will ever get. Nothing regenerates it.
+
+Then, in this order:
+
+1. **Deploy the Worlds-retirement build now, and not before.** The merge has run; the Secondary
+   dimension folders are empty of anything that mattered. This is also the build that turns
+   `/switch` into the signpost, and it must go out in **this** downtime — the signpost tells every
+   player that the Worlds have merged, which becomes true the moment the merge commits.
+2. **Run the deploy gate.**
+
+   ```sh
+   ./gradlew prodServer
+   ```
+
+   It boots a real dedicated server and asserts the dimensions that now exist:
+
+   ```
+   MCTraveler prod smoke: minecraft:overworld is live
+   MCTraveler prod smoke: minecraft:the_nether is live
+   MCTraveler prod smoke: minecraft:the_end is live
+   MCTraveler prod smoke: mctraveler:embassies is live
+   MCTraveler prod smoke: none of Secondary's dimensions exist, as expected
+   ```
+
+   It fails if a `mctraveler:secondary*` dimension reappears, which is what stops a regression
+   resurrecting the topology later.
+3. **Boot the server once and watch the log.** Verify, in this order:
+   - the log lists `minecraft:overworld`, `minecraft:the_nether`, `minecraft:the_end` and
+     `mctraveler:embassies`, and **no** `mctraveler:secondary*`;
+   - a player who had a base in Secondary logs in standing where they logged out, facing the same
+     way, in the corresponding Primary dimension;
+   - a player who was in Primary at merge time finds nothing about their position changed;
+   - `/switch` prints the signpost, and for a player with a second base names where it went;
+   - `/rg locate <something you know in Secondary>` finds the Region at its new coordinates and
+     reports a dimension rather than a World;
+   - a player with a bed in Secondary dies and respawns at it;
+   - an imported embassy anchor still sends visitors where it always did;
+   - a lodestone compass bound to a Secondary lodestone still points at it.
+4. **Work the `needs an operator` list.** Command blocks holding literal coordinates, and
+   anything under `cannot be repaired`. None of it blocks reopening.
+5. **Tell people.** Whose builds in Secondary's End were deleted, whose Embassy destinations were
+   cleared, and anybody named by an `outside border` count.
+6. **Keep the pre-merge backup** until the rollback window closes.
+
+### The merge marker, and returning players
+
+The merge writes `mctraveler/merge.json` when it commits:
+
+```json
+{"mergedAt":"2026-08-02T01:14:09.482Z","offsetX":8192,"offsetZ":-4096}
+```
+
+That file is how the offset survives the night. The Portal cutover left roughly thirteen thousand
+quarantined saves that are claimed lazily as their owners return, and every one of those claims
+has to apply the exact move the sweep applied — so the claim path reads this file on every claim,
+for as long as the quarantine exists. There is nothing to configure and nothing to fill in.
+
+**Do not edit or delete it, and make sure it is in every backup.** It has three states and they
+are three different things:
+
+- **absent** — this save has not been merged, and claims move nobody. Every server before the
+  operation is in this state.
+- **readable** — the offset it names, which is the offset the landmass actually moved by.
+- **unreadable** — the save says it was merged and cannot say by how much, so every claim fails
+  loudly with a `FAILED` line, writes nothing, and leaves the quarantine whole. Claims resume the
+  moment the file is repaired, from a backup or from the offset in the merge's own report; no
+  restart is needed. That is deliberate: reading a damaged marker as "never merged" would put
+  every returning player back at their pre-merge coordinates, silently, once each, with no second
+  chance.
+
+An offset of `0,0` is treated as damage rather than honoured, because no real run can produce it.
+
+`docs/migration.md` covers what a claim looks like in the log, including the line that says
+whether the merge transform was applied.
+
+### `/switch` after the merge
+
+The command is kept — an unknown-command error at that moment reads as "the server is broken" —
+and now answers instead of travelling:
+
+```
+--[ One World ]--
+Primary and Secondary have merged into one map. There is nowhere left to switch to — Secondary is somewhere you can walk to now.
+You are at 100/64/-201 in the Overworld.
+Your other base — where you last stood in Secondary — is now at 1024/70/-513 in the Nether.
+Bed and Spawn on your Teleportation Crystal still work exactly as they always did.
+```
+
+The fourth line appears only for players the merge recorded a banked position for; everyone else
+gets the same message without it. The positions come from `mctraveler/banked-positions.json`,
+which is written only when at least one player had one. It is cached against the file's size and
+modification time, so an operator who repairs it does not have to restart the server, and a file
+that will not parse is logged and treated as absent — the signpost never blocks server start.
 
 ## Rollback
 
-PLACEHOLDER trigger list and decision-maker.
+**A failed merge needs no rollback.** Nothing was written; the run directory is as you found it;
+fix the cause and run again. That is the whole of the staging discipline and it covers every
+refusal in this document.
+
+The exposure is different, and narrower: **a merge that succeeds and proves wrong after players
+are back on.** Restoring the pre-merge backup then costs everyone their play since the server
+reopened, and that cost grows by the hour. It is not a decision to start thinking about at 1am.
+
+So two things exist **before the downtime starts**, agreed and written down:
+
+**A trigger list.** What counts as serious enough to roll back, decided while nobody is tired.
+Draft it from what the merge can actually get wrong; a reasonable starting point:
+
+- terrain missing or corrupt in relocated Secondary, beyond the frontier chunks the report says
+  were dropped;
+- Regions not protecting what they protected before, or protecting somebody else's build;
+- players arriving somewhere they have never been, in numbers, rather than the handful the
+  `outside border` counts predicted;
+- respawns putting people inside solid rock;
+- returning players' claims landing wrong — check `mctraveler/merge.json` first, since a damaged
+  marker is a repair rather than a rollback.
+
+And what is explicitly **not** a trigger, so it does not get argued about: the seam where
+Primary's generation meets the relocated landmass, duplicate terrain, command blocks with stale
+coordinates, books and signs naming Secondary, and Secondary's End being gone. All of those are
+known, listed below, and none of them is fixed by restoring a backup.
+
+**One named person who makes the call.** A name, not a role, and someone who will be awake. The
+rollback window is declared at reopening rather than in advance — that is what keeps the merge
+cold — so the decision-maker's job starts when the players do.
+
+The mechanics, if it is called: stop the server, restore the pre-merge backup of the whole run
+directory, and roll the mod back to the pre-retirement build. The order matters — a restored
+two-World save on the retirement build is [the first hazard](#read-these-three-things-first) all
+over again. Everything Secondary's chunk data needs is in that backup, byte for byte, because the
+merge only ever copied it.
 
 ## Known limitations
 
-PLACEHOLDER what cannot be fixed.
+Cutover facts to communicate, not bugs to fix. Several of these are things players will notice
+within a day, so it is worth writing the announcement before the night rather than after.
+
+- **Duplicate terrain, everywhere.** Since the Portal cutover both Worlds generated from one
+  seed, so every chunk Secondary generated after that date is a twin of Primary's chunk at the
+  same coordinates. After the merge both exist in one world, in different places. **No offset can
+  prevent this and nothing here tries.** Players who explored both Worlds will find landmarks
+  they recognise in two places; that is the merge working, not a bug.
+- **The seam.** Where Primary's generation eventually reaches the relocated landmass there will
+  be a visible discontinuity. It is bounded by the clearance ring, and it is why the ring exists.
+- **Secondary's End is gone.** Deleted, not moved, and the one thing in the merge that cannot be
+  undone. Its Regions, the builds in them, and any Embassy destination pointing there.
+- **Secondary's level-wide saved data is not imported** — maps, in-progress raids, its world
+  border, force-loaded chunks and scoreboard objectives. Map ids are level-wide and cannot be
+  merged with Primary's without renumbering every map item. Primary's are unaffected. This was
+  already true at the Portal cutover.
+- **Command blocks holding literal coordinates are reported, never rewritten.** They are in the
+  report with their position and their command, as an action list. A command is a program, and
+  the numbers in one can be a place, a count, a score or a tick.
+- **Written books, signs and chat-shared coordinates naming Secondary are never touched.** They
+  are not even scanned. A base whose location was written on a sign is now somewhere else, and
+  nothing can find every sign that says so.
+- **Nobody's second base is restored to them — they are told where it went.** The Per-World
+  Bucket for the World a player was not in is transformed into merged coordinates and written to
+  a read-only artifact that `/switch` reads back. There is no journey home built into the merge;
+  Bed and Spawn on the Teleportation Crystal are what every player already has.
+- **Anything outside the border you stated stayed behind.** Chunks past `--border` plus `--bleed`
+  are not moved and not deleted — and are gone for good once the retirement build removes
+  Secondary's folders. Regions, players and Embassy destinations anchored out there were swept
+  anyway, so their coordinates moved while their chunks did not: they now name terrain that will
+  regenerate from Primary's seed. The report counts each; those counts are the only warning.
+- **A player who logged out in Secondary's End loses their vehicle and their sleeping position.**
+  They are put down at their Secondary overworld position, or at the relocated world spawn.
+- **Advancements and statistics were never per-World** and are unchanged by the merge (ADR 0001,
+  superseded by ADR 0004).
+- **`entered_nether_pos` may be stale** for a player who had Travelled since last entering the
+  nether. The cost is one advancement measured from the wrong place.
+- **The merge cannot be run twice**, and there is no partial re-run. Once the marker is written,
+  the only way back to a pre-merge save is the backup.
