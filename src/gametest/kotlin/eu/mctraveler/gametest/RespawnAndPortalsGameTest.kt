@@ -39,7 +39,7 @@ class RespawnAndPortalsGameTest {
         val server = helper.level.server
         var player: ServerPlayer = TestPlayers.login(server, "SpawnFaller")
         try {
-            runSwitch(server, player)
+            player.travelToTheOtherWorld()
             helper.assertValueEqual(
                 player.level().dimension(),
                 secondaryDimension("secondary"),
@@ -55,7 +55,7 @@ class RespawnAndPortalsGameTest {
             assertNearSpawn(helper, player, "the bedless respawn in Secondary")
 
             // Primary keeps behaving exactly as vanilla does.
-            runSwitch(server, player)
+            player.travelToTheOtherWorld()
             player = dieAndRespawn(server, player)
             helper.assertValueEqual(
                 player.level().dimension(),
@@ -76,7 +76,7 @@ class RespawnAndPortalsGameTest {
         var player: ServerPlayer = TestPlayers.login(server, "OneBedOnly")
         try {
             sleepAt(player, primary, LONE_BED)
-            runSwitch(server, player)
+            player.travelToTheOtherWorld()
 
             // Secondary has no bed of this player's anywhere in it, so the
             // Primary bed must not reach across — Secondary's own spawn does.
@@ -89,7 +89,7 @@ class RespawnAndPortalsGameTest {
             assertNearSpawn(helper, player, "a death in Secondary with a bed only in Primary")
 
             // ...and the Primary bed is still waiting, untouched, back home.
-            runSwitch(server, player)
+            player.travelToTheOtherWorld()
             player = dieAndRespawn(server, player)
             assertWokeUpAt(helper, player, primary, LONE_BED, "a death back in Primary")
         } finally {
@@ -106,7 +106,7 @@ class RespawnAndPortalsGameTest {
         var player: ServerPlayer = TestPlayers.login(server, "BedKeeper")
         try {
             sleepAt(player, primary, PRIMARY_BED)
-            runSwitch(server, player)
+            player.travelToTheOtherWorld()
             sleepAt(player, secondary, SECONDARY_BED)
 
             player = dieAndRespawn(server, player)
@@ -114,11 +114,11 @@ class RespawnAndPortalsGameTest {
 
             // The bed left behind in Primary is still Primary's, and only
             // Primary's — Travel swapped both respawn points with the buckets.
-            runSwitch(server, player)
+            player.travelToTheOtherWorld()
             player = dieAndRespawn(server, player)
             assertWokeUpAt(helper, player, primary, PRIMARY_BED, "a death in Primary")
 
-            runSwitch(server, player)
+            player.travelToTheOtherWorld()
             player = dieAndRespawn(server, player)
             assertWokeUpAt(helper, player, secondary, SECONDARY_BED, "a second death in Secondary")
         } finally {
@@ -299,10 +299,6 @@ class RespawnAndPortalsGameTest {
         // from whatever they landed in until the next deliberate death.
         respawned.isInvulnerable = true
         return respawned
-    }
-
-    private fun runSwitch(server: MinecraftServer, player: ServerPlayer) {
-        server.commands.performPrefixedCommand(player.createCommandSourceStack(), "switch")
     }
 
     private fun level(server: MinecraftServer, dimension: ResourceKey<Level>): ServerLevel =

@@ -84,7 +84,7 @@ class OrphanedSaveClaimGameTest {
 
                 // The other World's save became Primary's Per-World Bucket, so
                 // Travel puts them back where the other backend had them.
-                server.commands.performPrefixedCommand(player.createCommandSourceStack(), "switch")
+                player.travelToTheOtherWorld()
                 helper.assertValueEqual(
                     player.level().dimension(),
                     Level.NETHER,

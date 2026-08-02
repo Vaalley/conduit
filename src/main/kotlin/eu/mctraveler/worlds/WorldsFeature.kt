@@ -20,12 +20,23 @@ object WorldsFeature {
     var worlds: Worlds? = null
         private set
 
+    /**
+     * The merge's banked positions, which `/switch` reads back to tell a player
+     * where their other base went. Bound to the file at server start rather than
+     * to its contents — nothing is read until the first player asks, and an
+     * unmerged server has no file to read at all.
+     */
+    var bankedPositions: BankedPositions? = null
+        private set
+
     fun register() {
         ServerLifecycleEvents.SERVER_STARTING.register { server ->
-            worlds = Worlds(server, checkNotNull(MCTraveler.persistence).players)
+            val persistence = checkNotNull(MCTraveler.persistence)
+            worlds = Worlds(server, persistence.players)
+            bankedPositions = BankedPositions(persistence.root.resolve(BankedPositions.FILE_NAME))
         }
         CommandRegistrationCallback.EVENT.register { dispatcher, _, _ ->
-            SwitchCommand.register(dispatcher) { checkNotNull(worlds) }
+            SwitchCommand.register(dispatcher) { checkNotNull(bankedPositions) }
         }
         ServerPlayConnectionEvents.JOIN.register { handler, _, _ ->
             checkNotNull(worlds).handleLogin(handler.player)
