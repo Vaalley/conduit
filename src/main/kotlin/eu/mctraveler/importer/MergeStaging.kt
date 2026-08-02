@@ -112,32 +112,47 @@ class MergeStaging(
             // The merge in the order it happens. Each phase stages its own output
             // and returns the section it answers for; nothing reaches the save
             // until commit() below, so a phase failing here costs only the work.
-            val relocation = ChunkRelocation(
-                levelDir = levelDir,
-                stagedLevelDir = stagedLevelDir,
-                workDir = staging.resolve(WORK_DIRECTORY),
-                offset = placement.offset,
-                border = plan.border,
-                tool = tool,
-            ).run()
+            val relocation = phase("moving the chunks across") {
+                ChunkRelocation(
+                    levelDir = levelDir,
+                    stagedLevelDir = stagedLevelDir,
+                    workDir = staging.resolve(WORK_DIRECTORY),
+                    offset = placement.offset,
+                    border = plan.border,
+                    tool = tool,
+                ).run()
+            }
             // The diff before the audit, deliberately: it compares the staged
             // chunks against their sources, and the audit repairs lodestone
             // targets in place — so an audit that ran first would leave changes
             // the diff could only read as the relocation having gone wrong.
-            val sampled =
+            val sampled = phase("spot-checking the moved terrain") {
                 SampledDiff(levelDir, stagedLevelDir, placement.offset, plan.sample, plan.border).verify()
+            }
             // After the diff has compared the tool's own output against the source,
             // and before the audit judges it: this finishes coordinates the
             // relocation tool does not know about, so that a merge does not refuse
             // in a downtime window over a field somebody has yet to teach it. It
             // names every one it completed, because a gap that is silently filled
             // stops being a gap anybody knows about (ticket 17).
-            val completion = ChunkCompletion(stagedLevelDir, placement).run()
-            val audit = ChunkAudit(stagedLevelDir, placement).run()
-            val regions = MergeRegions(plan.targetDir, this, placement.offset, plan.border).sweep()
-            val players = PlayerSweep(plan, placement.offset).sweep(this)
-            val end = MergeEnd(plan, this, placement.offset, players.anchoredInSecondaryEnd).close()
-            val respawns = RespawnBeds(plan, this, stagedLevelDir).check()
+            val completion = phase("finishing the coordinates the tool left behind") {
+                ChunkCompletion(stagedLevelDir, placement).run()
+            }
+            val audit = phase("checking every coordinate arrived") {
+                ChunkAudit(stagedLevelDir, placement).run()
+            }
+            val regions = phase("moving the Regions") {
+                MergeRegions(plan.targetDir, this, placement.offset, plan.border).sweep()
+            }
+            val players = phase("moving the players") {
+                PlayerSweep(plan, placement.offset).sweep(this)
+            }
+            val end = phase("closing the old End") {
+                MergeEnd(plan, this, placement.offset, players.anchoredInSecondaryEnd).close()
+            }
+            val respawns = phase("checking the respawn beds") {
+                RespawnBeds(plan, this, stagedLevelDir).check()
+            }
             stampAsMerged(placement)
             MergeReport(
                 placement,
@@ -152,6 +167,31 @@ class MergeStaging(
         }
         commit()
         return report
+    }
+
+    /**
+     * [work], announced before it starts and timed when it finishes.
+     *
+     * The final report is what an operator keeps, and this does not touch it.
+     * What it adds is the hour before the report exists, which until now looked
+     * from the outside exactly like a hang — the first live merge had to be
+     * diagnosed with `/proc` sampling and a thread dump to establish which phase
+     * it was in, which is not a thing to ask of somebody in a downtime window
+     * (ticket 20).
+     *
+     * Named for what it does to the world rather than for the class that does it,
+     * because the operator reading this at 2am is answering "how much longer",
+     * and may well be relaying it to people waiting to play.
+     */
+    private fun <T> phase(name: String, work: () -> T): T {
+        println("[merge] $name…")
+        System.out.flush()
+        val started = System.currentTimeMillis()
+        val result = work()
+        val seconds = (System.currentTimeMillis() - started) / 1000
+        println("[merge] $name — done in ${seconds / 60}m ${seconds % 60}s")
+        System.out.flush()
+        return result
     }
 
     // ---- what a phase stages ------------------------------------------------

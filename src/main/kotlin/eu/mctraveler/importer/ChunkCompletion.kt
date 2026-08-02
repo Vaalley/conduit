@@ -148,7 +148,8 @@ class ChunkCompletion(
         val dimension = WorldLayout.PRIMARY.dimension(where.role)
         val storage = Footprint.storageFolder(stagedLevelDir, dimension)
         for ((folder, type) in FOLDERS) {
-            chunks.walk(storage.resolve(folder), dimension, type) { chunk, tag ->
+            val said = "completing ${dimension.identifier().path} $type"
+            chunks.walk(storage.resolve(folder), dimension, type, said) { chunk, tag ->
                 ChunkWalk(where, chunk).run(tag, type)
             }
         }
