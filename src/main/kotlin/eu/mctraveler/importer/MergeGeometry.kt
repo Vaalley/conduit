@@ -108,6 +108,17 @@ data class MergeOffset(val x: Int, val z: Int) {
     fun mergedZ(z: Int, role: DimensionRole): Int = z + shiftZ(role)
 
     /**
+     * The merged X a Secondary X becomes, in [role], for the coordinates that are
+     * a *position* rather than a block: a saved embassy destination, a player's
+     * stance, an entity. Exactly the same move — it lives here rather than at the
+     * call sites so that nothing outside this type ever adds a shift by hand.
+     */
+    fun mergedX(x: Double, role: DimensionRole): Double = x + shiftX(role)
+
+    /** The merged Z a Secondary Z becomes, in [role]. See the [Double] [mergedX]. */
+    fun mergedZ(z: Double, role: DimensionRole): Double = z + shiftZ(role)
+
+    /**
      * Region files [role] moves along X. Whole by construction — that is what
      * [MergeGeometry.OFFSET_ALIGNMENT] buys — so a source file's chunks all land
      * in one destination file.

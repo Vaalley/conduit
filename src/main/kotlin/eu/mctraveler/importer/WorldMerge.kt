@@ -264,7 +264,10 @@ class PlacementSearch(
  *
  * It measures how far Primary has been generated and how much ground Secondary
  * covers, finds or checks the offset Secondary will move by, and then hands the
- * placement to [MergeStaging], which does the writing.
+ * placement to [MergeStaging], which does all the writing: the chunk relocation
+ * and then every sweep that rewrites what recorded a place in Secondary. The
+ * [MergeReport] it hands back states the placement first, because that is the
+ * thing the operator has to accept or reject.
  *
  * With [MergePlan.planOnly] it stops at the placement and **writes nothing** —
  * not a staging directory, not a marker, not a byte — so asking where Secondary

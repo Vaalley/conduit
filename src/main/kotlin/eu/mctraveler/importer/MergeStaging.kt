@@ -2,24 +2,56 @@ package eu.mctraveler.importer
 
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import java.time.Instant
+
+/**
+ * One phase of the merge's account of itself.
+ *
+ * The merge is a sequence of phases — the chunks move, then each sweep rewrites
+ * what recorded a place in Secondary — and each one answers for its own counts
+ * and no one else's. A phase therefore contributes a section rather than fields
+ * on a shared report, which is what lets a later phase be added without the
+ * phases before it, or the report they hand back, being touched at all.
+ */
+interface MergeSection {
+    /** This phase's lines, aligned with every other section's by [reportLine]. */
+    fun lines(): List<String>
+}
 
 /**
  * What the merge did, for the operator to check against what they expected
  * (merge spec, User Story 48).
  *
- * The placement is embedded rather than replaced: the operator has to see where
- * Secondary went whether or not anything was written, so a plan and a merge
- * report the same first section and the merge adds to it.
+ * The placement always leads, whether or not anything was written: where
+ * Secondary went is the thing the operator has to accept or reject, and a plan
+ * and a completed merge open with exactly the same section so that a rehearsal
+ * reads as the beginning of the real run. Everything the phases did follows it,
+ * in the order they ran.
+ *
+ * A plan carries no sections at all, so asking one for a phase's counts is a
+ * question about work that never happened and [section] says so rather than
+ * inventing a zero.
  */
 data class MergeReport(
     val placement: MergePlacement,
-    /** Null when the merge was only asked where Secondary would go. */
-    val relocation: RelocationReport? = null,
+    /** One section per phase that ran, in phase order. Empty when the merge only planned. */
+    val sections: List<MergeSection> = emptyList(),
 ) {
     val offset: MergeOffset get() = placement.offset
 
-    fun lines(): List<String> = placement.lines() + (relocation?.lines() ?: emptyList())
+    val relocation: RelocationReport get() = section()
+    val regions: MergeRegionsReport get() = section()
+
+    fun lines(): List<String> = placement.lines() + sections.flatMap(MergeSection::lines)
+
+    /** The section [T] answers for, or a complaint naming the phases that did run. */
+    inline fun <reified T : MergeSection> section(): T =
+        sections.filterIsInstance<T>().firstOrNull() ?: throw IllegalStateException(
+            "no ${T::class.simpleName} in this merge report — it holds " +
+                sections.joinToString { it::class.simpleName.orEmpty() }
+                    .ifEmpty { "nothing but the placement, so the merge was a plan" },
+        )
 }
 
 /**
@@ -38,22 +70,42 @@ data class MergeReport(
  * start while it is there rather than reusing it: it is the only evidence of
  * what the dead run had built (merge spec, User Story 50).
  *
- * This is the seam the rest of the merge's writing hangs off. Later phases stage
- * their own output beside the chunk data and commit it here, so that the whole
- * merge stays one all-or-nothing move.
+ * **The phases stage; only this commits.** Every phase writes its output through
+ * [adding] or [replacing] and none of them moves a byte into the live save, so
+ * the whole merge is one all-or-nothing move: a player sweep that fails cannot
+ * leave a rewritten `regions.json` sitting beside chunks that never arrived. The
+ * order the phases run in is the order they are called in [write], and a new one
+ * is a line added there.
+ *
+ * The staging tree is a mirror of the run directory: a file staged for
+ * `<target>/regions.json` is built at `<staging>/regions.json`, and committing is
+ * walking that mirror and moving each file onto its twin. The corollary is the
+ * guarantee the sweeps rest on — a file that is never staged is never touched,
+ * so a player who was already in Primary comes out byte-for-byte as they went in
+ * rather than rewritten to an identical value.
  */
 class MergeStaging(
     private val plan: MergePlan,
     private val staging: Path,
+    /** The live save the phases read from; the staged twin of it is built under [staging]. */
     private val levelDir: Path,
     private val tool: McaSelector = McaSelector.resolved(),
 ) {
 
     private val stagedLevelDir: Path = staging.resolve(plan.levelName)
 
+    /**
+     * Destinations a phase has staged a *replacement* for, so the commit knows
+     * which of them it is entitled to land on top of. See [commit].
+     */
+    private val replaced = mutableSetOf<Path>()
+
     fun write(placement: MergePlacement): MergeReport {
         Files.createDirectories(staging)
         val report = try {
+            // The merge in the order it happens. Each phase stages its own output
+            // and returns the section it answers for; nothing reaches the save
+            // until commit() below, so a phase failing here costs only the work.
             val relocation = ChunkRelocation(
                 levelDir = levelDir,
                 stagedLevelDir = stagedLevelDir,
@@ -61,8 +113,9 @@ class MergeStaging(
                 offset = placement.offset,
                 tool = tool,
             ).run()
+            val regions = MergeRegions(plan.targetDir, this, placement.offset).sweep()
             stampAsMerged(placement)
-            MergeReport(placement, relocation)
+            MergeReport(placement, listOf(relocation, regions))
         } catch (failure: Throwable) {
             // The merge only ever copies — `--worlds move` is deliberately not
             // offered — so nothing here is the last copy of anything, and the
@@ -72,6 +125,32 @@ class MergeStaging(
         }
         commit()
         return report
+    }
+
+    // ---- what a phase stages ------------------------------------------------
+
+    /**
+     * Where a file the save does not have yet is built. Its destination must
+     * still be free when the merge commits; see [commit].
+     */
+    fun adding(destination: Path): Path = prepared(destination)
+
+    /**
+     * Where [live] — a file the save already has — is rebuilt before the merge
+     * replaces it. Staging a live file is the decision to overwrite it, and it is
+     * the only thing that gives the commit leave to do so.
+     */
+    fun replacing(live: Path): Path {
+        // `add`, not `+=`: a Path is itself an Iterable<Path>, so the operator
+        // would add its name elements one by one rather than the path.
+        replaced.add(live.normalize())
+        return prepared(live)
+    }
+
+    private fun prepared(live: Path): Path {
+        val staged = staging.resolve(plan.targetDir.relativize(live).toString())
+        Files.createDirectories(staged.parent)
+        return staged
     }
 
     /**
@@ -84,50 +163,73 @@ class MergeStaging(
      * coordinate that looks wrong is diagnosable from this file alone.
      */
     private fun stampAsMerged(placement: MergePlacement) {
-        val marker = staging.resolve(WorldMerge.MARKER_FILE)
-        Files.createDirectories(marker.parent)
         Files.writeString(
-            marker,
+            adding(plan.targetDir.resolve(WorldMerge.MARKER_FILE)),
             "{\"mergedAt\":\"${Instant.now()}\"," +
                 "\"offsetX\":${placement.offset.x},\"offsetZ\":${placement.offset.z}}\n",
         )
     }
 
+    // ---- the one commit -----------------------------------------------------
+
     /**
-     * The staged merge moved into the live save.
+     * The staged merge moved into the live save, in one pass, after every
+     * destination has been checked and before any of them has been touched — so
+     * a save that changed underneath the merge leaves it untouched rather than
+     * half-merged.
      *
-     * Chunk data is moved in file by file and never over an existing one. It
-     * cannot collide — the placement search proved every destination region file
-     * free before the relocation ran, and the offset moves whole files — so a
-     * collision here means the save changed underneath the merge, and stopping
-     * with the staging directory intact is the only safe answer to that.
+     * What "checked" means depends on how the file was staged, and the two cases
+     * are opposite claims about the same save:
+     *
+     * - An **addition** must not exist. Relocated chunk data cannot collide — the
+     *   placement search proved every destination region file free and the offset
+     *   moves whole files — so a file where one should not be means the save is
+     *   not the one that was planned against, and stopping is the only safe
+     *   answer to that.
+     * - A **replacement** must exist. `regions.json` and a player's records were
+     *   read off disk by the phase that rewrote them, and one that has since gone
+     *   is the same evidence read the other way round.
      */
     private fun commit() {
-        val moves = staged(stagedLevelDir, levelDir) +
-            staged(staging.resolve(WorldMerge.MOD_DIRECTORY), plan.targetDir.resolve(WorldMerge.MOD_DIRECTORY))
-        // Every destination is checked before any file moves, so a collision
-        // leaves the save exactly as it was rather than half-merged.
-        val clash = moves.firstOrNull { (_, destination) -> Files.exists(destination) }
-        if (clash != null) {
-            throw IllegalStateException(
-                "${clash.second} already exists, so the merge stopped rather than overwrite it. " +
-                    "Nothing has been changed in ${plan.targetDir}, and $staging still holds " +
-                    "everything the merge built.",
-            )
-        }
+        val moves = staged()
+        for ((_, destination) in moves) refuseIfTheSaveMoved(destination)
         for ((file, destination) in moves) {
             Files.createDirectories(destination.parent)
-            Files.move(file, destination)
+            if (destination in replaced) {
+                Files.move(file, destination, StandardCopyOption.REPLACE_EXISTING)
+            } else {
+                Files.move(file, destination)
+            }
         }
         deleteRecursively(staging)
     }
 
-    /** Every staged file under [from], paired with where in [to] it belongs. */
-    private fun staged(from: Path, to: Path): List<Pair<Path, Path>> {
-        if (!Files.isDirectory(from)) return emptyList()
-        return Files.walk(from).use { paths ->
+    private fun refuseIfTheSaveMoved(destination: Path) {
+        val expected = destination in replaced
+        if (Files.exists(destination) == expected) return
+        throw IllegalStateException(
+            if (expected) {
+                "$destination was read by the merge and is no longer there, so the merge stopped " +
+                    "rather than write a file it can no longer be sure of. "
+            } else {
+                "$destination already exists, so the merge stopped rather than overwrite it. "
+            } +
+                "Nothing has been changed in ${plan.targetDir}, and $staging still holds " +
+                "everything the merge built.",
+        )
+    }
+
+    /**
+     * Every staged file, paired with where in the run directory it belongs. The
+     * tool's own scratch space is not staged output and is the one thing under
+     * the staging directory that is never committed.
+     */
+    private fun staged(): List<Pair<Path, Path>> {
+        val work = staging.resolve(WORK_DIRECTORY)
+        return Files.walk(staging).use { paths ->
             paths.filter(Files::isRegularFile)
-                .map { it to to.resolve(from.relativize(it).toString()) }
+                .filter { !it.startsWith(work) }
+                .map { it to plan.targetDir.resolve(staging.relativize(it).toString()).normalize() }
                 .toList()
         }
     }

@@ -429,7 +429,7 @@ class WorldMergeTest {
         // The frontier chunk would have landed at (519, 519); the whole point is
         // that the frontier regenerates from Primary's seed instead.
         assertFalse(ChunkPos(519, 519) in relocatedChunks(DimensionRole.OVERWORLD, "region"))
-        assertEquals(1, report.relocation!!.dimension(DimensionRole.OVERWORLD).dropped)
+        assertEquals(1, report.relocation.dimension(DimensionRole.OVERWORLD).dropped)
     }
 
     @Test
@@ -440,7 +440,7 @@ class WorldMergeTest {
 
         assertEquals(
             listOf("Secondary's End", "Secondary's level-wide saved data"),
-            report.relocation!!.discarded.map { it.what },
+            report.relocation.discarded.map { it.what },
         )
         // Nothing of the End reached Primary, in any dimension.
         assertTrue(Files.notExists(save.primaryStorage(DimensionRole.END).resolve("region")))
@@ -469,7 +469,7 @@ class WorldMergeTest {
                 "discarded                : Secondary's End — 1 file",
                 "discarded                : Secondary's level-wide saved data — 1 file",
             ),
-            report.relocation!!.lines(),
+            report.relocation.lines(),
         )
     }
 

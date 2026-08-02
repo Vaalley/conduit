@@ -20,9 +20,10 @@ object WorldMergeMain {
         Merges the Secondary World into Primary, against a live server run directory.
 
         Run it with the server STOPPED. It measures both Worlds, chooses where Secondary's
-        landmass goes, and relocates Secondary's overworld and nether chunk data into Primary's
-        at that offset. Everything is built in a staging directory and moved into place only if
-        the whole merge succeeds; Secondary's End is discarded rather than moved.
+        landmass goes, relocates Secondary's overworld and nether chunk data into Primary's at
+        that offset, and rewrites everything that recorded a place in Secondary to name its new
+        one. Everything is built in a staging directory and moved into place only if the whole
+        merge succeeds; Secondary's End is discarded rather than moved.
 
         Plan it first with --plan-only, check the placement against the real map, then run it
         for real with the offset it chose.

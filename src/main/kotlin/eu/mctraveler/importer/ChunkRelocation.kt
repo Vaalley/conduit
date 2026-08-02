@@ -31,14 +31,14 @@ data class Discarded(val what: String, val files: Int, val bytes: Long)
 data class RelocationReport(
     val dimensions: List<DimensionRelocation>,
     val discarded: List<Discarded>,
-) {
+) : MergeSection {
     val relocated: Int get() = dimensions.sumOf { it.relocated }
     val dropped: Int get() = dimensions.sumOf { it.dropped }
     val bytes: Long get() = dimensions.sumOf { it.bytes }
 
     fun dimension(role: DimensionRole): DimensionRelocation = dimensions.first { it.role == role }
 
-    fun lines(): List<String> = dimensions.flatMap { it.lines() } +
+    override fun lines(): List<String> = dimensions.flatMap { it.lines() } +
         reportLine("relocated in total", "$relocated chunks, $dropped dropped, $bytes bytes") +
         discarded.map {
             reportLine("discarded", "${it.what} — ${it.files} file${if (it.files == 1) "" else "s"}")
