@@ -252,12 +252,16 @@ class MergeEnd(
     /**
      * Secondary's spawn, where the merge has put it.
      *
-     * The two Worlds share one spawn — there is one `level.dat` and Travel to
-     * Secondary lands a first-time visitor at that position in *Secondary's*
-     * overworld (see [eu.mctraveler.worlds.Worlds]) — so Secondary's spawn is
-     * the save's own spawn, and the merge moves it like everything else in
-     * Secondary. It is read through the game's own codec rather than key by key,
-     * so the shape it is read at is the shape the server writes.
+     * The Portal's two Worlds shared one spawn — there is one `level.dat`, and
+     * Travelling to Secondary landed a first-time visitor at that position in
+     * *Secondary's* overworld — so Secondary's spawn is the save's own spawn, and
+     * the merge moves it like everything else in Secondary. It is read through the
+     * game's own codec rather than key by key, so the shape it is read at is the
+     * shape the server writes.
+     *
+     * The Worlds service that did that Travelling no longer exists (ADR 0004);
+     * this is a statement about the save the merge reads, not about the running
+     * server.
      */
     private val relocatedSpawn: DoubleArray by lazy {
         val file = levelDir.resolve(LEVEL_DATA_FILE)

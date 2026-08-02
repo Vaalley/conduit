@@ -25,33 +25,158 @@ leaving it describing two Worlds is leaving a trap.
 
 **Blocked by:** 09 — Retiring the Worlds subsystem.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A merge runbook exists in the shape of the two existing cutover runbooks
-- [ ] It states, unmissably, that the Worlds-retirement build must not be deployed before
+- [x] A merge runbook exists in the shape of the two existing cutover runbooks
+- [x] It states, unmissably, that the Worlds-retirement build must not be deployed before
       the merge has run
-- [ ] It requires a written rollback trigger list and a named decision-maker before the
+- [x] It requires a written rollback trigger list and a named decision-maker before the
       downtime starts
-- [ ] It documents every refusal the merge can produce and how to clear each one
-- [ ] It documents the rehearsal: how to run against a copy of production and why the
+- [x] It documents every refusal the merge can produce and how to clear each one
+- [x] It documents the rehearsal: how to run against a copy of production and why the
       merge is safe to repeat that way
-- [ ] It lists what cannot be fixed — command blocks, books, signs, shared coordinates,
+- [x] It lists what cannot be fixed — command blocks, books, signs, shared coordinates,
       banked positions, Secondary's End — as things to communicate rather than bugs
-- [ ] It names the duplicate-terrain consequence of one seed, so it is not discovered as a
+- [x] It names the duplicate-terrain consequence of one seed, so it is not discovered as a
       surprise
-- [ ] A decision record supersedes the shared-player-state decision
-- [ ] The Embassies decision record is amended to define them against dimensions
-- [ ] The glossary retires World, Travel, Per-World Bucket and Position Memory, redefines
+- [x] A decision record supersedes the shared-player-state decision
+- [x] The Embassies decision record is amended to define them against dimensions
+- [x] The glossary retires World, Travel, Per-World Bucket and Position Memory, redefines
       Secondary as a place, and rewords every entry that was defined against a World
-- [ ] The existing migration runbook is updated where the merge changes it
-- [ ] It records that the relocation tool is a **patched** MCA Selector, why, and how to
+- [x] The existing migration runbook is updated where the merge changes it
+- [x] It records that the relocation tool is a **patched** MCA Selector, why, and how to
       rebuild it from `gradle/mcaselector/2.8-mctraveler1.patch` — ticket 16 wrote the
       material into its own Comments because this runbook did not exist yet
-- [ ] The rehearsal step says to check the searched offset against Secondary's own footprint
+- [x] The rehearsal step says to check the searched offset against Secondary's own footprint
       as well as against Primary's — ticket 18 wrote the material into the Comments below,
       because this runbook did not exist yet either
 
 ## Comments
+
+### What was written
+
+- **`docs/merge.md`** — the runbook, a sibling of `docs/migration.md` and `docs/nucleus-import.md`.
+  Sections: what the merge does and carries across; a `Read these three things first` block; before
+  you run it, including the patched relocation tool and the rehearsal; run it, with every option
+  and the `--border`/`--bleed` and `--accept-end-loss` semantics; what it prints, with a whole
+  annotated report and a walkthrough of the lines worth stopping on; every refusal by phase, with
+  what it means and how to clear it; after it runs, with the deploy gate, the merge marker and the
+  signpost; rollback; known limitations.
+- **`docs/adr/0004-one-world-worlds-retired-from-the-server.md`** — supersedes ADR 0001. Says
+  *retired from the server*, not deleted, and names the two things that survive on purpose: the
+  Per-World Bucket as legacy record data plus `importer.PerWorldBuckets`, and the Region layer's
+  legacy world strings.
+- **ADR 0001** — a superseded banner, kept as the record of why the port divided state as it did.
+- **ADR 0003** — amended, not superseded, with a banner saying so. The opening no longer defines a
+  World or names `Worlds.worldOf`; the Embassies are now defined against the map. Title's "not a
+  third World" became "not somewhere players live"; the filename is unchanged, since "out-of-trio"
+  is still true of the vanilla trio.
+- **`CONTEXT.md`** — World, Travel, Per-World Bucket and Position Memory are gone. **The map**,
+  **Secondary** (a landmass, not a World) and **The merge** replace them. **Region** and
+  **Embassies** are restated against dimensions, and Region carries the sentence about the legacy
+  world vocabulary being deliberate.
+- **`docs/migration.md`** — "first of two imports" → "first of three cutover operations", a note
+  that it describes the two-World server and which section is the exception, a pointer on the
+  verification list, the duplicate-terrain consequence of one seed, and ADR 0001 → 0004.
+
+### Two source files were touched, both comment-only
+
+This ticket was not expected to change code, so both are called out rather than slipped in.
+Neither can affect a test: they are a KDoc paragraph and a one-line KDoc.
+
+- **`importer/MergeEnd.kt`** — its `relocatedSpawn` KDoc linked `[eu.mctraveler.worlds.Worlds]`, a
+  class ticket 09 deleted, so the link was dangling. Rewritten in the past tense (it is a statement
+  about the save the merge reads, not about the running server) with a pointer to ADR 0004.
+- **`embassy/EmbassiesFeature.kt`** — `DIMENSION`'s KDoc said "Outside every World's trio, so
+  `Worlds.worldOf` is null for it", naming a deleted method. Now "Outside the vanilla trio, and not
+  somewhere players live (ADR 0003)".
+
+A sweep for other dangling references to the retired symbols found none. Every remaining mention of
+`RegionWorlds` is the live legacy-vocabulary class, and the prose mentions in `CrystalMenu` and
+`RegionCommands` are past-tense history and correct.
+
+### The naming loose end: not renamed, and why
+
+Ticket 09 left `eu.mctraveler.worlds` and `WorldsFeature` as they were and flagged them for this
+ticket. **Declined, deliberately.**
+
+Ticket 09's reason was a collision with ticket 18, which has since landed. But the same reason now
+holds for **ticket 11**, which is in flight writing the merge gametest under `src/gametest/` —
+`SwitchSignpostGameTest` already imports `eu.mctraveler.worlds`, and a merge gametest is very
+likely to import `BankedPositions` or `DimensionRole` too. A package rename would touch ~25
+importer imports plus the gametest source set, which is exactly the file another agent has open.
+
+Beyond the timing, the package's contents do not want the same name. It holds `/switch` and
+`BankedPositions` (the merge's own signpost, which *is* about the Worlds having merged), plus
+`Landing`, `Waypoint` and `DimensionRole`, which belong to the crystal, the Embassies and the
+importer respectively. There is no single name that fits all five, and the glossary does not need
+one: `CONTEXT.md` is where the vocabulary lives, and it now says plainly that World is retired.
+`WorldsFeature`'s KDoc already explains what is left and why the name stayed.
+
+If someone does rename later, the honest split is to move `DimensionRole` to
+`eu.mctraveler.importer` (its KDoc already says it is the importer's vocabulary), `Landing` and
+`Waypoint` to wherever the crystal's destinations live, and leave `/switch` and `BankedPositions`
+in a package named for the signpost. That is a refactor with its own ticket, not a rename.
+
+### Contradictions the assembly surfaced
+
+Six, in rough order of how much damage they could do at 2am.
+
+1. **Ticket 10's runbook step no longer exists, and following it would be harmful.** Ticket 10
+   wrote: *"The runbook must say this: the placement is found with `--plan-only`, the chosen offset
+   is written into `MergeGeometry.APPLIED_OFFSET`, and only then is the real run performed."*
+   Ticket 14 **deleted `APPLIED_OFFSET`** along with `WorldMerge.run()`'s fallback to it, and its
+   own Comments say so: *"The step ticket 10 added to the runbook is gone."* The runbook documents
+   ticket 14's sequence — plan, check, run with `--offset` — and says outright that there is
+   nothing to fill in between planning and running, because the offset is now a fact about the save
+   rather than a line of source.
+2. **Ticket 04's advice for a missing chunk is void, and inverted.** Ticket 04: *"a merge suite
+   that goes red with a chunk missing from an expected set is that defect and should be re-run, not
+   retuned."* That defect was the `--mode select` race, which **ticket 16 fixed at source**. After
+   16, a chunk-count mismatch means real data loss. The runbook says the opposite of ticket 04:
+   do not re-run and hope; confirm you are on the patched jar first.
+3. **Ticket 15's runbook acceptance criterion states the opposite of what shipped.** It asked the
+   runbook to record *"that the selection is ours, and why — an operator reading MCA Selector's own
+   documentation would otherwise expect `--mode select` to be involved."* Ticket 15 is **wontfix**,
+   superseded by 16: the selection is emphatically **not** ours and `--mode select` **is** what
+   produces it. Not copied.
+4. **Ticket 16's rehearsal step was superseded within ticket 12's own Comments.** 16: *"A rehearsal
+   must find out whether Secondary has bees in relocated chunks."* 17 fixed the bee and replaced
+   the step with the completion count, which answers the same question about every field at once.
+   The runbook carries only 17's version.
+5. **Ticket 02's account of the relocation tool describes a jar that no longer runs.** It documents
+   a pinned upstream `net.querz:mcaselector:2.8` with sha256 `64505f39…`; what ships is a locally
+   patched build at `f7d088d3…`, and ticket 16 removed the upstream resolution entirely rather than
+   keeping it as a fallback — *"a fallback here would be a way to silently run the defective tool."*
+   Relatedly, ticket 02 quotes 2.8's release notes claiming *"Updated mappings for Minecraft 26.2"*;
+   ticket 03 then demonstrated that claim false. The runbook does not repeat it.
+6. **Ticket 05 and ticket 07 both describe what happens to Secondary's End, differently.** 05 says
+   `MergeRegionsReport.endAnchored` *"is the list 07 turns into its refusal"*; 07 says the gate
+   re-reads the region tree instead, because 05's list is prose. The operator-visible consequence is
+   that **the same Region can appear twice in one report** — once under `still in Secondary's End`
+   and once under `Region deleted` — and that is phase order, not a double count. The runbook says
+   so. Also reconciled: ticket 06 says *"Secondary's End is left exactly as it is"*, while ticket 07
+   scrubs every save of End references **whether or not `--accept-end-loss` was given**. The flag
+   does not gate the End's destruction, only the loss of the things anchored in it. The runbook has
+   a subsection on exactly this, because reading either ticket alone gives the wrong answer.
+
+Two smaller ones, recorded but not runbook-facing: ticket 06's *"There is still no `--plan` flag"*
+is stale (it is `--plan-only`, added by ticket 02); and tickets 03 and 04 each claim their phase
+runs *"immediately after the relocation"*. The code settles it — relocation, sampled diff,
+completion, audit — and the runbook's report walkthrough follows the code.
+
+### Two things left alone on purpose
+
+- **The wrong-target refusal still points at `docs/migration.md`.** Ticket 01 asked for that string
+  to be revisited once the runbook existed. Revisited and kept: the refusal is about *which
+  directory* — the one the Portal migration produced — and `docs/migration.md` is the document that
+  defines it. Pointing at `docs/merge.md` would send the operator to the document they are already
+  holding.
+- **`gradle/merge-worlds.gradle.kts`'s failure message says the released tool "leaves four kinds of
+  26.2 coordinate behind".** That was true at ticket 16 and ticket 17 widened it a long way past
+  four; the comment block above it says "in two ways" and then lists three. Both are stale by a
+  count rather than wrong in substance, and the file is ticket 16/17's rather than this one's, so it
+  is recorded here rather than edited.
 
 ### From ticket 16 — what the runbook must say about the relocation tool
 

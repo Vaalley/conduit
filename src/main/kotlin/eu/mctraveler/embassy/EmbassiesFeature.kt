@@ -31,7 +31,7 @@ object EmbassiesFeature {
     /** The bottom of the dimension: under here a player is falling through the void. */
     private const val VOID_Y = -64.0
 
-    /** The dimension. Outside every World's trio, so `Worlds.worldOf` is null for it. */
+    /** The dimension. Outside the vanilla trio, and not somewhere players live (ADR 0003). */
     val DIMENSION: ResourceKey<Level> = ResourceKey.create(Registries.DIMENSION, id("embassies"))
 
     /** The dimension's only biome: plains, with nothing spawning and no weather. */
