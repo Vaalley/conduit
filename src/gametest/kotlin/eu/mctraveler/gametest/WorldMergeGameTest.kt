@@ -2,11 +2,20 @@ package eu.mctraveler.gametest
 
 import eu.mctraveler.embassy.EmbassiesFeature
 import eu.mctraveler.importer.WorldLayout
+import eu.mctraveler.region.RegionWorlds
+import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.worlds.DimensionRole
 import java.nio.file.Files
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.gametest.framework.GameTestHelper
+import net.minecraft.resources.ResourceKey
+import net.minecraft.server.MinecraftServer
+import net.minecraft.server.level.ServerLevel
+import net.minecraft.world.item.Items
+import net.minecraft.world.level.ChunkPos
 import net.minecraft.world.level.Level
+import net.minecraft.world.level.block.Blocks
+import net.minecraft.world.level.block.entity.ChestBlockEntity
 
 /**
  * The merge against a running server (ticket 11), which is the last line of
@@ -85,4 +94,111 @@ class WorldMergeGameTest {
         )
         helper.succeed()
     }
+
+    /**
+     * A relocated chunk loads, and the chest standing in it still holds what was
+     * in it (merge spec, User Story 8).
+     *
+     * The file tier already compares this chunk against its source block for
+     * block. What it cannot say is that the result is something the game will
+     * open: a chunk can satisfy every comparison the merge makes and still fail
+     * to parse, and the failure mode is a chunk vanilla quietly regenerates from
+     * Primary's own seed. That is why the chest is the assertion rather than the
+     * terrain — flat ground regenerated from this server's seed has no chest in
+     * it, so a chunk that did not arrive cannot pass.
+     */
+    @GameTest(maxTicks = 600)
+    fun aRelocatedChestStillHoldsWhatWasInIt(helper: GameTestHelper) {
+        val server = helper.level.server
+        MergedSave.of(server)
+        val overworld = level(server, Level.OVERWORLD)
+        val at = MergedSave.merged(MergedSave.CHEST, DimensionRole.OVERWORLD)
+
+        val chunk = ChunkPos.containing(at)
+        overworld.getChunk(chunk.x, chunk.z)
+
+        helper.assertTrue(
+            overworld.getBlockState(at).`is`(Blocks.CHEST),
+            "no chest arrived at $at, where the merge moved the homestead's",
+        )
+        val chest = checkNotNull(overworld.getBlockEntity(at) as? ChestBlockEntity) {
+            "the chest at $at has no block entity, so nothing that was in it travelled with it"
+        }
+        val held = chest.getItem(0)
+        helper.assertTrue(
+            held.`is`(Items.DIAMOND) && held.count == MergedSave.DIAMONDS,
+            "the relocated chest holds $held rather than the ${MergedSave.DIAMONDS} diamonds put in it",
+        )
+        // A merge offset is horizontal and cannot express anything else, so a
+        // container that arrived one block up would be one nobody can find.
+        helper.assertValueEqual(at.y, MergedSave.CHEST.y, "the height a relocated chest arrives at")
+        helper.succeed()
+    }
+
+    /**
+     * A relocated Region turns a stranger away at its new coordinates (merge
+     * spec, User Story 21).
+     *
+     * Two passes of the merge have to agree for this to work and neither can
+     * check the other: the Regions sweep moved the cuboid, the chunk relocation
+     * moved the ground under it, and protection is only real where the two
+     * landed on top of one another. So the block broken here is one the
+     * relocation carried, inside a cuboid the sweep rewrote, read through the
+     * live Region service exactly as a merged server would read its own file.
+     */
+    @GameTest(maxTicks = 600)
+    fun aRelocatedRegionRefusesAStrangerWhereItLanded(helper: GameTestHelper) {
+        val server = helper.level.server
+        val merged = MergedSave.of(server)
+        val overworld = level(server, Level.OVERWORLD)
+        val at = MergedSave.merged(MergedSave.STONE, DimensionRole.OVERWORLD)
+
+        val swept = merged.regions().single()
+        helper.assertValueEqual(swept.title, MergedSave.REGION_TITLE, "the Region the merge swept")
+        helper.assertValueEqual(
+            swept.world,
+            RegionWorlds.legacyName(Level.OVERWORLD),
+            "the World a relocated Region comes to name",
+        )
+        helper.assertTrue(
+            swept.contains(at.x, at.y, at.z),
+            "the swept Region does not cover $at, where the relocation put the ground it protects",
+        )
+
+        // Added to the live tree rather than saved into it: what a merged server
+        // reads at boot is this very object, and taking it out again afterwards
+        // leaves this server's own regions.json untouched.
+        val service = RegionsFeature.requireService()
+        service.roots.add(swept)
+        val stranger = MessageCapturingPlayer.join(helper, "T11Stranger")
+        try {
+            helper.assertTrue(
+                overworld.getBlockState(at).`is`(Blocks.STONE),
+                "no relocated block arrived at $at for the Region to be protecting",
+            )
+            stranger.isInvulnerable = true
+            stranger.teleportTo(at.x + 0.5, MergedSave.FLOOR_Y + 1.0, at.z + 1.5)
+
+            helper.assertFalse(
+                stranger.gameMode.destroyBlock(at),
+                "a stranger broke a block inside a relocated Region",
+            )
+            helper.assertTrue(
+                overworld.getBlockState(at).`is`(Blocks.STONE),
+                "the block a relocated Region protects was broken anyway",
+            )
+            helper.assertValueEqual(
+                stranger.messages.last(),
+                protectedBy(MergedSave.REGION_TITLE),
+                "the refusal a relocated Region gives at its new coordinates",
+            )
+        } finally {
+            service.roots.remove(swept)
+            stranger.leave()
+        }
+        helper.succeed()
+    }
+
+    private fun level(server: MinecraftServer, dimension: ResourceKey<Level>): ServerLevel =
+        checkNotNull(server.getLevel(dimension)) { "${dimension.identifier()} is not loaded" }
 }
