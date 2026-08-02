@@ -408,7 +408,110 @@ person: the gateway is in relocated terrain and its destination no longer exists
 
 ## It refuses rather than half-merging
 
-PLACEHOLDER refusals.
+Nothing is written unless the whole merge succeeds. Everything is read, converted and checked
+first, the output is built in `<target>/.mctraveler-merge`, and only a complete merge is moved
+into place — in one pass, after every destination has been checked and before any of them has
+been touched. **Every refusal below leaves the run directory exactly as it was found.**
+
+Three prefixes, and the difference is who has to fix it:
+
+| Prefix | Exit | Means |
+| --- | --- | --- |
+| *(usage text)* | 2 | an argument is malformed. Nothing was read |
+| `Merge refused, nothing was written: …` | 1 | you have something to fix or a decision to make. The message names it |
+| `Merge failed, nothing was written: …` | 1 | **the tool** did something wrong, not you. Not fixable by re-typing a flag |
+
+A run that refuses or fails **clears its own staging directory**, so you can fix the cause and run
+again immediately. A run that is *interrupted* — killed, or the machine lost — leaves one behind
+by definition, and the next attempt refuses rather than reusing it, because it is the only
+evidence of what the dead run had built.
+
+### Arguments
+
+Refused before anything is read, with the usage text.
+
+| Refusal | Clear it by |
+| --- | --- |
+| `--target is required` | supplying it |
+| `--offset must be "<x>,<z>", got "…"` | one comma, two whole numbers |
+| `--<name> wants a whole number, got "…"` | as it says |
+| `a merge offset must be a multiple of 4096 blocks` | rounding the offset to the lattice |
+| `Secondary's border must be at least 512 blocks from the origin` | a border of at least one region file |
+| `the clearance cannot be negative` / `the sample size cannot be negative` | as it says |
+| `the search limit must be between 1 and 256 steps of 4096 blocks` | a limit in range |
+
+### Before anything is measured
+
+| Refusal | What it means and how to clear it |
+| --- | --- |
+| `<target> is not a directory` | wrong `--target` |
+| `<target> has no "<artifact>" — merge the live server's own run directory (see docs/migration.md), not a fresh one` | one of `world`, `mctraveler/`, `regions.json` is missing. You are pointing at the wrong directory — this tool merges the live save the Portal migration produced, and creates nothing on your behalf |
+| `<target> has already been merged: {"mergedAt":…,"offsetX":…,"offsetZ":…}` | the save carries `mctraveler/merge.json`. **Not clearable by the tool**, and deliberately so: a second run would relocate an already-relocated landmass. Either you are done, or you restore the pre-merge backup |
+| `<staging> is left over from an interrupted merge; look at what it holds, then remove it and run again` | a previous run was killed. Look at what is inside it, then remove it |
+| `no Secondary chunk data under <folders> — is <target> the run directory the Portal migration produced?` | Secondary's dimension folders are empty or absent. Wrong save, or a save the Worlds-retirement build has already been deployed against — in which case stop and read [the first hazard](#read-these-three-things-first) |
+| `Secondary's border of ±N blocks, with M of bleed carried past it carries none of Secondary's chunk data: every region file it has lies outside … Check --border and --bleed against the border Secondary actually ran` | `--border` or `--bleed` is wrong, or the target is not the save you think it is |
+
+### Choosing where the landmass goes
+
+| Refusal | What it means and how to clear it |
+| --- | --- |
+| `an offset of x +0, z +0 would leave Secondary exactly where it is — the landmass has to move` | the origin is not a slot |
+| `the offset x +8192, z +0 would set Secondary's nether back down on ground it already covers: it lands on …, and Secondary's nether is at …. Inside that overlap the audit cannot tell a coordinate that moved from one that never left, so the landmass has to clear the place it is being moved off` | **the offset is too small.** Throw the landmass further. Asking for less clearance cannot help — this is not about elbow room. The nether is usually the dimension that fails first, because it moves one region file per lattice step where the overworld moves eight |
+| `the offset … does not clear Primary's chunk data: Secondary's overworld would come within N blocks of Primary's r.0.0.mca, … and r.1.1.mca (and more) — choose another offset, or ask for less clearance` | as it says. Only the first clashing dimension is listed, and at most four files: you fix one offset at a time |
+| `no 4096-aligned slot within N blocks of the origin can take Secondary — M slots tried, A of them ruled out by the ground Secondary is being moved off and B by Primary's chunk data …` | **read the two numbers.** A large `A` means `--search-limit` is too small for how wide Secondary is. A large `B` means the clearance is too large for how much of Primary's map is generated. The refusal also states how far Primary reaches in each dimension |
+
+### Moving and proving the chunks
+
+These are `Merge failed` rather than `Merge refused` — the operator did nothing wrong.
+
+| Refusal | What it means |
+| --- | --- |
+| a non-zero exit from MCA Selector, with the tool's own output attached | the relocation tool failed. Nothing moved |
+| `the relocation of Secondary's <role> put N chunks into <path>, but M were selected to move. Nothing has been moved into place.` | fewer chunks arrived than were selected. **Do not re-run and hope.** The selection race that used to cause this was fixed at source in the patched build, so this now means real data loss — confirm you are running the patched jar (`./gradlew provideMcaSelector`) before anything else |
+| `the relocated copy of <chunk> of Secondary's <role> is not its source: <difference>. … Nothing has been moved into place.` | a sampled chunk does not match the chunk it came from. This is the check that catches a chunk which was dropped, truncated or half-written — invisible to everything that only reads the relocated data |
+
+### The audit
+
+| Refusal | What it means and how to clear it |
+| --- | --- |
+| `the relocated chunks still hold N coordinates pointing into the place Secondary used to be, so the merge stopped and nothing has been written: …` | a **structural** leftover — a block entity position, a scheduled tick, a structure start, an entity position, a brain memory, a POI record. It names each one and where, and states what Secondary used to cover and how far it moved. Not fixable from the message: it means the relocation tool does not know about a field, and the patch has to be widened. The one you should expect is an end gateway's `exit_portal`, which the merge deliberately declines to move because its destination was in Secondary's End |
+| `the relocation left N villager memories without the point-of-interest record that claimed them, so the merge stopped and nothing has been written: …` | a cross-check, not a stale coordinate: these moved exactly as they were meant to and are still wrong. **It can fire on a pairing that was already broken before the merge**, so if it appears in a rehearsal, compare against the source save before assuming the merge did it |
+
+Because region files are compared at file granularity, a refusal can name a coordinate in an
+empty corner of a Secondary region file that never held anything. That is the check erring safe,
+not a phantom to chase — but it is worth knowing before you go looking.
+
+### The Regions sweep
+
+| Refusal | What it means and how to clear it |
+| --- | --- |
+| `Secondary's Region "<title>" lands on x …, z … in "<world>", where Primary's Region "<title>" already covers x …, z … — two owners cannot share a cuboid, so choose another offset, or move one of the two before merging` | exactly what it says. The test is the same full-intersection rule `/rg` refuses an overlapping claim by |
+| `the Region "<title>" carries an "<key>" the merge cannot read (<message>) — fix it in <regionsFile>, then run the merge again` | a hand-edited Embassy destination the strict reader will not guess about. Fix it in `regions.json` |
+
+### Secondary's End
+
+| Refusal | What it means and how to clear it |
+| --- | --- |
+| `Secondary's End is destroyed by this merge, and it is the one thing here that cannot be undone. Something is still anchored in it: …` | the default. It lists every Region by title *and* by its members' names, every Embassy whose destination points into the End, and every player standing there with where they would land. **Tell those people, then pass `--accept-end-loss`.** Note it comes after the relocation has been staged, so reaching it costs the relocation's time |
+| `there is no <level.dat>, and the merge needs the world spawn out of it to put down the players standing in Secondary's End` | only reachable with players standing in the End. Restore `level.dat` |
+| `<file> records no world spawn under "Data"/"spawn", …` / `<file>'s world spawn cannot be read: …` | as above. A save this server has booted always has these |
+
+### The respawn cross-check
+
+| Refusal | What it means |
+| --- | --- |
+| `player <uuid> respawns at …, where Secondary has a bed or a respawn anchor, and the merge moved that respawn point to … — but no bed and no respawn anchor arrived there. … Nothing has been written` | the respawn point and the block it names are moved by two different passes, and they disagree. That is a **relocation** problem, not a data problem, and the merge stopped rather than wake somebody up inside solid rock |
+| `player <uuid> respawns at …, which the merge has to move, but their swept save records no respawn point at all. Nothing has been written` | the sweep lost a respawn point it was supposed to move |
+
+A respawn point whose bed was broken months ago is completely ordinary and is **counted, not
+refused over** — the report says how many. So is a bed left outside the border.
+
+### The commit
+
+| Refusal | What it means |
+| --- | --- |
+| `<destination> already exists, so the merge stopped rather than overwrite it. Nothing has been changed in <target>, and <staging> still holds everything the merge built.` | a destination the merge proved free is now occupied: the save changed underneath the run. **The staging directory is left in place deliberately.** Find out what wrote there before doing anything else |
+| `<destination> was read by the merge and is no longer there, so the merge stopped rather than write a file it can no longer be sure of. …` | the same evidence read the other way round — a file the merge rewrote has since gone |
 
 ## After it runs
 
