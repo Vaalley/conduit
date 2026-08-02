@@ -187,6 +187,44 @@ Nothing about Secondary's own chunk data is modified by any of this: the merge o
 `--worlds move` is deliberately not offered, because a moved source would compromise the backup
 that is your rollback — so Secondary's folders come out of a merge byte-for-byte identical.
 
+### Four things a real save taught us that a test save cannot
+
+Every fixture in the test suite is a handful of chunks written by a 26.2 server. A live
+Secondary is six million chunks written by a decade of Minecraft versions, and the difference is
+not one of degree. All four of these were found by rehearsing against real data, and every one
+of them would otherwise have been found in the downtime window.
+
+**Run it under `script`, not through a pipe.** Gradle's output is block-buffered when its stdout
+is a pipe, so `… | tee merge.log` produces a log and a terminal that both sit empty until the
+process exits — an hour of a migration with nothing to watch. `script` gives it a pty, so the
+output is live in both:
+
+```sh
+tmux new-session -d -s merge \
+  "script -qfc './gradlew mergeWorlds --args=\"…\"' /root/merge.log"
+```
+
+**The relocation runs single-threaded, and must.** MCA Selector's `--mode import` corrupts its
+own heap under its default five worker threads: on the live Secondary it died after thirteen
+minutes with a SIGSEGV reading an array through a wild pointer. Ticket 16 fixed the race in
+`--mode select`; the import's was found only at this scale. `McaSelector.relocate` passes
+`--process-threads 1` for that reason and the flag is not an optimisation to reconsider.
+
+**Killing the merge does not kill MCA Selector.** It is a subprocess, and it survives its
+parent. If you interrupt a run, check for an orphan before doing anything else — one will
+happily keep writing into a staging directory you are trying to delete:
+
+```sh
+pgrep -af mcaselector && pkill -f mcaselector
+```
+
+**A mixture of DataVersions is the normal case.** Vanilla upgrades a chunk only when it loads
+one, so ground nobody has walked since before the Portal cutover is still in the shape the
+version that generated it wrote — the live Secondary carries 1.15-era chunks beside 26.2 ones.
+Anything that reads chunk NBT has to cope with both layouts, and the failure mode is quiet: a
+reader that looks only at the modern shape finds *nothing* rather than erroring, and an empty
+list compares equal to an empty list.
+
 ## Run it
 
 Plan first, check the placement against the real map, then run for real with the offset the plan
