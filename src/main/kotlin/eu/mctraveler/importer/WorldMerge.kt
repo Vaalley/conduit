@@ -333,12 +333,12 @@ class WorldMerge(private val plan: MergePlan) {
         refuseIfTheBorderLeavesNothing(secondary)
 
         val search = PlacementSearch(secondary, footprints(WorldLayout.PRIMARY), plan.clearance)
-        // The declared offset is the real run's: once it is filled in, the merge
-        // moves the landmass by the same statement the claim path will still be
-        // reading years later, so the two cannot be made to disagree by anyone
-        // forgetting a flag. Until then this is null and the search answers.
-        val declared = plan.offset ?: MergeGeometry.APPLIED_OFFSET
-        val placement = declared?.let(search::checked) ?: search.nearestSlot(plan.searchLimit)
+        // Whichever way the offset is arrived at, the merge writes the one it
+        // used into the save's own marker and everything downstream — the claim
+        // path most of all — reads it back from there. So a rehearsal and the
+        // real run agree because the operator passed --offset, and the claim path
+        // agrees with the night because it never held a second copy at all.
+        val placement = plan.offset?.let(search::checked) ?: search.nearestSlot(plan.searchLimit)
         if (plan.planOnly) return MergeReport(placement, listOf(clip))
         // The clip is not a phase of the staging — it was decided up here, and it
         // constrained every phase down there — so it leads the sections rather

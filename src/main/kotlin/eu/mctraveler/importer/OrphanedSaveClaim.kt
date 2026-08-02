@@ -25,7 +25,7 @@ sealed interface MergeOnClaim {
     /**
      * This server has never been merged, so there is nothing to apply. The state
      * of every server before the operation and of every server that never runs
-     * it — see [MergeGeometry.APPLIED_OFFSET].
+     * it, and the state a save with no [MergeMarker] is in.
      */
     data object NotMerged : MergeOnClaim
 
@@ -135,6 +135,15 @@ sealed interface ClaimOutcome {
  * the two happened is in the claim's log line, because a wrong landing years from
  * now has nothing else to be diagnosed from.
  *
+ * **How far to move a save, and which of two saves to make live, are both asked
+ * of the merge rather than of this server's present state** (ticket 14). The
+ * offset comes out of the save's own [MergeMarker] — the file the merge wrote
+ * about itself — and the World a returning player was last in comes out of the
+ * merge stamp the sweep left on their record, because the sweep overwrote the
+ * only other place that was written down. Both are questions about a night that
+ * has already happened, and neither has an answer anybody has to remember to
+ * supply.
+ *
  * All paths come in from the caller so this is testable with no server at all;
  * [OrphanedSaveClaimFeature] supplies the live server's.
  */
@@ -153,12 +162,12 @@ class OrphanedSaveClaim(
      */
     private val records: Path,
     /**
-     * How far Secondary moved when this server was merged, or null while it has
-     * not been. It defaults from [MergeGeometry.APPLIED_OFFSET] rather than being
-     * threaded in by the live wiring, so that nothing but a test can hold an
-     * answer the merge itself did not.
+     * The save's own record of the merge, which is where how far Secondary moved
+     * comes from. There is no default: the one question this class must never
+     * answer out of thin air is the one it would be answering if it could fall
+     * back to something.
      */
-    private val mergeOffset: MergeOffset? = MergeGeometry.APPLIED_OFFSET,
+    private val mergeMarker: MergeMarker,
 ) {
 
     /**
@@ -181,7 +190,9 @@ class OrphanedSaveClaim(
         // is written, so a save this server cannot place fails while the
         // quarantine is still whole — and a failure during the writes has to say
         // so, because an audit line claiming nothing was written when something
-        // was is worse than no line at all.
+        // was is worse than no line at all. A merge marker that cannot be read
+        // fails here too, and that is exactly where it belongs: loudly, in the
+        // log, with nothing written and the next login free to try again.
         val prepared = try {
             prepare(uuid, offlineUuid, quarantined)
         } catch (failure: Exception) {
@@ -213,19 +224,30 @@ class OrphanedSaveClaim(
         val merge: MergeOnClaim,
         /** The World the player's own record ends up naming; see [prepare]. */
         val recordWorld: WorldTrio,
+        /**
+         * The World the sweep found on this record before it rewrote the field,
+         * carried through so the stamp this claim writes keeps saying it; see
+         * [MergeStamp.wasLastIn].
+         */
+        val wasLastIn: WorldTrio?,
     )
 
     private fun prepare(uuid: UUID, offlineUuid: UUID, quarantined: List<WorldTrio>): PreparedClaim {
-        val live = liveWorld(uuid, quarantined)
+        // Both of the merge's answers are read here, before a byte is written: a
+        // marker that says the save was merged and cannot say by how much throws
+        // out of this phase, where the failure costs nothing but a log line.
+        val offset = mergeMarker.offsetApplied()
+        val wasLastIn = MergeStamp.wasLastIn(records.resolve("$uuid$RECORD_SUFFIX"))
+        val live = liveWorld(uuid, wasLastIn, quarantined)
         val other = quarantined.firstOrNull { it != live }
         val liveTag = read(quarantine.save(live.id, offlineUuid))
-        val merge = mergeFor(live)
+        val merge = mergeFor(live, offset)
         return PreparedClaim(
             quarantined = quarantined,
             live = live,
             liveSave = claimedSave(liveTag, live, merge),
             dataVersion = NbtUtils.getDataVersion(liveTag, UNKNOWN_DATA_VERSION),
-            bucket = other?.let { it to claimedBucket(read(quarantine.save(it.id, offlineUuid)), it) },
+            bucket = other?.let { it to claimedBucket(read(quarantine.save(it.id, offlineUuid)), it, offset) },
             merge = merge,
             // A merged server has one World, so a claim that applied the merge
             // records Primary rather than the quarantine it read out of — the
@@ -233,11 +255,13 @@ class OrphanedSaveClaim(
             // same reason: a record still naming Secondary would have the login
             // path place its owner in a World that is being retired.
             recordWorld = if (merge is MergeOnClaim.Relocated) WorldLayout.PRIMARY else live,
+            wasLastIn = wasLastIn,
         )
     }
 
     /**
-     * What the merge does to a save out of [world]'s quarantine.
+     * What a merge that moved Secondary by [offset] does to a save out of
+     * [world]'s quarantine, or [MergeOnClaim.NotMerged] when there was no merge.
      *
      * The asymmetry is the substance of it: Secondary's landmass moved and
      * Primary's did not, so the quarantine directory a save was sitting in is
@@ -245,8 +269,8 @@ class OrphanedSaveClaim(
      * Portal-era backend wrote it, and both backends were plain vanilla servers
      * naming the vanilla trio whichever World they became.
      */
-    private fun mergeFor(world: WorldTrio): MergeOnClaim {
-        val offset = mergeOffset ?: return MergeOnClaim.NotMerged
+    private fun mergeFor(world: WorldTrio, offset: MergeOffset?): MergeOnClaim {
+        if (offset == null) return MergeOnClaim.NotMerged
         return if (world === WorldLayout.SECONDARY) {
             MergeOnClaim.Relocated(offset)
         } else {
@@ -282,14 +306,13 @@ class OrphanedSaveClaim(
      * when that World is Secondary and this server has been merged.
      *
      * The banked half takes the transform for the same reason the live half does,
-     * and it is not the rare case: the sweep rewrote every existing record's
-     * `lastServer` to Primary, so a returning player who was quarantined on both
-     * sides has their Primary save made live and their Secondary one banked —
-     * which is precisely the half that moved.
+     * and which half that is depends on the player: a returning player
+     * quarantined on both sides has whichever save they were last in made live
+     * and the other one banked, so either half can be the one that moved. Both
+     * mirrors are this one line, as they are in the sweep.
      */
-    private fun claimedBucket(tag: CompoundTag, world: WorldTrio): PerWorldBucket {
+    private fun claimedBucket(tag: CompoundTag, world: WorldTrio, offset: MergeOffset?): PerWorldBucket {
         val bucket = PlayerdataImport.bucket(tag)
-        val offset = mergeOffset
         return if (offset != null && world === WorldLayout.SECONDARY) {
             MergedPlayerdata.merged(bucket, offset)
         } else {
@@ -306,7 +329,7 @@ class OrphanedSaveClaim(
         // leftover quarantine files are an operator's cleanup, not a data loss.
         claim.bucket?.let { (world, seeded) -> players.setBucket(uuid, world.id, seeded) }
         if (players.lastWorld(uuid) != claim.recordWorld.id) players.setLastWorld(uuid, claim.recordWorld.id)
-        stamp(uuid, claim.merge)
+        stamp(uuid, claim)
         takeSidecar(quarantine.advancements(claim.live.id, offlineUuid), advancements.resolve("$uuid.json"))
         takeSidecar(quarantine.stats(claim.live.id, offlineUuid), stats.resolve("$uuid.json"))
         Files.createDirectories(playerdata)
@@ -334,22 +357,40 @@ class OrphanedSaveClaim(
      * years after the night reads as exactly that instead of being backdated into
      * the crowd — and the offset beside it is the same offset, which is what the
      * question is really about.
+     *
+     * The pre-merge World the sweep recorded is written back out unchanged. This
+     * claim consumed the quarantine and nothing will ask the question again, but
+     * overwriting the stamp would quietly delete the record's own account of what
+     * the merge found here — and that account is the only evidence of why this
+     * player was handed the save they were handed.
      */
-    private fun stamp(uuid: UUID, merge: MergeOnClaim) {
+    private fun stamp(uuid: UUID, claim: PreparedClaim) {
+        val merge = claim.merge
         if (merge !is MergeOnClaim.Relocated) return
-        MergeStamp.into(records.resolve("$uuid$RECORD_SUFFIX"), merge.offset, Instant.now())
+        MergeStamp.into(records.resolve("$uuid$RECORD_SUFFIX"), merge.offset, Instant.now(), claim.wasLastIn)
     }
 
     private fun reason(failure: Exception): String = failure.message ?: failure.toString()
 
     /**
      * Which World's save becomes the live one, by the migration's own rule: the
-     * Portal record's `lastServer` if it names a World with a quarantined save,
+     * World the player was last in if it is one they have a quarantined save in,
      * otherwise the World they do have one in (spec deviation register 50). An
-     * unrecognised `lastServer` counts as no answer.
+     * unrecognised World counts as no answer, and no answer at all means Primary.
+     *
+     * [wasLastIn] — the World the merge stamp says this record named before the
+     * sweep — is preferred over the record's live `lastServer` because on a
+     * merged server that field no longer answers this question: the sweep
+     * rewrote it to Primary for everyone, correctly, since there is one World
+     * afterwards. Reading it here would hand a returning player who was last in
+     * Secondary their *Primary* save, and the mistake is nearly invisible —
+     * their coordinates are right either way, and only the inventory, XP and
+     * advancements are the wrong ones (ticket 14). A record with no stamp was
+     * never swept and still answers for itself, which is why the fallback is the
+     * behaviour this had before the merge existed rather than a second guess.
      */
-    private fun liveWorld(uuid: UUID, quarantined: List<WorldTrio>): WorldTrio {
-        val recorded = players.lastWorld(uuid)?.let(WorldLayout::byId) ?: WorldLayout.PRIMARY
+    private fun liveWorld(uuid: UUID, wasLastIn: WorldTrio?, quarantined: List<WorldTrio>): WorldTrio {
+        val recorded = wasLastIn ?: players.lastWorld(uuid)?.let(WorldLayout::byId) ?: WorldLayout.PRIMARY
         return quarantined.firstOrNull { it == recorded } ?: quarantined.first()
     }
 

@@ -198,16 +198,16 @@ class MergeStaging(
      * The stamp a finished merge leaves on the save.
      *
      * [WorldMerge.MARKER_FILE] is what a second run refuses over, so this is the
-     * thing that makes a merge unrepeatable (merge spec, User Story 46). It
-     * records the offset as well as the time because months later the question
-     * asked of a save is not only whether it was merged but by how far — a
-     * coordinate that looks wrong is diagnosable from this file alone.
+     * thing that makes a merge unrepeatable (merge spec, User Story 46). It is
+     * also the last word on how far the landmass moved: the claim path reads its
+     * offset back for as long as a quarantined save can still be claimed, which
+     * is why the bytes are [MergeMarker]'s rather than this phase's own — the one
+     * writer and the one reader of this file must not be able to drift apart.
      */
     private fun stampAsMerged(placement: MergePlacement) {
         Files.writeString(
             adding(plan.targetDir.resolve(WorldMerge.MARKER_FILE)),
-            "{\"mergedAt\":\"${Instant.now()}\"," +
-                "\"offsetX\":${placement.offset.x},\"offsetZ\":${placement.offset.z}}\n",
+            MergeMarker.contents(placement.offset, Instant.now()),
         )
     }
 
