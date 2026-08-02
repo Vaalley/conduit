@@ -116,8 +116,10 @@ class MergeStaging(
             ).run()
             val regions = MergeRegions(plan.targetDir, this, placement.offset).sweep()
             val players = PlayerSweep(plan, placement.offset).sweep(this)
+            val end = MergeEnd(plan, this, placement.offset, players.anchoredInSecondaryEnd).close()
+            val respawns = RespawnBeds(plan, this, stagedLevelDir).check()
             stampAsMerged(placement)
-            MergeReport(placement, listOf(relocation, regions, players))
+            MergeReport(placement, listOf(relocation, regions, players, end, respawns))
         } catch (failure: Throwable) {
             // The merge only ever copies — `--worlds move` is deliberately not
             // offered — so nothing here is the last copy of anything, and the
@@ -149,11 +151,25 @@ class MergeStaging(
         return prepared(live)
     }
 
+    /**
+     * What a phase should read when it builds on what an earlier phase staged:
+     * the staged file if there is one, and the live file when there is not.
+     *
+     * The End gate deletes out of a `regions.json` and out of player saves the
+     * sweeps before it have already rewritten, and reading the live files would
+     * quietly undo their work. Asking is not staging: [replacing] is still the
+     * only thing that gives the commit leave to overwrite, so a phase that looks
+     * and then finds it has nothing to do leaves the file untouched.
+     */
+    fun latest(live: Path): Path = stagedPath(live).takeIf(Files::exists) ?: live
+
     private fun prepared(live: Path): Path {
-        val staged = staging.resolve(plan.targetDir.relativize(live).toString())
+        val staged = stagedPath(live)
         Files.createDirectories(staged.parent)
         return staged
     }
+
+    private fun stagedPath(live: Path): Path = staging.resolve(plan.targetDir.relativize(live).toString())
 
     /**
      * The stamp a finished merge leaves on the save.

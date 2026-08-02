@@ -50,7 +50,14 @@ class WorldMergeRegionsTest {
         save = MergedDeploymentFixture(dir).build().withRealSecondaryChunks()
     }
 
-    private fun merge() = WorldMerge(save.plan(planOnly = false)).run()
+    /**
+     * [acceptEndLoss] is only ever passed by the tests that put something in
+     * Secondary's End: the End gate refuses the whole merge over it otherwise,
+     * and what this suite is about is what the Regions sweep did before that
+     * gate ran.
+     */
+    private fun merge(acceptEndLoss: Boolean = false) =
+        WorldMerge(save.plan(planOnly = false, acceptEndLoss = acceptEndLoss)).run()
 
     /** The swept file as the running server reads it back. */
     private fun swept(): List<Region> = RegionService(save.regionsFile).roots
@@ -440,11 +447,15 @@ class WorldMergeRegionsTest {
     fun `a Region in Secondary's End is left where it is and named for the End gate`() {
         save.withRegions(endFile)
 
-        val report = merge()
+        val report = merge(acceptEndLoss = true)
 
-        assertEquals(endFile, save.regionsJson())
-        assertEquals("last_the_end", region("Ender Outpost").world)
+        // This sweep neither moves it nor rewrites the file over it — it has no
+        // offset for a dimension being discarded, so it leaves it and says so.
+        // What becomes of it afterwards belongs to the End gate, which deletes it
+        // once the operator has accepted the loss (WorldMergeEndGateTest); the
+        // opt-in is here only because without it that gate stops the whole merge.
         assertEquals(0, report.regions.movedCount)
+        assertFalse(report.regions.rewroteFile)
         assertTrue(
             report.regions.endAnchored.contains("the Region \"Ender Outpost\""),
             "the End Region was not reported: ${report.regions.endAnchored}",
@@ -455,10 +466,10 @@ class WorldMergeRegionsTest {
     fun `an Embassy destination naming Secondary's End is left alone and named too`() {
         save.withRegions(endFile)
 
-        val report = merge()
+        val report = merge(acceptEndLoss = true)
 
-        assertEquals("last_the_end", EmbassyDestination.of(region("Ambassador Plot"))?.world)
         assertEquals(0, report.regions.destinationsRewritten)
+        assertFalse(report.regions.rewroteFile)
         assertTrue(
             report.regions.endAnchored.contains(
                 "the destination of the Embassy Region \"Ambassador Plot\"",
@@ -490,7 +501,7 @@ class WorldMergeRegionsTest {
     fun `the report names everything still anchored in Secondary's End`() {
         save.withRegions(endFile)
 
-        val report = merge()
+        val report = merge(acceptEndLoss = true)
 
         assertEquals(
             listOf(

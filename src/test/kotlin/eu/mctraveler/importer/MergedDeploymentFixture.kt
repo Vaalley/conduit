@@ -4,9 +4,14 @@ import eu.mctraveler.worlds.DimensionRole
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
+import net.minecraft.core.BlockPos
+import net.minecraft.core.GlobalPos
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.nbt.NbtAccounter
 import net.minecraft.nbt.NbtIo
+import net.minecraft.nbt.NbtOps
+import net.minecraft.world.level.Level
+import net.minecraft.world.level.storage.LevelData
 
 /**
  * The live server's run directory as the merge finds it on the night: one save
@@ -73,12 +78,14 @@ class MergedDeploymentFixture(val root: Path) {
         offset: MergeOffset? = null,
         searchLimit: Int = WorldMerge.DEFAULT_SEARCH_LIMIT,
         planOnly: Boolean = true,
+        acceptEndLoss: Boolean = false,
     ) = MergePlan(
         targetDir = targetDir,
         clearance = clearance,
         offset = offset,
         searchLimit = searchLimit,
         planOnly = planOnly,
+        acceptEndLoss = acceptEndLoss,
     )
 
     /**
@@ -91,9 +98,11 @@ class MergedDeploymentFixture(val root: Path) {
      * than everything being funnelled into one. [FRONTIER] is the half-generated
      * chunk that must not travel.
      */
-    fun withRealSecondaryChunks(): MergedDeploymentFixture {
+    fun withRealSecondaryChunks(
+        overworld: List<SyntheticChunks.Chunk> = SECONDARY_OVERWORLD,
+    ): MergedDeploymentFixture {
         SECONDARY_FOLDERS.values.forEach { deleteRecursively(levelDir.resolve("dimensions/$it")) }
-        SyntheticChunks.write(levelDir, secondaryDimension(DimensionRole.OVERWORLD), SECONDARY_OVERWORLD)
+        SyntheticChunks.write(levelDir, secondaryDimension(DimensionRole.OVERWORLD), overworld)
         SyntheticChunks.write(levelDir, secondaryDimension(DimensionRole.NETHER), SECONDARY_NETHER)
         // Discarded rather than relocated, so it never has to be readable.
         secondary(DimensionRole.END, "region", 0 to 0)
@@ -135,6 +144,39 @@ class MergedDeploymentFixture(val root: Path) {
 
     /** The stamp a completed merge leaves behind, as a later run must refuse to see. */
     fun stampAsMerged(json: String = """{"mergedAt":"2026-01-01T00:00:00Z"}""") = write(mergeStamp, json)
+
+    /**
+     * The save's own spawn, as `level.dat` records it.
+     *
+     * There is one spawn for both Worlds — one level, one `level.dat` — so this
+     * is Secondary's spawn as much as Primary's, and it is where the End gate
+     * puts down a player who has no Secondary base of their own to go back to.
+     * Written through the game's own codec, which is what the running server
+     * writes it with, so what the merge reads back is the shape it will meet.
+     */
+    fun withWorldSpawn(x: Int, y: Int, z: Int): MergedDeploymentFixture {
+        val spawn = LevelData.RespawnData.CODEC.encodeStart(
+            NbtOps.INSTANCE,
+            LevelData.RespawnData(GlobalPos.of(Level.OVERWORLD, BlockPos(x, y, z)), 0f, 0f),
+        ).getOrThrow()
+        Files.createDirectories(levelDir)
+        NbtIo.writeCompressed(
+            CompoundTag().apply { put("Data", CompoundTag().apply { put("spawn", spawn) }) },
+            levelDir.resolve("level.dat"),
+        )
+        return this
+    }
+
+    /**
+     * Vanilla's own profile cache, in the run directory where a live server
+     * keeps it — the file the End gate names Region members out of.
+     */
+    fun withUserCache(vararg players: Pair<UUID, String>) = write(
+        targetDir.resolve("usercache.json"),
+        players.joinToString(",", "[", "]") { (uuid, name) ->
+            """{"name":"$name","uuid":"$uuid","expiresOn":"2099-01-01 00:00:00 +0000"}"""
+        },
+    )
 
     // ---- players ------------------------------------------------------------
     //
