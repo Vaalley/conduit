@@ -209,7 +209,7 @@ class ChunkAudit(
         dimension: ResourceKey<Level>,
         type: String,
         audit: (ChunkPos, CompoundTag) -> Boolean,
-    ) = chunks.walk(folder, dimension, type) { chunk, tag ->
+    ) = chunks.walk(folder, dimension, type, said = "auditing ${dimension.identifier().path} $type") { chunk, tag ->
         chunksAudited++
         audit(chunk, tag)
     }
@@ -645,12 +645,29 @@ class ChunkAudit(
         /**
          * The arbitrary-NBT escape hatches, whose contents are somebody's stored
          * data rather than the world's geography.
+         *
+         * Both spellings of each, because the same stored NBT is reached by two
+         * routes. As an item *component* it carries the namespace; nested inside
+         * another component it does not, and the live merge refused over exactly
+         * that gap — three hundred bees at
+         * `block_entities[].Items[].components.minecraft:bees[].entity_data`,
+         * which is a beehive somebody picked up with silk touch and left in a
+         * barrel. A bee sealed in a hive in a box is not standing anywhere: the
+         * position is whatever it held when the hive was broken, and vanilla
+         * gives it a fresh one when it comes out. The relocation leaves it alone,
+         * so flagging it refused a sound merge over nothing — the same reasoning
+         * the bucketed axolotl above is excluded for.
          */
         private val OPAQUE = setOf(
             "minecraft:custom_data",
             "minecraft:entity_data",
             "minecraft:block_entity_data",
             "minecraft:bucket_entity_data",
+            "minecraft:bees",
+            "custom_data",
+            "entity_data",
+            "block_entity_data",
+            "bucket_entity_data",
         )
 
         private const val BLOCK_POS_LENGTH = 3
