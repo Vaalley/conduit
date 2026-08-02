@@ -42,6 +42,7 @@ data class MergeReport(
 
     val relocation: RelocationReport get() = section()
     val sampled: SampledDiffReport get() = section()
+    val completion: ChunkCompletionReport get() = section()
     val audit: ChunkAuditReport get() = section()
     val regions: MergeRegionsReport get() = section()
     val players: PlayerSweepReport get() = section()
@@ -121,13 +122,23 @@ class MergeStaging(
             // targets in place — so an audit that ran first would leave changes
             // the diff could only read as the relocation having gone wrong.
             val sampled = SampledDiff(levelDir, stagedLevelDir, placement.offset, plan.sample).verify()
+            // After the diff has compared the tool's own output against the source,
+            // and before the audit judges it: this finishes coordinates the
+            // relocation tool does not know about, so that a merge does not refuse
+            // in a downtime window over a field somebody has yet to teach it. It
+            // names every one it completed, because a gap that is silently filled
+            // stops being a gap anybody knows about (ticket 17).
+            val completion = ChunkCompletion(stagedLevelDir, placement).run()
             val audit = ChunkAudit(stagedLevelDir, placement).run()
             val regions = MergeRegions(plan.targetDir, this, placement.offset).sweep()
             val players = PlayerSweep(plan, placement.offset).sweep(this)
             val end = MergeEnd(plan, this, placement.offset, players.anchoredInSecondaryEnd).close()
             val respawns = RespawnBeds(plan, this, stagedLevelDir).check()
             stampAsMerged(placement)
-            MergeReport(placement, listOf(relocation, sampled, audit, regions, players, end, respawns))
+            MergeReport(
+                placement,
+                listOf(relocation, sampled, completion, audit, regions, players, end, respawns),
+            )
         } catch (failure: Throwable) {
             // The merge only ever copies — `--worlds move` is deliberately not
             // offered — so nothing here is the last copy of anything, and the

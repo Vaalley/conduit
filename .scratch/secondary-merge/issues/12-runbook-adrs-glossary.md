@@ -77,3 +77,63 @@ not on it. The audit refuses on those, naming the bee and the chunk, so it is a 
 than a silent loss — but it *is* a refusal the operator cannot clear, and a rehearsal against
 production is what will say whether Secondary has any bees in a relocated chunk. That is worth
 finding out before the downtime window rather than during it.
+
+*Superseded by ticket 17, below: the bee is fixed, and a rehearsal no longer has to guess
+which field will be next.*
+
+### From ticket 17 — the completion count, and what a non-zero one means
+
+Ticket 17 widened the patch a long way past the bee (its Comments carry the enumeration) and
+added a phase the runbook has to explain, because it prints a number an operator will
+otherwise not know how to read.
+
+**There is a new report section, between the sampled diff and the audit:**
+
+```
+coordinates completed    : none — the relocation tool moved everything it should have
+```
+
+**Zero is the expected reading, and the boring one.** It says MCA Selector moved every
+coordinate Minecraft 26.2 writes, and there was nothing left for the merge to finish.
+
+**A non-zero count is a finding.** It looks like this:
+
+```
+coordinates completed    : 2 in 1 chunk, which the relocation tool did not move. See below.
+  the tool left behind   : minecraft:bee_nest.flower_pos — 1 coordinate
+  the tool left behind   : minecraft:bee.hive_pos — 1 coordinate
+  what this means        : MCA Selector has fallen behind what Minecraft writes. The merge
+                           finished these itself and the audit below still checked all of
+                           them, so the map is sound — but the patch wants widening before
+                           the next run.
+```
+
+What it means: the pinned tool does not know about a coordinate the game writes, and the merge
+applied the offset itself rather than stopping. **It is not a reason to abort the run.** The
+audit runs afterwards, unchanged, over the completed chunks, and would still have refused if
+anything were left — so a merge that prints this and then completes is a merge whose map is
+sound.
+
+What to do about it, in order:
+
+1. **Nothing, during the window.** The run is good. Do not stop it and do not try to widen the
+   patch at 2am.
+2. **Afterwards, record the field names.** They are the whole value of the section: each names
+   a field to add to `gradle/mcaselector/2.8-mctraveler1.patch`. Ticket 17's Comments explain
+   the shape the additions take — keyed by NBT name rather than by entity id.
+3. **Expect it to be non-zero on the first real run.** Ticket 17 deliberately left the tool's
+   *block entity* switch unfixed, because the completion pass had to be proved against a
+   defect that is real rather than mocked. A bee nest in a relocated chunk is what will show
+   up here, and it is expected rather than alarming.
+4. **Compare it between the rehearsal and the real run.** They should match. A count that grew
+   means the save changed underneath, and is worth understanding before reopening.
+
+**This replaces the "check whether Secondary has bees" rehearsal step above.** That step
+existed because one known field would have refused the merge; now no known field refuses it,
+and the completion count answers the same question about *every* field at once — including
+the ones nobody has found yet. The rehearsal step is simply: run it, and read this number.
+
+**The one refusal this does not clear.** An end gateway's `exit_portal` names a place in the
+End, and Secondary's End is discarded, so the merge cannot know where to point it and
+deliberately does not try. If the audit refuses over one, that is a genuine decision for a
+person: the gateway is in relocated terrain and its destination no longer exists.

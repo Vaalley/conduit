@@ -1,17 +1,13 @@
 package eu.mctraveler.importer
 
 import eu.mctraveler.worlds.DimensionRole
-import java.nio.file.Files
 import java.nio.file.Path
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.nbt.IntArrayTag
 import net.minecraft.nbt.ListTag
-import net.minecraft.nbt.NbtIo
 import net.minecraft.resources.ResourceKey
 import net.minecraft.world.level.ChunkPos
 import net.minecraft.world.level.Level
-import net.minecraft.world.level.chunk.storage.RegionFile
-import net.minecraft.world.level.chunk.storage.RegionStorageInfo
 
 /**
  * One coordinate a relocated chunk still records in the place Secondary used to
@@ -154,6 +150,7 @@ class ChunkAudit(
     private val placement: MergePlacement,
 ) {
 
+    private val chunks = StagedChunks(stagedLevelDir)
     private var chunksAudited = 0
     private var coordinatesChecked = 0
     private var retargeted = 0
@@ -203,66 +200,19 @@ class ChunkAudit(
      * Every chunk of every region file under [folder], walked by [audit] and
      * written back only if the walk repaired something.
      *
-     * A chunk the audit had nothing to do for is never re-encoded, so the bytes
-     * MCA Selector produced are the bytes the merge commits — which is what lets
-     * ticket 04's diff compare relocated terrain against its source without this
-     * phase standing in the middle of it.
+     * The reading and writing is [StagedChunks]', shared with [ChunkCompletion] so
+     * that the phase which finishes the relocation's leftovers and the phase which
+     * proves none are left reach exactly the same chunks.
      */
     private fun walk(
         folder: Path,
         dimension: ResourceKey<Level>,
         type: String,
         audit: (ChunkPos, CompoundTag) -> Boolean,
-    ) {
-        if (!Files.isDirectory(folder)) return
-        val files = Files.newDirectoryStream(folder, "r.*.mca").use { it.sortedBy(Path::toString) }
-        for (file in files) {
-            val at = RegionFilePos.parse(file.fileName.toString()) ?: continue
-            val chunks = read(file, folder, dimension, type, at)
-            val repaired = LinkedHashMap<ChunkPos, CompoundTag>()
-            for ((chunk, tag) in chunks) {
-                chunksAudited++
-                if (audit(chunk, tag)) repaired[chunk] = tag
-            }
-            if (repaired.isEmpty()) continue
-            region(file, folder, dimension, type).use { region ->
-                for ((chunk, tag) in repaired) {
-                    region.getChunkDataOutputStream(chunk).use { NbtIo.write(tag, it) }
-                }
-            }
-        }
+    ) = chunks.walk(folder, dimension, type) { chunk, tag ->
+        chunksAudited++
+        audit(chunk, tag)
     }
-
-    private fun read(
-        file: Path,
-        folder: Path,
-        dimension: ResourceKey<Level>,
-        type: String,
-        at: RegionFilePos,
-    ): Map<ChunkPos, CompoundTag> {
-        val found = LinkedHashMap<ChunkPos, CompoundTag>()
-        region(file, folder, dimension, type).use { region ->
-            for (localZ in 0 until CHUNKS_PER_REGION) {
-                for (localX in 0 until CHUNKS_PER_REGION) {
-                    val chunk = ChunkPos(
-                        at.x * CHUNKS_PER_REGION + localX,
-                        at.z * CHUNKS_PER_REGION + localZ,
-                    )
-                    if (!region.hasChunk(chunk)) continue
-                    region.getChunkDataInputStream(chunk)?.use { found[chunk] = NbtIo.read(it) }
-                }
-            }
-        }
-        return found
-    }
-
-    /**
-     * A region file opened through the server's own reader, so that the sector
-     * layout and the compression the audit reads and writes are the ones the
-     * server will meet rather than a second implementation of them.
-     */
-    private fun region(file: Path, folder: Path, dimension: ResourceKey<Level>, type: String) =
-        RegionFile(RegionStorageInfo(stagedLevelDir.fileName.toString(), dimension, type), file, folder, false)
 
     /** Every point of interest a poi chunk records, for the villager cross-check. */
     private fun collectPointsOfInterest(tag: CompoundTag, into: MutableSet<BlockPosition>) {
@@ -633,17 +583,17 @@ class ChunkAudit(
         /** How many leftovers a refusal spells out before it stops listing them. */
         private const val LEFTOVERS_NAMED = 8
 
-        private const val TERRAIN = "region"
-        private const val ENTITIES = "entities"
-        private const val POI = "poi"
+        // The folders a dimension's chunk data is split across and the `type` each
+        // is known by, named once in StagedChunks so that this phase and
+        // ChunkCompletion cannot come to disagree about which files they mean.
+        private const val TERRAIN = StagedChunks.TERRAIN
+        private const val ENTITIES = StagedChunks.ENTITIES
+        private const val POI = StagedChunks.POI
 
-        // The `type` a RegionStorageInfo carries, which is what the server's own
-        // error messages name a file by.
-        private const val TERRAIN_TYPE = "chunk"
-        private const val ENTITIES_TYPE = "entities"
-        private const val POI_TYPE = "poi"
+        private const val TERRAIN_TYPE = StagedChunks.TERRAIN_TYPE
+        private const val ENTITIES_TYPE = StagedChunks.ENTITIES_TYPE
+        private const val POI_TYPE = StagedChunks.POI_TYPE
 
-        private const val CHUNKS_PER_REGION = 32
         private const val BLOCKS_PER_CHUNK = 16
         private const val CHUNK_MASK = 0xFFFFFFFFL
 

@@ -120,10 +120,60 @@ index 86155618..ad6519ab 100644
  			}
  		}
 diff --git a/src/main/java/net/querz/mcaselector/version/java_1_18/ChunkFilter_21w37a.java b/src/main/java/net/querz/mcaselector/version/java_1_18/ChunkFilter_21w37a.java
-index 01bc608f..eefcd036 100644
+index 01bc608f..a4bfb1ee 100644
 --- a/src/main/java/net/querz/mcaselector/version/java_1_18/ChunkFilter_21w37a.java
 +++ b/src/main/java/net/querz/mcaselector/version/java_1_18/ChunkFilter_21w37a.java
-@@ -557,9 +557,12 @@ public class ChunkFilter_21w37a {
+@@ -544,6 +544,49 @@ public class ChunkFilter_21w37a {
+ 	@MCVersionImplementation(2834)
+ 	public static class RelocateEntities extends ChunkFilter_20w45a.RelocateEntities {
+ 
++		/**
++		 * Every block position Minecraft writes as an int array of three at the root of an
++		 * entity, enumerated from Minecraft 26.2's own entity classes rather than from
++		 * recollection: each class that serialises a {@code BlockPos} through
++		 * {@code BlockPos.CODEC}.
++		 *
++		 * <ul>
++		 *   <li>{@code block_pos} — {@code BlockAttachedEntity}: item frame, glow item
++		 *       frame, painting, leash knot</li>
++		 *   <li>{@code sleeping_pos} — {@code LivingEntity}: anything that sleeps in a bed</li>
++		 *   <li>{@code home_pos} — {@code Mob}: a turtle's home, a creaking's, a happy
++		 *       ghast's, and any mob restricted to one</li>
++		 *   <li>{@code hive_pos}, {@code flower_pos} — {@code Bee}</li>
++		 *   <li>{@code anchor_pos} — {@code Phantom}</li>
++		 *   <li>{@code bound_pos} — {@code Vex}</li>
++		 *   <li>{@code beam_target} — {@code EndCrystal}</li>
++		 *   <li>{@code wander_target} — {@code WanderingTrader}</li>
++		 *   <li>{@code patrol_target} — {@code PatrollingMonster}: pillager, vindicator,
++		 *       evoker, illusioner, ravager, witch</li>
++		 * </ul>
++		 *
++		 * <p>{@code current_explosion_impact_pos} is deliberately not here. It is the only
++		 * other position {@code LivingEntity} persists, and it is a {@code Vec3} of doubles
++		 * rather than a block position — knockback state rather than a place anything
++		 * stands.
++		 *
++		 * <p>Keyed by name because these names are unambiguous, which the legacy triples are
++		 * not: every entity carrying {@code hive_pos} means the same thing by it, so this
++		 * list does not have to be crossed with the list of entity ids that have one.
++		 */
++		protected static final String[] INLINE_BLOCK_POSITIONS = {
++			"block_pos",
++			"sleeping_pos",
++			"home_pos",
++			"hive_pos",
++			"flower_pos",
++			"anchor_pos",
++			"bound_pos",
++			"beam_target",
++			"wander_target",
++			"patrol_target",
++		};
++
+ 		@Override
+ 		protected void applyOffsetToEntity(CompoundTag entity, Point3i offset) {
+ 			if (entity == null) {
+@@ -557,9 +600,12 @@ public class ChunkFilter_21w37a {
  				entityPos.set(2, DoubleTag.valueOf(entityPos.getDouble(2) + offset.getZ()));
  			}
  
@@ -137,19 +187,67 @@ index 01bc608f..eefcd036 100644
  
  			// projectiles
  			if (attempt(() -> Helper.applyIntOffsetIfRootPresent(entity, "xTile", "yTile", "zTile", offset))) {
-@@ -604,7 +607,10 @@ public class ChunkFilter_21w37a {
+@@ -569,6 +615,34 @@ public class ChunkFilter_21w37a {
+ 			// entities that have a sleeping place
+ 			Helper.applyIntOffsetIfRootPresent(entity, "SleepingX", "SleepingY", "SleepingZ", offset);
+ 
++			// The inlined block positions, keyed by name rather than by entity id. Each of
++			// these names a place on whatever entity carries it — a bee's hive, a phantom's
++			// anchor, the block an item frame hangs on — so one loop reaches every entity
++			// that has one, including a kind nobody thought to list. The legacy CamelCase
++			// triples stay in the switch below, because those spellings really are
++			// entity-specific: AX/AY/AZ means something only on a phantom. Both are applied,
++			// never one instead of the other, because a save holds chunks at a mixture of
++			// DataVersions. applyOffsetToIntArrayPos only touches an array of exactly three,
++			// so a key that happens to hold a uuid is left alone.
++			for (String key : INLINE_BLOCK_POSITIONS) {
++				Helper.applyOffsetToIntArrayPos(entity.getIntArrayTag(key), offset);
++			}
++
++			// Every memory in the brain, rather than the three a villager claims a point of
++			// interest with. A memory that holds a place holds it under "pos", either on the
++			// memory itself or inside the "value" that ExpirableValue wraps it in, so one
++			// loop reaches a villager's potential_job_site and an allay's liked_noteblock as
++			// readily as its home. A memory whose value is a *list* of places is not covered
++			// here; the sniffer case below is the one of those upstream knows about.
++			CompoundTag brainMemories = Helper.tagFromCompound(Helper.tagFromCompound(entity, "Brain"), "memories");
++			if (brainMemories != null) {
++				for (Tag memory : brainMemories.values()) {
++					if (memory instanceof CompoundTag m) {
++						Relocate.instance.applyOffsetToVillagerMemory(m, offset);
++					}
++				}
++			}
++
+ 			// positions for specific entity types
+ 			String id = Helper.stringFromCompound(entity, "id", "");
+ 			switch (id) {
+@@ -603,17 +677,15 @@ public class ChunkFilter_21w37a {
+ 				Helper.applyIntOffsetIfRootPresent(beamTarget, "X", "Y", "Z", offset);
  				break;
  			case "minecraft:item_frame":
++			case "minecraft:glow_item_frame":
  			case "minecraft:painting":
-+				// The block the thing hangs on, in both spellings: TileX/TileY/TileZ
-+				// before 1.21.5 inlined it, block_pos after.
++			case "minecraft:leash_knot":
++				// The block the thing hangs on, in the spelling used before 1.21.5 inlined
++				// it. All four are BlockAttachedEntity, which is why the glow item frame and
++				// the leash knot belong here beside the two upstream listed; the inlined
++				// block_pos they all now write is applied above rather than here.
  				Helper.applyIntOffsetIfRootPresent(entity, "TileX", "TileY", "TileZ", offset);
-+				Helper.applyOffsetToIntArrayPos(entity.getIntArrayTag("block_pos"), offset);
  				break;
- 			case "minecraft:villager":
- 				CompoundTag memories = Helper.tagFromCompound(Helper.tagFromCompound(entity, "Brain"), "memories");
+-			case "minecraft:villager":
+-				CompoundTag memories = Helper.tagFromCompound(Helper.tagFromCompound(entity, "Brain"), "memories");
+-				if (memories != null && !memories.isEmpty()) {
+-					Relocate.instance.applyOffsetToVillagerMemory(Helper.tagFromCompound(memories, "minecraft:meeting_point"), offset);
+-					Relocate.instance.applyOffsetToVillagerMemory(Helper.tagFromCompound(memories, "minecraft:home"), offset);
+-					Relocate.instance.applyOffsetToVillagerMemory(Helper.tagFromCompound(memories, "minecraft:job_site"), offset);
+-				}
+-				break;
+ 			case "minecraft:pillager":
+ 			case "minecraft:witch":
+ 			case "minecraft:vindicator":
 diff --git a/src/main/java/net/querz/mcaselector/version/java_1_21/ChunkFilter_25w15a.java b/src/main/java/net/querz/mcaselector/version/java_1_21/ChunkFilter_25w15a.java
-index 3a7d483d..fc4b2bb5 100644
+index 3a7d483d..f8985cf1 100644
 --- a/src/main/java/net/querz/mcaselector/version/java_1_21/ChunkFilter_25w15a.java
 +++ b/src/main/java/net/querz/mcaselector/version/java_1_21/ChunkFilter_25w15a.java
 @@ -30,9 +30,12 @@ public class ChunkFilter_25w15a {
@@ -166,18 +264,79 @@ index 3a7d483d..fc4b2bb5 100644
  
  			// projectiles
  			if (attempt(() -> Helper.applyIntOffsetIfRootPresent(entity, "xTile", "yTile", "zTile", offset))) {
-@@ -77,7 +80,10 @@ public class ChunkFilter_25w15a {
+@@ -42,6 +45,34 @@ public class ChunkFilter_25w15a {
+ 			// entities that have a sleeping place
+ 			Helper.applyIntOffsetIfRootPresent(entity, "SleepingX", "SleepingY", "SleepingZ", offset);
+ 
++			// The inlined block positions, keyed by name rather than by entity id. Each of
++			// these names a place on whatever entity carries it — a bee's hive, a phantom's
++			// anchor, the block an item frame hangs on — so one loop reaches every entity
++			// that has one, including a kind nobody thought to list. The legacy CamelCase
++			// triples stay in the switch below, because those spellings really are
++			// entity-specific: AX/AY/AZ means something only on a phantom. Both are applied,
++			// never one instead of the other, because a save holds chunks at a mixture of
++			// DataVersions. applyOffsetToIntArrayPos only touches an array of exactly three,
++			// so a key that happens to hold a uuid is left alone.
++			for (String key : INLINE_BLOCK_POSITIONS) {
++				Helper.applyOffsetToIntArrayPos(entity.getIntArrayTag(key), offset);
++			}
++
++			// Every memory in the brain, rather than the three a villager claims a point of
++			// interest with. A memory that holds a place holds it under "pos", either on the
++			// memory itself or inside the "value" that ExpirableValue wraps it in, so one
++			// loop reaches a villager's potential_job_site and an allay's liked_noteblock as
++			// readily as its home. A memory whose value is a *list* of places is not covered
++			// here; the sniffer case below is the one of those upstream knows about.
++			CompoundTag brainMemories = Helper.tagFromCompound(Helper.tagFromCompound(entity, "Brain"), "memories");
++			if (brainMemories != null) {
++				for (Tag memory : brainMemories.values()) {
++					if (memory instanceof CompoundTag m) {
++						Relocate.instance.applyOffsetToVillagerMemory(m, offset);
++					}
++				}
++			}
++
+ 			// positions for specific entity types
+ 			String id = Helper.stringFromCompound(entity, "id", "");
+ 			switch (id) {
+@@ -76,17 +107,15 @@ public class ChunkFilter_25w15a {
+ 					Helper.applyIntOffsetIfRootPresent(beamTarget, "X", "Y", "Z", offset);
  					break;
  				case "minecraft:item_frame":
++				case "minecraft:glow_item_frame":
  				case "minecraft:painting":
-+					// The block the thing hangs on, in both spellings: TileX/TileY/TileZ
-+					// before 1.21.5 inlined it, block_pos after.
++				case "minecraft:leash_knot":
++					// The block the thing hangs on, in the spelling used before 1.21.5
++					// inlined it. All four are BlockAttachedEntity, which is why the glow
++					// item frame and the leash knot belong here beside the two upstream
++					// listed; the inlined block_pos they all now write is applied above.
  					Helper.applyIntOffsetIfRootPresent(entity, "TileX", "TileY", "TileZ", offset);
-+					Helper.applyOffsetToIntArrayPos(entity.getIntArrayTag("block_pos"), offset);
  					break;
- 				case "minecraft:villager":
- 					CompoundTag memories = Helper.tagFromCompound(Helper.tagFromCompound(entity, "Brain"), "memories");
-@@ -149,11 +155,20 @@ public class ChunkFilter_25w15a {
+-				case "minecraft:villager":
+-					CompoundTag memories = Helper.tagFromCompound(Helper.tagFromCompound(entity, "Brain"), "memories");
+-					if (memories != null && !memories.isEmpty()) {
+-						Relocate.instance.applyOffsetToVillagerMemory(Helper.tagFromCompound(memories, "minecraft:meeting_point"), offset);
+-						Relocate.instance.applyOffsetToVillagerMemory(Helper.tagFromCompound(memories, "minecraft:home"), offset);
+-						Relocate.instance.applyOffsetToVillagerMemory(Helper.tagFromCompound(memories, "minecraft:job_site"), offset);
+-					}
+-					break;
+ 				case "minecraft:pillager":
+ 				case "minecraft:witch":
+ 				case "minecraft:vindicator":
+@@ -114,9 +143,9 @@ public class ChunkFilter_25w15a {
+ 						}
+ 					}
+ 					break;
+-				case "minecraft:happy_ghast":
+-					Helper.applyOffsetToIntArrayPos(entity.getIntArrayTag("home_pos"), offset);
+-					break;
++				// minecraft:happy_ghast had a case here for home_pos. It is applied above
++				// now, for every mob that has one rather than only this one, and applying
++				// it in both places would move the ghast's home twice.
+ 			}
+ 
+ 			// recursively update passengers
+@@ -149,11 +178,20 @@ public class ChunkFilter_25w15a {
  
  	protected static class Relocate extends ChunkFilter_21w06a.Relocate {
  

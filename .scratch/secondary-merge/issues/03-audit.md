@@ -103,6 +103,16 @@ One field of the same kind is still not relocated and was deliberately left: a b
 writes nothing` now leaves stale, so this suite still proves the refusal path over something
 real rather than something invented.
 
+**Ticket 17 fixed the bee and much else besides**, and changed what this suite refuses over.
+Judgement call 1 below still stands and was the argument ticket 17 had to answer: it did not
+weaken the audit, it added a *separate* phase in front of it — `ChunkCompletion` — which
+finishes the coordinates the tool left and then **names every one of them and its kind in the
+merge report**. The audit runs after it, unchanged, and still refuses over anything left. The
+information this ticket protected is preserved; what changed is that the merge finishes and
+says so, instead of stopping and saying so. The deliberately-stale coordinate is now an end
+gateway's `exit_portal`, which is genuinely unrelocated *and* genuinely declined by the
+completion pass — the End is discarded, so there is nowhere to point it.
+
 ### Judgement calls
 
 1. **Structural leftovers refuse; they are not repaired.** The merge spec and this ticket
