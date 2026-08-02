@@ -71,15 +71,121 @@ objectives), and anything outside the border you state. See
 
 ## Before you run it
 
-PLACEHOLDER preparation.
+1. **Stop the server.** The merge rewrites `regions.json` and player records directly, and a
+   running server holds both in memory and would overwrite the merge at its next save. It also
+   reads player saves, which a running server has not flushed.
+2. **Back up the whole run directory**, and verify the backup opens. This backup *is* the
+   rollback — there is no undo in the tool. Keep it until the rollback window has closed.
+3. **Find out Secondary's real world border.** `--border` defaults to 50,000, which is what
+   Secondary ran, but the tool cannot measure it: if you give it the wrong number nothing will
+   say so. Check it against the server's own configuration. Chunks outside it are left behind
+   for good.
+4. **Rehearse against a copy of production.** See [The rehearsal](#the-rehearsal). This is not
+   optional; it is where you meet the End refusal and where the placement gets checked against
+   the real map.
+5. **Agree the rollback trigger list and name the decision-maker.** See [Rollback](#rollback).
+6. **Have the patched relocation tool built and verified.** See below.
+
+`mergeWorlds` runs *after* `migrate` and `importNucleus`, both of which are long done in
+production, so it sees every Region including the imported Embassies.
 
 ### The relocation tool is a patched build
 
-PLACEHOLDER mcaselector.
+The merge does not move chunks itself — MCA Selector does, and its per-version relocation chain
+is what copes with Secondary's chunks being a mixture of DataVersions, because vanilla only
+upgrades a chunk when something loads it. **It is not a released MCA Selector.** It is a local
+build of the 2.8 tag with `gradle/mcaselector/2.8-mctraveler1.patch` applied, pinned by path and
+sha256 in `gradle/merge-worlds.gradle.kts`, and run headless as a subprocess.
+
+**Why it is patched.** Released 2.8 has defects that make it unusable here, all found by this
+project and all fixed at source rather than routed around:
+
+- `--mode select` races. A non-thread-safe map is mutated from every per-region-file job at once,
+  so about one run in twenty silently returned an entire region file's worth of chunks fewer than
+  it matched — **and exited 0**. In production that is player builds left behind with the merge
+  reporting success.
+- The relocation is incomplete for 26.2. A static field the entity relocation dereferences for
+  every entity was left null, so each entity was abandoned partway through; and the tool's
+  hand-written switch over entity ids still speaks only the pre-1.21.5 spellings, so a leash, an
+  item frame's and a painting's tile position, every villager's memories, a bee's hive, a
+  phantom's anchor, a mob's home, anything asleep in a bed and much else arrived in Primary still
+  naming Secondary. The audit refuses on those, so a merge on stock 2.8 could not complete at
+  all.
+
+**How to build it.** The build prints the whole procedure when the jar is missing, so the short
+correct instruction is:
+
+```sh
+./gradlew provideMcaSelector
+```
+
+and follow what it says. For reference that is: clone the 2.8 tag to
+`~/.mctraveler/src/mcaselector`, `git apply` the patch, `./gradlew shadowJar`, and copy
+`build/libs/mcaselector-2.8-all.jar` to
+`~/.mctraveler/tools/mcaselector-2.8-mctraveler1.jar`. It needs a JDK 21 and it downloads JavaFX,
+which its build needs even though the merge only ever runs it headless. Pass
+`-PmcaSelectorJar=<path>` if you keep it somewhere else.
+
+**The build is reproducible**, so a rebuilt jar matches the pinned checksum exactly. A mismatch
+means something is wrong, not that a rebuild drifted — do not run the merge until you know why,
+and never take a new checksum from a jar that just failed the check.
 
 ### The rehearsal
 
-PLACEHOLDER rehearsal.
+Copy the run directory somewhere throwaway, merge into the copy, look at what it says, then throw
+it away. **The merge refuses to run against a save that already carries the merge stamp**, which
+is exactly what makes this repeatable: a rehearsal cannot half-succeed into the state a second
+attempt would trip over, because a run that refuses or fails clears its own staging directory and
+leaves the copy as it found it.
+
+A rehearsal predicts the real run by construction rather than by luck. Ties in the placement
+search break towards +X and then +Z, so the same save gives the same slot every time. The sampled
+diff picks its chunks by a stride, not a shuffle — no clock and no random source — so the
+rehearsal and the night compare the *same* chunks. Both properties hold only if you keep the
+options the same: in particular, **raising `--sample` moves every pick rather than adding to
+them**, so rehearse and run at one sample size or you have not repeated the check.
+
+Work through it in this order:
+
+1. **Plan it.** `--plan-only` chooses the offset, prints the placement and writes nothing at all —
+   not a staging directory, not a marker, not a byte. Ask as often as you like.
+2. **Read the placement against the real map.** The default clearance of 512 nether blocks is a
+   starting point for a judgement, not a recommendation. Secondary has grown since the Portal
+   cutover.
+3. **Check `lands at` against `Secondary's footprint`, per dimension.** This is the one check
+   that protects the audit itself, so it is worth making by hand even though the search now
+   enforces it. The two lines are printed together:
+
+   ```
+     Secondary's footprint  : x 0…50175  z 0…511  (98 region files)
+     lands at               : x 8192…58367  z -4096…-3585
+   ```
+
+   `lands at` must not overlap `Secondary's footprint` on **both** axes at once, in the overworld
+   *and* in the nether. Above it does not: the X ranges overlap heavily, but the Z ranges do not
+   meet at all, so no landed coordinate can be mistaken for one that stayed. Inside an overlap
+   the audit cannot tell a coordinate that moved from one that never left — it decides that by
+   asking whether a coordinate still points into Secondary's old footprint, and in the overlap
+   the answer is the same either way. A merge whose audit is unreadable would report success.
+4. **Read `left outside the border`.** `nothing — every region file of Secondary is inside it` is
+   the expected answer. Anything else is a number to understand now rather than at 2am; see
+   [What it prints](#what-it-prints).
+5. **Run it for real against the copy, without `--accept-end-loss`.** If anything is still
+   anchored in Secondary's End the merge refuses and names it — every Region by title *and* by
+   its members' names, every Embassy whose destination points there, and every player standing
+   there with where they would land. That list is the whole point of meeting this on the
+   rehearsal: those people have to be told before the night, because afterwards their builds are
+   gone and there is nothing left to show them. Note that this refusal comes **late**, after the
+   chunk relocation has been staged, so a rehearsal that refuses has still spent the
+   relocation's time.
+6. **Run it again with `--accept-end-loss` and the offset the plan chose**, and read the whole
+   report. Compare `coordinates completed` and `left outside the border` between this run and the
+   night — they should match, and a count that grew means the save changed underneath.
+7. **Boot the merged copy** and walk some of it. Log in as a player who had a base in Secondary.
+
+Nothing about Secondary's own chunk data is modified by any of this: the merge only ever copies —
+`--worlds move` is deliberately not offered, because a moved source would compromise the backup
+that is your rollback — so Secondary's folders come out of a merge byte-for-byte identical.
 
 ## Run it
 
