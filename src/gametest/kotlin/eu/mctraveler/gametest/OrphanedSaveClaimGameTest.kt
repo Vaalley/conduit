@@ -1,7 +1,11 @@
 package eu.mctraveler.gametest
 
 import eu.mctraveler.MCTraveler
+import eu.mctraveler.importer.ClaimOutcome
+import eu.mctraveler.importer.MergeOffset
+import eu.mctraveler.importer.MergeOnClaim
 import eu.mctraveler.importer.OfflineUuid
+import eu.mctraveler.importer.OrphanedSaveClaim
 import eu.mctraveler.importer.SaveQuarantine
 import java.nio.file.Files
 import java.nio.file.Path
@@ -35,6 +39,20 @@ class OrphanedSaveClaimGameTest {
     private companion object {
         /** What the Portal-era backends stamped their saves with, as `PortalDeploymentFixture` does. */
         const val PORTAL_ERA_DATA_VERSION = 4536
+
+        /**
+         * How far Secondary moved, for the merged claim below: one lattice step
+         * out on each axis, in opposite directions so a transposed or mirrored
+         * coordinate cannot pass by accident. Small enough that the relocated
+         * landing is a chunk this server can generate inside the test's ticks.
+         */
+        val OFFSET = MergeOffset(4096, -4096)
+
+        /** Where a returning player logged out in Secondary, before the landmass moved. */
+        val SECONDARY_POS = Triple(100.5, 71.0, -200.5)
+
+        /** Where a returning player logged out in Primary, which did not move. */
+        val PRIMARY_POS = Triple(5.5, 70.0, 6.5)
     }
 
     private val claimantUuid: UUID = UUID.fromString("b7c1d2e3-4f50-4a61-9b72-c3d4e5f60718")
@@ -42,6 +60,12 @@ class OrphanedSaveClaimGameTest {
 
     private val settledUuid: UUID = UUID.fromString("c8d2e3f4-5061-4b72-8c83-d4e5f6071829")
     private val settledName = "Settled"
+
+    private val returningUuid: UUID = UUID.fromString("d9e3f405-6172-4c83-9d94-e5f60718293a")
+    private val returningName = "Returning"
+
+    private val homebodyUuid: UUID = UUID.fromString("ea04f516-7283-4d94-8ea5-f60718293a4b")
+    private val homebodyName = "Homebody"
 
     @GameTest(maxTicks = 600)
     fun aQuarantinedSaveIsClaimedByTheFirstLoginThatNamesIt(helper: GameTestHelper) {
@@ -158,6 +182,108 @@ class OrphanedSaveClaimGameTest {
         }
         helper.succeed()
     }
+
+    @GameTest(maxTicks = 600)
+    fun aClaimOnAMergedServerLandsWhereTheLandmassWent(helper: GameTestHelper) {
+        // The whole live-code surface of the merge, against a real login. The
+        // quarantine is claimed lazily — some of it years after Secondary moved —
+        // so what has to be true here is that the save is put down where the
+        // landmass went, in Primary's own dimension, and that a save from the
+        // other quarantine is not moved at all.
+        val server = helper.level.server
+        val quarantine = quarantine(server)
+        forget(server, returningUuid)
+        forget(server, homebodyUuid)
+        try {
+            quarantineSave(quarantine, returningName, "secondary", "minecraft:overworld", SECONDARY_POS) {
+                putInt("XpLevel", 42)
+                put("Inventory", ListTag().apply { add(diamonds(7)) })
+            }
+            quarantineSave(quarantine, homebodyName, "primary", "minecraft:overworld", PRIMARY_POS)
+
+            val merged = claimOnAMergedServer(server)
+            val returning = merged.claim(returningUuid, returningName) as ClaimOutcome.Claimed
+            val homebody = merged.claim(homebodyUuid, homebodyName) as ClaimOutcome.Claimed
+
+            helper.assertValueEqual(
+                returning.merge,
+                MergeOnClaim.Relocated(OFFSET) as MergeOnClaim,
+                "what the merge did to a save out of Secondary's quarantine",
+            )
+            helper.assertValueEqual(
+                homebody.merge,
+                MergeOnClaim.LeftWhereItWas as MergeOnClaim,
+                "what the merge did to a save out of Primary's quarantine",
+            )
+
+            val player = TestPlayers.login(server, returningName, returningUuid)
+            try {
+                helper.assertValueEqual(
+                    player.level().dimension(),
+                    Level.OVERWORLD,
+                    "a relocated save puts the player in the corresponding Primary dimension",
+                )
+                helper.assertValueEqual(
+                    listOf(player.x, player.y, player.z),
+                    listOf(SECONDARY_POS.first + OFFSET.x, SECONDARY_POS.second, SECONDARY_POS.third + OFFSET.z),
+                    "the relocated position a claimed Secondary save puts the player at",
+                )
+                helper.assertValueEqual(player.experienceLevel, 42, "the XP a relocated save still carries")
+                val held = player.inventory.getItem(0)
+                helper.assertTrue(held.`is`(Items.DIAMOND) && held.count == 7, "the inventory it still carries")
+                helper.assertTrue(
+                    Files.readString(record(returningUuid)).contains("""{"x":${OFFSET.x},"z":${OFFSET.z}}"""),
+                    "the record must carry the merge stamp, with the offset that was applied",
+                )
+            } finally {
+                TestPlayers.logout(player)
+            }
+
+            val untouched = TestPlayers.login(server, homebodyName, homebodyUuid)
+            try {
+                helper.assertValueEqual(
+                    listOf(untouched.x, untouched.y, untouched.z),
+                    listOf(PRIMARY_POS.first, PRIMARY_POS.second, PRIMARY_POS.third),
+                    "a save out of Primary's quarantine is left exactly where it was",
+                )
+                helper.assertFalse(
+                    Files.readString(record(homebodyUuid)).contains("\"merge\""),
+                    "a stamp would claim a move that never happened",
+                )
+            } finally {
+                TestPlayers.logout(untouched)
+            }
+        } finally {
+            clear(quarantine, returningName)
+            clear(quarantine, homebodyName)
+        }
+        helper.succeed()
+    }
+
+    /**
+     * The claim exactly as [eu.mctraveler.importer.OrphanedSaveClaimFeature] wires
+     * it against this server, but on a deployment the merge has been run on.
+     *
+     * The offset is passed rather than read from
+     * [eu.mctraveler.importer.MergeGeometry.APPLIED_OFFSET], which is null until
+     * the operation is actually performed — the constant is what production will
+     * hold, and this is the same value arriving by the same parameter.
+     */
+    private fun claimOnAMergedServer(server: MinecraftServer): OrphanedSaveClaim {
+        val persistence = checkNotNull(MCTraveler.persistence)
+        return OrphanedSaveClaim(
+            quarantine = quarantine(server),
+            playerdata = server.getWorldPath(LevelResource.PLAYER_DATA_DIR),
+            advancements = server.getWorldPath(LevelResource.PLAYER_ADVANCEMENTS_DIR),
+            stats = server.getWorldPath(LevelResource.PLAYER_STATS_DIR),
+            players = persistence.players,
+            records = persistence.playersDir,
+            mergeOffset = OFFSET,
+        )
+    }
+
+    private fun record(uuid: UUID): Path =
+        checkNotNull(MCTraveler.persistence).playersDir.resolve("$uuid.json")
 
     private fun quarantine(server: MinecraftServer): SaveQuarantine =
         SaveQuarantine.under(server.serverDirectory.resolve("mctraveler"))

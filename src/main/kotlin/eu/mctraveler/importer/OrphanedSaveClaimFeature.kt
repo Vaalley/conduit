@@ -1,6 +1,7 @@
 package eu.mctraveler.importer
 
 import eu.mctraveler.MCTraveler
+import eu.mctraveler.worlds.DimensionRole
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
 import net.minecraft.server.players.NameAndId
 import net.minecraft.world.level.storage.LevelResource
@@ -42,6 +43,7 @@ object OrphanedSaveClaimFeature {
                 advancements = server.getWorldPath(LevelResource.PLAYER_ADVANCEMENTS_DIR),
                 stats = server.getWorldPath(LevelResource.PLAYER_STATS_DIR),
                 players = persistence.players,
+                records = persistence.playersDir,
             )
         }
     }
@@ -61,7 +63,7 @@ object OrphanedSaveClaimFeature {
         when (outcome) {
             ClaimOutcome.NoOrphan -> Unit
             is ClaimOutcome.Claimed -> MCTraveler.LOGGER.info(
-                "orphaned-save claim: {} ({}) claimed their Portal save — live World {}, {}, DataVersion {}",
+                "orphaned-save claim: {} ({}) claimed their Portal save — live World {}, {}, DataVersion {}{}",
                 outcome.username,
                 outcome.uuid,
                 outcome.liveWorld,
@@ -71,6 +73,7 @@ object OrphanedSaveClaimFeature {
                 } else {
                     outcome.dataVersion
                 },
+                mergeClause(outcome.merge),
             )
             is ClaimOutcome.AlreadyLive -> MCTraveler.LOGGER.warn(
                 "orphaned-save claim: skipped for {} ({}) — they already have a save on this server, so the " +
@@ -92,5 +95,29 @@ object OrphanedSaveClaimFeature {
                 },
             )
         }
+    }
+
+    /**
+     * What the merge did to the claimed save, as the tail of its claim line
+     * (merge spec, User Story 40).
+     *
+     * The two merged cases have to be told apart here or nowhere. A claim is
+     * silent to the player and refused for good once they have a save of their
+     * own, so if a returning player lands somewhere wrong years from now this
+     * line is the only record of whether the offset was applied to them — and a
+     * line that merely omitted it would leave "not moved" and "should have been
+     * moved" looking identical.
+     *
+     * An unmerged server says nothing at all, because on it there is nothing to
+     * say: no save has ever been moved and the claim line is the one the Portal
+     * cutover's runbook already documents.
+     */
+    internal fun mergeClause(merge: MergeOnClaim): String = when (merge) {
+        MergeOnClaim.NotMerged -> ""
+        is MergeOnClaim.Relocated ->
+            ", moved by the Secondary merge: ${merge.offset.describe(DimensionRole.OVERWORLD)} " +
+                "in the overworld (${merge.offset.describe(DimensionRole.NETHER)} in the nether)"
+        MergeOnClaim.LeftWhereItWas ->
+            ", not moved by the Secondary merge — it came out of Primary's quarantine, which did not move"
     }
 }

@@ -307,7 +307,12 @@ class WorldMerge(private val plan: MergePlan) {
         refuseIfSecondaryIsMissing(secondary)
 
         val search = PlacementSearch(secondary, footprints(WorldLayout.PRIMARY), plan.clearance)
-        val placement = plan.offset?.let(search::checked) ?: search.nearestSlot(plan.searchLimit)
+        // The declared offset is the real run's: once it is filled in, the merge
+        // moves the landmass by the same statement the claim path will still be
+        // reading years later, so the two cannot be made to disagree by anyone
+        // forgetting a flag. Until then this is null and the search answers.
+        val declared = plan.offset ?: MergeGeometry.APPLIED_OFFSET
+        val placement = declared?.let(search::checked) ?: search.nearestSlot(plan.searchLimit)
         if (plan.planOnly) return MergeReport(placement)
         return MergeStaging(plan, staging, levelDir).write(placement)
     }

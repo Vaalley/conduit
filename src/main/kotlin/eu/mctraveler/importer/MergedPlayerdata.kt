@@ -51,18 +51,57 @@ import net.minecraft.nbt.ListTag
 object MergedPlayerdata {
 
     /**
-     * [tag] with every place it names in Secondary rewritten to its merged one.
+     * [tag] — a save this server already keeps — with every place it names in
+     * Secondary rewritten to its merged one.
      *
      * Always a copy, so the caller can compare it against what it read and tell a
      * player the merge actually moved from one it merely looked at — which is the
      * difference between a save that gets rewritten and one that is left alone.
      */
-    fun merged(tag: CompoundTag, offset: MergeOffset): CompoundTag {
+    fun merged(tag: CompoundTag, offset: MergeOffset): CompoundTag =
+        merged(tag, offset, ::secondaryRole)
+
+    /**
+     * [tag] — a save taken out of Secondary's half of the Portal cutover's
+     * quarantine — moved exactly as the sweep moves a save this server already
+     * keeps (ticket 10; merge spec, "The claim path").
+     *
+     * The quarantine is the one place the rule the rest of this file is built on
+     * does not hold. A quarantined save was written by a Portal-era backend, and
+     * both backends were plain vanilla servers, so every place in it names the
+     * *vanilla* trio however deep in Secondary it actually is — [secondaryRole]
+     * would recognise none of them and the save would land, silently, at
+     * Secondary's old coordinates in the middle of Primary's map.
+     *
+     * So which World a place is in is answered here by the quarantine directory
+     * the save came out of rather than by the place itself, and that is sound for
+     * exactly the reason it is unsound everywhere else: a save that has not been
+     * opened since before the cutover cannot name both Worlds at once. One
+     * backend wrote all of it, and if that backend was Secondary's then every
+     * place in it — the position, the bed, the death location, the compasses —
+     * is a Secondary place. [OrphanedSaveClaim] never calls this for a save out
+     * of Primary's quarantine, whose owner was never anywhere that moved.
+     */
+    fun mergedFromSecondarysQuarantine(tag: CompoundTag, offset: MergeOffset): CompoundTag =
+        merged(tag, offset, WorldLayout::backendRole)
+
+    /**
+     * The whole transform, over a save whose Secondary places are spelled by
+     * [inSecondary] — the mod's own dimension ids for a save this server keeps,
+     * the vanilla ones for a save still in the quarantine. Everything downstream
+     * of that one question is shared, so the offset is applied by one statement
+     * whichever door the save came in through.
+     */
+    private fun merged(
+        tag: CompoundTag,
+        offset: MergeOffset,
+        inSecondary: (String) -> DimensionRole?,
+    ): CompoundTag {
         val save = tag.copy()
-        mergeGlobalPositions(save, offset)
-        mergeLegacyRespawn(save, offset)
-        mergeEnderPearls(save, offset)
-        mergeWhereTheyStand(save, offset)
+        mergeGlobalPositions(save, offset, inSecondary)
+        mergeLegacyRespawn(save, offset, inSecondary)
+        mergeEnderPearls(save, offset, inSecondary)
+        mergeWhereTheyStand(save, offset, inSecondary)
         return save
     }
 
@@ -119,19 +158,29 @@ object MergedPlayerdata {
      * element away — so the dimension string is the discriminator, and it has to
      * name one of *Secondary's* three dimensions before anything is touched.
      */
-    private fun mergeGlobalPositions(tag: CompoundTag, offset: MergeOffset) {
-        mergeGlobalPosition(tag, offset)
+    private fun mergeGlobalPositions(
+        tag: CompoundTag,
+        offset: MergeOffset,
+        inSecondary: (String) -> DimensionRole?,
+    ) {
+        mergeGlobalPosition(tag, offset, inSecondary)
         for ((_, value) in tag.entrySet()) {
             when (value) {
-                is CompoundTag -> mergeGlobalPositions(value, offset)
-                is ListTag -> value.forEach { if (it is CompoundTag) mergeGlobalPositions(it, offset) }
+                is CompoundTag -> mergeGlobalPositions(value, offset, inSecondary)
+                is ListTag -> value.forEach {
+                    if (it is CompoundTag) mergeGlobalPositions(it, offset, inSecondary)
+                }
                 else -> Unit
             }
         }
     }
 
-    private fun mergeGlobalPosition(tag: CompoundTag, offset: MergeOffset) {
-        val role = secondaryRole(tag.getStringOr(GLOBAL_POS_DIMENSION, "")) ?: return
+    private fun mergeGlobalPosition(
+        tag: CompoundTag,
+        offset: MergeOffset,
+        inSecondary: (String) -> DimensionRole?,
+    ) {
+        val role = inSecondary(tag.getStringOr(GLOBAL_POS_DIMENSION, "")) ?: return
         if (role == DimensionRole.END) return
         val pos = tag.getIntArray(GLOBAL_POS).orElse(null) ?: return
         if (pos.size != BLOCK_POS_LENGTH) return
@@ -145,8 +194,12 @@ object MergedPlayerdata {
      * across verbatim by the Portal cutover — [PlayerdataImport] met the same
      * form and understands both spellings for the same reason.
      */
-    private fun mergeLegacyRespawn(save: CompoundTag, offset: MergeOffset) {
-        val role = secondaryRole(save.getStringOr(LEGACY_SPAWN_DIMENSION, "")) ?: return
+    private fun mergeLegacyRespawn(
+        save: CompoundTag,
+        offset: MergeOffset,
+        inSecondary: (String) -> DimensionRole?,
+    ) {
+        val role = inSecondary(save.getStringOr(LEGACY_SPAWN_DIMENSION, "")) ?: return
         if (role == DimensionRole.END) return
         save.putString(LEGACY_SPAWN_DIMENSION, WorldLayout.PRIMARY.dimensionId(role))
         save.putInt(LEGACY_SPAWN_X, offset.mergedX(save.getIntOr(LEGACY_SPAWN_X, 0), role))
@@ -160,10 +213,14 @@ object MergedPlayerdata {
      * `GlobalPos`. A pearl left over Secondary has to arrive where its landmass
      * did, or it teleports its owner into the ground it used to be above.
      */
-    private fun mergeEnderPearls(save: CompoundTag, offset: MergeOffset) {
+    private fun mergeEnderPearls(
+        save: CompoundTag,
+        offset: MergeOffset,
+        inSecondary: (String) -> DimensionRole?,
+    ) {
         for (pearl in save.getListOrEmpty(ENDER_PEARLS)) {
             if (pearl !is CompoundTag) continue
-            val role = secondaryRole(pearl.getStringOr(ENDER_PEARL_DIMENSION, "")) ?: continue
+            val role = inSecondary(pearl.getStringOr(ENDER_PEARL_DIMENSION, "")) ?: continue
             if (role == DimensionRole.END) continue
             pearl.putString(ENDER_PEARL_DIMENSION, WorldLayout.PRIMARY.dimensionId(role))
             mergeEntity(pearl, offset, role)
@@ -176,8 +233,12 @@ object MergedPlayerdata {
      * Where the player is standing, and everything positioned relative to that
      * rather than to a dimension of its own.
      */
-    private fun mergeWhereTheyStand(save: CompoundTag, offset: MergeOffset) {
-        val role = secondaryRole(save.getStringOr(DIMENSION, "")) ?: return
+    private fun mergeWhereTheyStand(
+        save: CompoundTag,
+        offset: MergeOffset,
+        inSecondary: (String) -> DimensionRole?,
+    ) {
+        val role = inSecondary(save.getStringOr(DIMENSION, "")) ?: return
         if (role == DimensionRole.END) return
         save.putString(DIMENSION, WorldLayout.PRIMARY.dimensionId(role))
         mergeEntity(save, offset, role)
@@ -265,9 +326,13 @@ object MergedPlayerdata {
         intArrayOf(offset.mergedX(pos[0], role), pos[1], offset.mergedZ(pos[2], role))
 
     /**
-     * The role [dimensionId] plays in Secondary, or null — it names one of
-     * Primary's dimensions, the Embassies, or something no World owns, all of
-     * which the merge leaves exactly where they are.
+     * The role [dimensionId] plays in Secondary as a save this server keeps
+     * spells it, or null — it names one of Primary's dimensions, the Embassies,
+     * or something no World owns, all of which the merge leaves exactly where
+     * they are.
+     *
+     * A save still in the Portal cutover's quarantine spells the same places the
+     * other way; see [mergedFromSecondarysQuarantine].
      */
     private fun secondaryRole(dimensionId: String): DimensionRole? =
         DimensionRole.entries.firstOrNull { WorldLayout.SECONDARY.dimensionId(it) == dimensionId }

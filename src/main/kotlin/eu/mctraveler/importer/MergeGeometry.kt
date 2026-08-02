@@ -48,6 +48,30 @@ object MergeGeometry {
     val RELOCATED_ROLES = listOf(DimensionRole.OVERWORLD, DimensionRole.NETHER)
 
     /**
+     * **How far Secondary was moved on this deployment**, or null while the merge
+     * has not been run here (merge spec, User Story 39; ticket 10).
+     *
+     * This is the one line of the merge that outlives it. Everything else the
+     * merge does is offline and happens once, but the Portal cutover quarantined
+     * roughly thirteen thousand offline-keyed saves that are claimed lazily as
+     * their owners come back — some of them years from now — and each of those
+     * claims has to apply the very same move the sweep applied on the night. So
+     * the offset stops being a value the tool worked out and becomes a fact about
+     * the save, and it is stated here, beside [Footprint] and the arithmetic that
+     * consumes it, so that the merge and [OrphanedSaveClaim] cannot hold two
+     * different answers.
+     *
+     * Null is the honest value for every server that has not been merged,
+     * including this repository until the operation is actually performed: a
+     * claim then behaves exactly as it did before the merge existed. Filling it
+     * in is a step of the merge runbook, not an optimisation — [WorldMerge] takes
+     * its offset from here when the operator names none, so the value that ends
+     * up in the save is this one rather than a copy of it, and a claim years
+     * later cannot land somewhere the landmass is not.
+     */
+    val APPLIED_OFFSET: MergeOffset? = null
+
+    /**
      * How many overworld blocks one of [role]'s blocks stands for: 1 in the
      * overworld, [NETHER_DIVISOR] in the nether. Both the offset and the
      * clearance are stated in one dimension's blocks and divided down by this,

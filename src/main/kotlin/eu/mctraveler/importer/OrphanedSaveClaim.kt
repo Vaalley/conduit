@@ -4,11 +4,44 @@ import eu.mctraveler.persistence.PerWorldBucket
 import eu.mctraveler.persistence.PlayerStore
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Instant
 import java.util.UUID
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.nbt.NbtAccounter
 import net.minecraft.nbt.NbtIo
 import net.minecraft.nbt.NbtUtils
+
+/**
+ * What the merge of Secondary into Primary did to a claimed save on the way in
+ * (ticket 10; merge spec, User Stories 37, 38 and 40).
+ *
+ * The cases are kept apart, and named, because a claim is invisible to the
+ * player and cannot be taken back: once its owner has played and has a save of
+ * their own the claim is refused for good, so a save that landed in the wrong
+ * place is diagnosable only from the line written the day it happened.
+ */
+sealed interface MergeOnClaim {
+
+    /**
+     * This server has never been merged, so there is nothing to apply. The state
+     * of every server before the operation and of every server that never runs
+     * it — see [MergeGeometry.APPLIED_OFFSET].
+     */
+    data object NotMerged : MergeOnClaim
+
+    /**
+     * The save came out of Secondary's quarantine, and every place it remembers
+     * was moved by [offset] — the same move, by the same statement of it, that
+     * the sweep made to the saves it could see on the night.
+     */
+    data class Relocated(val offset: MergeOffset) : MergeOnClaim
+
+    /**
+     * The save came out of Primary's quarantine on a merged server and was left
+     * exactly as it was, because its owner was never anywhere that moved.
+     */
+    data object LeftWhereItWas : MergeOnClaim
+}
 
 /** What one login-time claim did — the whole of what an audit needs. */
 sealed interface ClaimOutcome {
@@ -38,6 +71,8 @@ sealed interface ClaimOutcome {
         val liveWorld: String,
         val bucketWorld: String?,
         val dataVersion: Int,
+        /** What the merge did to the save on the way in; see [MergeOnClaim]. */
+        val merge: MergeOnClaim = MergeOnClaim.NotMerged,
     ) : ClaimOutcome
 
     /**
@@ -88,6 +123,18 @@ sealed interface ClaimOutcome {
  * time the player is saved. The version each claim carried in is reported in
  * [ClaimOutcome.Claimed.dataVersion] rather than left to be guessed at.
  *
+ * **A claim on a merged server applies the merge on the way in.** This is the
+ * whole live-code surface of that migration: everything else it does is offline
+ * and happens once, but the quarantine is claimed lazily and some of it will be
+ * claimed years after the landmass moved. So a save out of Secondary's
+ * quarantine is put through the very transform the offline sweep ran, and
+ * stamped with the very stamp the sweep wrote — [MergedPlayerdata] and
+ * [MergeStamp], called rather than copied, because two statements of an offset
+ * that can drift apart is the one failure this design exists to prevent. A save
+ * out of Primary's quarantine is untouched: nothing of Primary's moved. Which of
+ * the two happened is in the claim's log line, because a wrong landing years from
+ * now has nothing else to be diagnosed from.
+ *
  * All paths come in from the caller so this is testable with no server at all;
  * [OrphanedSaveClaimFeature] supplies the live server's.
  */
@@ -98,6 +145,20 @@ class OrphanedSaveClaim(
     private val advancements: Path,
     private val stats: Path,
     private val players: PlayerStore,
+    /**
+     * Where [players] keeps its records. The merge stamp is a raw field the store
+     * does not model, so a claim writes it into the record directly — which is
+     * exactly what the sweep does with it, and is what lets both go through
+     * [MergeStamp].
+     */
+    private val records: Path,
+    /**
+     * How far Secondary moved when this server was merged, or null while it has
+     * not been. It defaults from [MergeGeometry.APPLIED_OFFSET] rather than being
+     * threaded in by the live wiring, so that nothing but a test can hold an
+     * answer the merge itself did not.
+     */
+    private val mergeOffset: MergeOffset? = MergeGeometry.APPLIED_OFFSET,
 ) {
 
     /**
@@ -134,6 +195,7 @@ class OrphanedSaveClaim(
                 liveWorld = prepared.live.id,
                 bucketWorld = prepared.bucket?.first?.id,
                 dataVersion = prepared.dataVersion,
+                merge = prepared.merge,
             )
         } catch (failure: Exception) {
             ClaimOutcome.Failed(username, uuid, reason(failure), anythingWritten = true)
@@ -147,19 +209,92 @@ class OrphanedSaveClaim(
         val liveSave: CompoundTag,
         val dataVersion: Int,
         val bucket: Pair<WorldTrio, PerWorldBucket>?,
+        /** What the merge did to [liveSave] on the way in. */
+        val merge: MergeOnClaim,
+        /** The World the player's own record ends up naming; see [prepare]. */
+        val recordWorld: WorldTrio,
     )
 
     private fun prepare(uuid: UUID, offlineUuid: UUID, quarantined: List<WorldTrio>): PreparedClaim {
         val live = liveWorld(uuid, quarantined)
         val other = quarantined.firstOrNull { it != live }
         val liveTag = read(quarantine.save(live.id, offlineUuid))
+        val merge = mergeFor(live)
         return PreparedClaim(
             quarantined = quarantined,
             live = live,
-            liveSave = PlayerdataImport.live(liveTag, live),
+            liveSave = claimedSave(liveTag, live, merge),
             dataVersion = NbtUtils.getDataVersion(liveTag, UNKNOWN_DATA_VERSION),
-            bucket = other?.let { it to PlayerdataImport.bucket(read(quarantine.save(it.id, offlineUuid))) },
+            bucket = other?.let { it to claimedBucket(read(quarantine.save(it.id, offlineUuid)), it) },
+            merge = merge,
+            // A merged server has one World, so a claim that applied the merge
+            // records Primary rather than the quarantine it read out of — the
+            // same rewrite the sweep made to every record it swept, and for the
+            // same reason: a record still naming Secondary would have the login
+            // path place its owner in a World that is being retired.
+            recordWorld = if (merge is MergeOnClaim.Relocated) WorldLayout.PRIMARY else live,
         )
+    }
+
+    /**
+     * What the merge does to a save out of [world]'s quarantine.
+     *
+     * The asymmetry is the substance of it: Secondary's landmass moved and
+     * Primary's did not, so the quarantine directory a save was sitting in is
+     * what decides whether it is transformed. The save cannot be asked — a
+     * Portal-era backend wrote it, and both backends were plain vanilla servers
+     * naming the vanilla trio whichever World they became.
+     */
+    private fun mergeFor(world: WorldTrio): MergeOnClaim {
+        val offset = mergeOffset ?: return MergeOnClaim.NotMerged
+        return if (world === WorldLayout.SECONDARY) {
+            MergeOnClaim.Relocated(offset)
+        } else {
+            MergeOnClaim.LeftWhereItWas
+        }
+    }
+
+    /**
+     * The quarantined save [tag] as this server's live playerdata, for a player
+     * whose last World was [world].
+     *
+     * Before the merge that is [PlayerdataImport]'s re-pointing and nothing more.
+     * After it, a save out of Secondary's quarantine is re-pointed at **Primary**
+     * first and then moved: the re-pointing leaves the overworld's and the
+     * nether's ids exactly as they were and still gives a save naming a dimension
+     * this server has never heard of the overworld landing it has always had, and
+     * the move then puts every place it remembers where that place is on today's
+     * map. Composed that way round, the two steps say "the same ground, at its
+     * new coordinates" rather than routing anyone through a World that is going
+     * away.
+     */
+    private fun claimedSave(tag: CompoundTag, world: WorldTrio, merge: MergeOnClaim): CompoundTag =
+        when (merge) {
+            is MergeOnClaim.Relocated -> MergedPlayerdata.mergedFromSecondarysQuarantine(
+                PlayerdataImport.live(tag, WorldLayout.PRIMARY),
+                merge.offset,
+            )
+            else -> PlayerdataImport.live(tag, world)
+        }
+
+    /**
+     * The other World's save read as that World's Per-World Bucket — moved too,
+     * when that World is Secondary and this server has been merged.
+     *
+     * The banked half takes the transform for the same reason the live half does,
+     * and it is not the rare case: the sweep rewrote every existing record's
+     * `lastServer` to Primary, so a returning player who was quarantined on both
+     * sides has their Primary save made live and their Secondary one banked —
+     * which is precisely the half that moved.
+     */
+    private fun claimedBucket(tag: CompoundTag, world: WorldTrio): PerWorldBucket {
+        val bucket = PlayerdataImport.bucket(tag)
+        val offset = mergeOffset
+        return if (offset != null && world === WorldLayout.SECONDARY) {
+            MergedPlayerdata.merged(bucket, offset)
+        } else {
+            bucket
+        }
     }
 
     private fun perform(uuid: UUID, offlineUuid: UUID, claim: PreparedClaim) {
@@ -170,7 +305,8 @@ class OrphanedSaveClaim(
         // interrupted after it, the next login is refused by the guard and the
         // leftover quarantine files are an operator's cleanup, not a data loss.
         claim.bucket?.let { (world, seeded) -> players.setBucket(uuid, world.id, seeded) }
-        if (players.lastWorld(uuid) != claim.live.id) players.setLastWorld(uuid, claim.live.id)
+        if (players.lastWorld(uuid) != claim.recordWorld.id) players.setLastWorld(uuid, claim.recordWorld.id)
+        stamp(uuid, claim.merge)
         takeSidecar(quarantine.advancements(claim.live.id, offlineUuid), advancements.resolve("$uuid.json"))
         takeSidecar(quarantine.stats(claim.live.id, offlineUuid), stats.resolve("$uuid.json"))
         Files.createDirectories(playerdata)
@@ -182,6 +318,26 @@ class OrphanedSaveClaim(
         claim.quarantined.forEach { world ->
             quarantine.filesOf(world.id, offlineUuid).forEach(Files::deleteIfExists)
         }
+    }
+
+    /**
+     * The merge stamp, on the record of a player the merge actually moved.
+     *
+     * A claim that moved nothing writes none, exactly as the sweep left an
+     * unmoved player's record alone: the stamp answers "was this player's
+     * geography rewritten, and by how much?", and one on a Primary claim would
+     * answer it wrongly.
+     *
+     * The instant is this claim's own rather than the merge's, which is the only
+     * part of the stamp that differs from the sweep's and the only part that
+     * should. It records when *this* record was moved, so a save handed back
+     * years after the night reads as exactly that instead of being backdated into
+     * the crowd — and the offset beside it is the same offset, which is what the
+     * question is really about.
+     */
+    private fun stamp(uuid: UUID, merge: MergeOnClaim) {
+        if (merge !is MergeOnClaim.Relocated) return
+        MergeStamp.into(records.resolve("$uuid$RECORD_SUFFIX"), merge.offset, Instant.now())
     }
 
     private fun reason(failure: Exception): String = failure.message ?: failure.toString()
@@ -226,6 +382,9 @@ class OrphanedSaveClaim(
         const val UNKNOWN_DATA_VERSION = 0
 
         private const val SAVE_SUFFIX = ".dat"
+
+        /** One player record, as [eu.mctraveler.persistence.JsonPlayerStore] names it. */
+        private const val RECORD_SUFFIX = ".json"
 
         /** Vanilla's own backup of a player save, which `PlayerDataStorage.load` falls back to. */
         private const val BACKUP_SUFFIX = ".dat_old"

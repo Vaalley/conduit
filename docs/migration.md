@@ -124,6 +124,25 @@ refused for good. The usual cause is playerdata this server cannot place (see th
 below). A **skipped** line is worth a look too — it means a quarantined save is keyed to the name
 of somebody who already plays here.
 
+Once Secondary has been merged into Primary, every claim line also says what the merge did to
+the save on the way in. A save out of `secondary/` is put down where the landmass went, by the
+same offset the merge applied to everyone who was here on the night; a save out of `primary/`
+is not moved at all, because its owner was never anywhere that moved:
+
+```
+[mctraveler] orphaned-save claim: … DataVersion 4536, moved by the Secondary merge: x +8192,
+             z -4096 in the overworld (x +1024, z -512 in the nether)
+[mctraveler] orphaned-save claim: … DataVersion 4536, not moved by the Secondary merge — it
+             came out of Primary's quarantine, which did not move
+```
+
+That clause is the only record of which of the two happened. A claim is invisible to the player
+and refused for good once they have a save of their own, so a player who comes back years from
+now and reports landing somewhere wrong is diagnosable from this line or from nothing. A claim
+that was moved also leaves a `merge` stamp on the player's record, exactly as the merge's own
+sweep did. On a server that has not been merged the clause is absent and every claim behaves
+as it always has.
+
 The quarantine only shrinks, never grows. Once the community has cycled through and the log has
 gone quiet, whatever is left belongs to players who never came back, and the directory can be
 archived and deleted.

@@ -33,6 +33,21 @@ object MergeStamp {
     fun json(offset: MergeOffset, at: Instant): String =
         """{"at":${PortalJson.encodeString(at.toString())},""" +
             """"offset":{"x":${offset.x},"z":${offset.z}}}"""
+
+    /**
+     * Adds the stamp to the player record at [record], leaving every other
+     * field's bytes exactly as they were.
+     *
+     * Both the ones who stamp go through here — the sweep, on a staged record it
+     * is about to commit, and [OrphanedSaveClaim], on a live record years later —
+     * so a returning player's stamp is the same field in the same shape as one
+     * written on the night rather than a second spelling of it.
+     */
+    fun into(record: Path, offset: MergeOffset, at: Instant) {
+        val fields = PortalJson.parse(Files.readString(record))
+        fields[FIELD] = PortalJson.Field(PortalJson.encodeString(FIELD), json(offset, at))
+        Files.writeString(record, PortalJson.emit(fields.values))
+    }
 }
 
 /**
@@ -281,14 +296,7 @@ class PlayerSweep(private val plan: MergePlan, private val offset: MergeOffset) 
     }
 
     /** Adds the merge stamp to a staged record, leaving every other field's bytes alone. */
-    private fun stamp(record: Path) {
-        val fields = PortalJson.parse(Files.readString(record))
-        fields[MergeStamp.FIELD] = PortalJson.Field(
-            PortalJson.encodeString(MergeStamp.FIELD),
-            MergeStamp.json(offset, at),
-        )
-        Files.writeString(record, PortalJson.emit(fields.values))
-    }
+    private fun stamp(record: Path) = MergeStamp.into(record, offset, at)
 
     // ---- the artifact the signpost reads ------------------------------------
 
