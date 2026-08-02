@@ -200,6 +200,20 @@ which both dimensions relocate whole region files 1:1 — the nether's ÷8 of a 
 is a 512 multiple, which is one region file. The ÷8 relationship is what keeps existing
 nether portal pairs linking. Y is never offset.
 
+**What comes across.** Secondary's world border runs from −50,000 to +50,000 on both
+horizontal axes, and only chunks inside it plus a 512-block bleed are imported. Chunks
+generated beyond the border — a stray teleport, an admin excursion — are left behind: they
+are worth nothing and they cost a great deal, because the placement search sizes its slot
+from the whole footprint and one distant chunk would demand an enormous free area. The bleed
+is what keeps the terrain continuous rather than sliced at the border. The border applies at
+the same coordinates in both relocated dimensions, as a vanilla world border does; it is not
+scaled by the nether's ÷8. The clip only ever shrinks what is taken.
+
+A Region, player or Embassy destination anchored *outside* the border is swept normally
+rather than gated on — a deliberate call, since almost certainly none exist. The consequence,
+recorded rather than prevented: such a player's coordinates move while their chunks do not,
+so they arrive in terrain that regenerates from Primary's seed. The report counts them.
+
 **Placement search.** A 4096-lattice slot is a candidate when no region, entity or POI file
 exists for any part of the overworld footprint plus the ring, *and* the same holds for the
 nether footprint plus the ring. Clearance is specified in nether blocks and multiplied by
