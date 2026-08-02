@@ -178,3 +178,16 @@ tasks.named<JavaExec>("runGameTest") {
     inputs.files(provideMcaSelector)
     systemProperty(mcaSelectorProperty, mcaSelectorJar.get().asFile.absolutePath)
 }
+
+// A diagnostic, not part of the merge: prints what one chunk says about itself,
+// read through the same RegionFile the merge reads it through. Added when a
+// rehearsal found MCA Selector and SampledDiff disagreeing about whether a chunk
+// was finished, which is not a thing that can be settled by reading either one's
+// source.
+//   ./gradlew chunkProbe --args="<region folder> <chunkX> <chunkZ>"
+tasks.register<JavaExec>("chunkProbe") {
+    group = "migration"
+    description = "Prints one chunk's DataVersion, status and root keys, as the merge reads them."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass = "eu.mctraveler.importer.ChunkProbeMain"
+}
