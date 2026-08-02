@@ -102,28 +102,44 @@ object SyntheticChunks {
     fun positions(folder: Path, type: String, dimension: ResourceKey<Level>): Set<ChunkPos> =
         read(folder, type, dimension).keys
 
+    /**
+     * [chunks] written into [folder] as real region files, whatever they hold.
+     *
+     * The counterpart of [read], for a test that needs chunk NBT this object does
+     * not invent: the audit and the sampled diff both want chunks carrying one of
+     * every coordinate-bearing thing, and each wants a different set of them. A
+     * chunk already in the file is replaced, so a rich chunk can be dropped into
+     * a save [write] has already laid out.
+     */
+    fun write(
+        folder: Path,
+        type: String,
+        dimension: ResourceKey<Level>,
+        chunks: Map<ChunkPos, CompoundTag>,
+    ) {
+        if (chunks.isEmpty()) return
+        Files.createDirectories(folder)
+        // One RegionFile per file, opened once: a region file is a sector
+        // allocator, and reopening it per chunk would be a different test of it.
+        for ((position, inFile) in chunks.entries.groupBy {
+            RegionFilePos(it.key.x shr REGION_SHIFT, it.key.z shr REGION_SHIFT)
+        }) {
+            val file = folder.resolve(position.fileName)
+            RegionFile(RegionStorageInfo("world", dimension, type), file, folder, false).use { region ->
+                for ((at, tag) in inFile) {
+                    region.getChunkDataOutputStream(at).use { NbtIo.write(tag, it) }
+                }
+            }
+        }
+    }
+
     private fun writeFolder(
         folder: Path,
         dimension: ResourceKey<Level>,
         type: String,
         chunks: List<Chunk>,
         content: (Chunk) -> CompoundTag,
-    ) {
-        if (chunks.isEmpty()) return
-        Files.createDirectories(folder)
-        // One RegionFile per file, opened once: a region file is a sector
-        // allocator, and reopening it per chunk would be a different test of it.
-        for ((position, inFile) in chunks.groupBy { RegionFilePos(it.x shr REGION_SHIFT, it.z shr REGION_SHIFT) }) {
-            val file = folder.resolve(position.fileName)
-            RegionFile(RegionStorageInfo("world", dimension, type), file, folder, false).use { region ->
-                for (chunk in inFile) {
-                    region.getChunkDataOutputStream(ChunkPos(chunk.x, chunk.z)).use {
-                        NbtIo.write(content(chunk), it)
-                    }
-                }
-            }
-        }
-    }
+    ) = write(folder, type, dimension, chunks.associate { ChunkPos(it.x, it.z) to content(it) })
 
     /** A chunk of terrain: one stone section, one block entity, at its own coordinates. */
     private fun terrain(chunk: Chunk): CompoundTag {
