@@ -512,6 +512,17 @@ class ChunkAudit(
                 "merge stopped and nothing has been written:\n" +
                 named.joinToString("\n") { "  ${it.role.id}: ${it.describe()}" } +
                 (if (stale.size > named.size) "\n  (and ${stale.size - named.size} more)" else "") +
+                // Every kind, counted, however long the list is. The examples are
+                // capped so the refusal stays readable, and the first live merge
+                // showed what that costs on its own: eight bees printed and
+                // "(and 292 more)" said nothing about whether the 292 were bees
+                // too. That is the difference between one fix and an unknown
+                // number of them, and it is the question the operator has to
+                // answer before deciding whether to start another two-hour run.
+                "\n  every kind, counted:\n" +
+                stale.groupingBy { "${it.role.id}: ${it.what}" }.eachCount()
+                    .entries.sortedByDescending { it.value }
+                    .joinToString("\n") { "    ${it.value} × ${it.key}" } +
                 "\n" + placement.dimensions.joinToString("\n") {
                     "  Secondary's ${it.role.id} used to cover ${it.secondary.describeBlocks()} and moved " +
                         placement.offset.describe(it.role)
