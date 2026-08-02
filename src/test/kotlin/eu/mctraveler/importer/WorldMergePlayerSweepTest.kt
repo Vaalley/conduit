@@ -96,11 +96,13 @@ class WorldMergePlayerSweepTest {
         assertEquals(listOf(8292.5, 64.0, -4296.25), positionIn(live))
         assertEquals(90f, live.getListOrEmpty("Rotation").getFloatOr(0, 0f))
         assertEquals(-10f, live.getListOrEmpty("Rotation").getFloatOr(1, 0f))
-        // The banked bucket is Primary's, and nothing in Primary moved.
+        // The banked bucket is Primary's, and nothing in Primary moved. The
+        // stamp keeps the World this record named before the sweep rewrote it,
+        // which is the only place that answer survives; see MergeStamp.wasLastIn.
         assertEquals(
             """{"lastServer":"primary","worlds":{"primary":""" +
                 """{"dimension":"overworld","x":1.5,"y":70.0,"z":2.5,"yaw":0.0,"pitch":0.0}},""" +
-                """"merge":{"at":"<when>","offset":{"x":8192,"z":-4096}}}""",
+                """"merge":{"at":"<when>","offset":{"x":8192,"z":-4096},"wasLastIn":"secondary"}}""",
             recordOf(ALICE),
         )
     }
@@ -132,7 +134,7 @@ class WorldMergePlayerSweepTest {
                 """"yaw":0.0,"pitch":0.0,""" +
                 """"respawn":{"dimension":"nether","x":1040,"y":70,"z":-520,""" +
                 """"yaw":0.0,"pitch":0.0,"forced":false}}},""" +
-                """"merge":{"at":"<when>","offset":{"x":8192,"z":-4096}}}""",
+                """"merge":{"at":"<when>","offset":{"x":8192,"z":-4096},"wasLastIn":"primary"}}""",
             recordOf(BOB),
         )
     }
@@ -431,9 +433,40 @@ class WorldMergePlayerSweepTest {
             """{"lastServer":"primary","balance":1234.50,"isAdmin":true,""" +
                 """"geoLocation":{"country":"NL",  "city":"Amsterdam"},""" +
                 """"notepad":["page \"one\""],"fromSomeFutureVersion":[1,2,{"a":null}],""" +
-                """"merge":{"at":"<when>","offset":{"x":8192,"z":-4096}}}""",
+                """"merge":{"at":"<when>","offset":{"x":8192,"z":-4096},"wasLastIn":"secondary"}}""",
             recordOf(ALICE),
         )
+    }
+
+    @Test
+    fun `the stamp keeps the World a record named before the sweep rewrote it`() {
+        // The claim path's only source for it (ticket 14). `lastServer` is
+        // rewritten to Primary for everyone — there is one World afterwards — but
+        // it is also what decides which of a returning player's two quarantined
+        // saves becomes their live one. Once the sweep has been over it, this
+        // stamp is the only thing left that remembers which World that was.
+        deployment.playerSave(ALICE, save("mctraveler:secondary"))
+        deployment.playerRecord(ALICE, """{"lastServer":"secondary"}""")
+        deployment.playerSave(BOB, save("minecraft:overworld"))
+        deployment.playerRecord(
+            BOB,
+            """{"lastServer":"primary","worlds":{"secondary":""" +
+                """{"dimension":"nether","x":16.0,"y":70.0,"z":-8.0,"yaw":0.0,"pitch":0.0}}}""",
+        )
+
+        merge()
+
+        assertEquals(WorldLayout.SECONDARY, MergeStamp.wasLastIn(deployment.recordFile(ALICE)))
+        assertEquals(
+            """{"lastServer":"primary","merge":{"at":"<when>",""" +
+                """"offset":{"x":8192,"z":-4096},"wasLastIn":"secondary"}}""",
+            recordOf(ALICE),
+            "the field it answers with now says Primary, and the stamp says what it said before",
+        )
+        // Both mirrors, because the claim path prefers the stamp whichever World
+        // it names: a record whose answer the sweep happened not to change still
+        // carries that answer, so nothing downstream has to know which case it is.
+        assertEquals(WorldLayout.PRIMARY, MergeStamp.wasLastIn(deployment.recordFile(BOB)))
     }
 
     @Test

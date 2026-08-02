@@ -143,6 +143,35 @@ that was moved also leaves a `merge` stamp on the player's record, exactly as th
 sweep did. On a server that has not been merged the clause is absent and every claim behaves
 as it always has.
 
+**The offset comes out of `mctraveler/merge.json`**, the marker the merge writes about itself
+when it commits. There is nothing to configure and nothing to fill in: the file records the
+offset the run actually applied, and the claim path reads it back on every claim for as long as
+the quarantine exists. A run directory with no marker has not been merged, and its claims move
+nobody — the state of every server before the operation.
+
+**Do not edit or delete that file.** It is also what a second merge refuses over, and a claim
+that finds it damaged says so and stops:
+
+```
+[mctraveler] orphaned-save claim: FAILED for Dave (…): /srv/mc/mctraveler/merge.json says this
+             save has been merged but cannot be read, so how far Secondary moved is unknown: …
+```
+
+That is deliberate, and it is the one **FAILED** line that affects everybody rather than one
+player: nothing was written and the quarantine is intact, but every claim will keep failing
+until the file is restored — from a backup, or from the offset in the merge's own report.
+Reading a damaged marker as "never merged" would be far worse, because it would silently put
+every returning player back at their pre-merge coordinates, once each, with no line in the log
+and no second chance.
+
+**A player quarantined on both sides gets the save from the World they were last in.** Their
+record's `lastServer` cannot answer that after the merge — the sweep rewrote it to `primary`
+for everyone, correctly, because there is one World now — so the sweep keeps the value it
+replaced in the `merge` stamp on the record, and the claim path reads it from there. A player
+the sweep never saw has no stamp and claims by their record exactly as before. Getting this
+wrong would have been quiet: the coordinates come out right either way, and only the inventory,
+XP and advancements would have been the other save's.
+
 The quarantine only shrinks, never grows. Once the community has cycled through and the log has
 gone quiet, whatever is left belongs to players who never came back, and the directory can be
 archived and deleted.

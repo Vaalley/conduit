@@ -29,10 +29,23 @@ object MergeStamp {
     /** The record field the stamp lives in, beside the Portal's own legacy fields. */
     const val FIELD = "merge"
 
-    /** The stamp's raw JSON value, ready to be a [PortalJson.Field]'s value slice. */
-    fun json(offset: MergeOffset, at: Instant): String =
+    /** Where the stamp keeps the World the record named before the merge; see [wasLastIn]. */
+    private const val WAS_LAST_IN = "wasLastIn"
+
+    /**
+     * The stamp's raw JSON value, ready to be a [PortalJson.Field]'s value slice.
+     *
+     * The World the record named *before* the merge rewrote that field is the one
+     * part of the stamp that is not merely an audit trail — see
+     * [MergeStamp.wasLastIn]. It is omitted when the record named no World at
+     * all, because a stamp saying nothing is the honest shape of having been told
+     * nothing.
+     */
+    fun json(offset: MergeOffset, at: Instant, wasLastIn: WorldTrio? = null): String =
         """{"at":${PortalJson.encodeString(at.toString())},""" +
-            """"offset":{"x":${offset.x},"z":${offset.z}}}"""
+            """"offset":{"x":${offset.x},"z":${offset.z}}""" +
+            (wasLastIn?.let { ""","$WAS_LAST_IN":${PortalJson.encodeString(it.id)}""" } ?: "") +
+            "}"
 
     /**
      * Adds the stamp to the player record at [record], leaving every other
@@ -43,10 +56,33 @@ object MergeStamp {
      * so a returning player's stamp is the same field in the same shape as one
      * written on the night rather than a second spelling of it.
      */
-    fun into(record: Path, offset: MergeOffset, at: Instant) {
+    fun into(record: Path, offset: MergeOffset, at: Instant, wasLastIn: WorldTrio? = null) {
         val fields = PortalJson.parse(Files.readString(record))
-        fields[FIELD] = PortalJson.Field(PortalJson.encodeString(FIELD), json(offset, at))
+        fields[FIELD] = PortalJson.Field(PortalJson.encodeString(FIELD), json(offset, at, wasLastIn))
         Files.writeString(record, PortalJson.emit(fields.values))
+    }
+
+    /**
+     * The World [record] named before the merge rewrote it, or null when it has
+     * no stamp, no such field, or names a World this server does not have.
+     *
+     * This is the one thing in the stamp that is read back rather than only read
+     * (ticket 14). The sweep rewrites every record's `lastServer` to Primary —
+     * correct, there is one World afterwards — but the claim path uses that same
+     * field to choose which of a returning player's *two* quarantined saves
+     * becomes their live one and which merely seeds a Per-World Bucket. Once the
+     * sweep has been over it the field can no longer answer that question, and it
+     * would answer Primary every time, whichever World its owner was actually
+     * last in. Their coordinates come out right either way, which is what makes
+     * the mistake so quiet; what comes out wrong is whose inventory, XP and
+     * advancements they are handed back. So the value the sweep replaces is kept
+     * here, where the claim path can still find it years later.
+     */
+    fun wasLastIn(record: Path): WorldTrio? {
+        if (Files.notExists(record)) return null
+        val stamp = PortalJson.parse(Files.readString(record))[FIELD] ?: return null
+        val world = PortalJson.parse(stamp.rawValue)[WAS_LAST_IN] ?: return null
+        return WorldLayout.byId(PortalJson.decodeString(world.rawValue))
     }
 }
 
@@ -240,8 +276,9 @@ class PlayerSweep(private val plan: MergePlan, private val offset: MergeOffset) 
 
         // Read before anything is rewritten: which bucket is the banked one turns
         // on the World the player was last in, and that field is about to change.
-        val lastWorld = store.lastWorld(uuid)
-        val liveWorld = lastWorld?.let(WorldLayout::byId) ?: WorldLayout.PRIMARY
+        // An unrecognised value counts as no answer, here and in the stamp.
+        val wasLastIn = store.lastWorld(uuid)?.let(WorldLayout::byId)
+        val liveWorld = wasLastIn ?: WorldLayout.PRIMARY
         val bankedWorld = WorldLayout.all.first { it !== liveWorld }
 
         val secondary = store.bucket(uuid, WorldLayout.SECONDARY.id)
@@ -263,7 +300,7 @@ class PlayerSweep(private val plan: MergePlan, private val offset: MergeOffset) 
 
         // There is one World after this, so a record still naming Secondary would
         // send its owner to a World that is being retired.
-        if (lastWorld == WorldLayout.SECONDARY.id) {
+        if (wasLastIn === WorldLayout.SECONDARY) {
             store.setLastWorld(uuid, WorldLayout.PRIMARY.id)
             changed = true
         }
@@ -272,7 +309,7 @@ class PlayerSweep(private val plan: MergePlan, private val offset: MergeOffset) 
             Files.delete(staged)
             return false
         }
-        stamp(staged)
+        stamp(staged, wasLastIn)
         return true
     }
 
@@ -295,8 +332,13 @@ class PlayerSweep(private val plan: MergePlan, private val offset: MergeOffset) 
         )
     }
 
-    /** Adds the merge stamp to a staged record, leaving every other field's bytes alone. */
-    private fun stamp(record: Path) = MergeStamp.into(record, offset, at)
+    /**
+     * Adds the merge stamp to a staged record, leaving every other field's bytes
+     * alone. [wasLastIn] is the World the record named before this sweep, which
+     * the stamp carries because the sweep is about to overwrite the only other
+     * place it was written down; see [MergeStamp.wasLastIn].
+     */
+    private fun stamp(record: Path, wasLastIn: WorldTrio?) = MergeStamp.into(record, offset, at, wasLastIn)
 
     // ---- the artifact the signpost reads ------------------------------------
 

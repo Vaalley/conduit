@@ -47,6 +47,9 @@ class OrphanedSaveClaimTest {
          * number of region files, as any real offset must be.
          */
         private val OFFSET = MergeOffset(8192, -4096)
+
+        /** The night the merge ran, for the marker and for a swept record's stamp. */
+        private val MERGED_AT: Instant = Instant.parse("2026-08-02T00:49:31Z")
     }
 
     @TempDir
@@ -62,13 +65,37 @@ class OrphanedSaveClaimTest {
     private val records: Path by lazy { dir.resolve("mctraveler/players") }
     private val players: JsonPlayerStore by lazy { JsonPlayerStore(records) }
 
+    /**
+     * A claim against this run directory, on a server the merge has been run on
+     * when [merge] names an offset and on one it has not when it does not.
+     *
+     * The offset goes in by writing the marker the merge itself writes rather
+     * than by handing it to the claim, because the claim path has no other way to
+     * learn it — every test below therefore exercises the real file on the way
+     * through (ticket 14).
+     */
     private fun claim(
         uuid: UUID = alice,
         username: String = "Alice",
         merge: MergeOffset? = null,
-    ): ClaimOutcome =
-        OrphanedSaveClaim(quarantine, saves, advancements, stats, players, records, merge)
+    ): ClaimOutcome {
+        merge?.let { mergedBy(it) }
+        return OrphanedSaveClaim(quarantine, saves, advancements, stats, players, records, MergeMarker.of(dir))
             .claim(uuid, username)
+    }
+
+    /** This run directory as a merge that moved Secondary by [offset] left it. */
+    private fun mergedBy(offset: MergeOffset) =
+        write(dir.resolve(WorldMerge.MARKER_FILE), MergeMarker.contents(offset, MERGED_AT))
+
+    /**
+     * [uuid]'s record as the sweep left it: naming Primary, because there is one
+     * World afterwards, with the World it named before kept in the merge stamp.
+     */
+    private fun swept(uuid: UUID, wasLastIn: WorldTrio) {
+        players.setLastWorld(uuid, WorldLayout.PRIMARY.id)
+        MergeStamp.into(records.resolve("$uuid.json"), OFFSET, MERGED_AT, wasLastIn)
+    }
 
     @Test
     fun `a quarantined save becomes the live save under the player's Mojang uuid`() {
@@ -447,6 +474,163 @@ class OrphanedSaveClaimTest {
         assertTrue(moved.contains("x +8192") && moved.contains("x +1024"), "names the move it made: $moved")
         assertTrue(untouched.contains("not moved"), "says it made none: $untouched")
         assertEquals("", OrphanedSaveClaimFeature.mergeClause(MergeOnClaim.NotMerged), "an unmerged server is silent")
+    }
+
+    // ---- where the offset comes from (ticket 14) -----------------------------
+    //
+    // From the marker the merge wrote about itself, and from nowhere else. It
+    // used to be a constant an operator edited in source between planning the
+    // merge and running it; forgetting that step left every one of these claims
+    // moving nobody, silently, for the whole life of the quarantine.
+
+    @Test
+    fun `the offset comes out of the merge marker, exactly as the merge writes it`() {
+        // The marker's bytes, spelled out rather than produced by MergeMarker, so
+        // that this fails if the format the merge writes and the format the claim
+        // path reads ever stop being the same one.
+        quarantined("secondary", pos = Triple(1000.5, 70.0, -2000.5))
+        write(
+            dir.resolve(WorldMerge.MARKER_FILE),
+            """{"mergedAt":"2026-08-02T00:49:31Z","offsetX":8192,"offsetZ":-4096}""" + "\n",
+        )
+
+        val outcome = claim() as ClaimOutcome.Claimed
+
+        assertEquals(MergeOnClaim.Relocated(OFFSET), outcome.merge)
+        assertEquals(1000.5 + 8192, liveSave().getListOrEmpty("Pos").getDoubleOr(0, 0.0))
+        assertEquals(-2000.5 - 4096, liveSave().getListOrEmpty("Pos").getDoubleOr(2, 0.0))
+    }
+
+    @Test
+    fun `a run directory carrying no merge marker moves nobody, exactly as before`() {
+        // The state of every server that never merged, and the one case where
+        // "this claim moved nothing" is the right answer rather than a failure.
+        quarantined("secondary", pos = Triple(1000.5, 70.0, -2000.5))
+
+        val outcome = claim() as ClaimOutcome.Claimed
+
+        assertEquals(MergeOnClaim.NotMerged, outcome.merge)
+        assertEquals(1000.5, liveSave().getListOrEmpty("Pos").getDoubleOr(0, 0.0))
+        assertEquals("mctraveler:secondary", liveSave().getStringOr("Dimension", ""), "re-pointed, not moved")
+        assertNull(
+            PortalJson.parse(Files.readString(records.resolve("$alice.json")))["merge"],
+            "a stamp would claim a merge that never happened",
+        )
+    }
+
+    @Test
+    fun `a merge marker that cannot be read fails the claim rather than moving nobody`() {
+        // The failure this correction exists to delete. A save that says it was
+        // merged and cannot say by how far must not read as a save that was never
+        // merged: that would put every returning player back at their pre-merge
+        // coordinates, once each and with nobody watching. It fails while the
+        // quarantine is whole, so the next login after a repair claims normally.
+        val damaged = listOf(
+            "a marker overwritten by something that is not JSON" to
+                "the merge stamp, clobbered",
+            "a marker with no offset in it at all" to
+                """{"mergedAt":"2026-08-02T00:49:31Z"}""",
+            "a marker missing one of its two axes" to
+                """{"mergedAt":"2026-08-02T00:49:31Z","offsetX":8192}""",
+            "an axis that is not a number of blocks" to
+                """{"mergedAt":"2026-08-02T00:49:31Z","offsetX":"8192","offsetZ":-4096}""",
+            "an axis off the lattice every real offset lands on" to
+                """{"mergedAt":"2026-08-02T00:49:31Z","offsetX":100,"offsetZ":-4096}""",
+            "a move no merge can have applied, which would move nobody just as quietly" to
+                """{"mergedAt":"2026-08-02T00:49:31Z","offsetX":0,"offsetZ":0}""",
+        )
+
+        for ((what, contents) in damaged) {
+            quarantined("secondary", pos = Triple(1000.5, 70.0, -2000.5))
+            write(dir.resolve(WorldMerge.MARKER_FILE), contents)
+
+            val outcome = claim()
+
+            assertTrue(
+                outcome is ClaimOutcome.Failed && !outcome.anythingWritten,
+                "$what must fail the claim having written nothing, got $outcome",
+            )
+            val failed = outcome as ClaimOutcome.Failed
+            assertTrue(
+                failed.reason.contains("merge.json"),
+                "$what must name the file an operator has to repair: ${failed.reason}",
+            )
+            assertTrue(Files.exists(quarantine.save("secondary", aliceOffline)), "$what: the quarantine must survive")
+            assertFalse(Files.exists(saves.resolve("$alice.dat")), "$what: no live save may be written")
+            assertFalse(Files.exists(records.resolve("$alice.json")), "$what: and no stamp either")
+        }
+    }
+
+    // ---- which of two quarantined saves becomes live (ticket 14) -------------
+
+    @Test
+    fun `a player quarantined on both sides is made live in the World they were last in`() {
+        // The sweep rewrote their record's lastServer to Primary — correctly,
+        // there is one World now — so the record can no longer answer this, and
+        // reading it would hand them the wrong save's inventory and XP. Their
+        // coordinates would be right either way, which is what makes it quiet.
+        quarantined("primary", pos = Triple(3.5, 64.0, 4.5)) { putInt("XpLevel", 7) }
+        quarantined("secondary", pos = Triple(1000.5, 70.0, -2000.5)) { putInt("XpLevel", 42) }
+        swept(alice, wasLastIn = WorldLayout.SECONDARY)
+
+        val outcome = claim(merge = OFFSET) as ClaimOutcome.Claimed
+
+        assertEquals("secondary", outcome.liveWorld, "the World they were actually last in")
+        assertEquals(MergeOnClaim.Relocated(OFFSET), outcome.merge)
+        assertEquals(42, liveSave().getIntOr("XpLevel", 0), "the inventory and XP of the save they left off in")
+        assertEquals(1000.5 + 8192, liveSave().getListOrEmpty("Pos").getDoubleOr(0, 0.0), "moved with the landmass")
+        // And the other half seeds the Per-World Bucket, untransformed, because
+        // it came out of Primary's quarantine and nothing of Primary's moved.
+        assertEquals("primary", outcome.bucketWorld)
+        val bucket = checkNotNull(players.bucket(alice, "primary"))
+        assertEquals(3.5, bucket.x)
+        assertEquals(4.5, bucket.z)
+        assertEquals("primary", players.lastWorld(alice), "the record still names the one World that is left")
+    }
+
+    @Test
+    fun `the pre-merge World survives the claim's own stamp`() {
+        // The claim rewrites the stamp with its own instant, and must not take
+        // the merge's account of what it found here down with it.
+        quarantined("primary")
+        quarantined("secondary")
+        swept(alice, wasLastIn = WorldLayout.SECONDARY)
+
+        claim(merge = OFFSET)
+
+        assertEquals(
+            WorldLayout.SECONDARY,
+            MergeStamp.wasLastIn(records.resolve("$alice.json")),
+            "the World the sweep found is still on the record",
+        )
+    }
+
+    @Test
+    fun `a player quarantined on one side only is unaffected by what the sweep recorded`() {
+        quarantined("primary", pos = Triple(3.5, 64.0, 4.5))
+        swept(alice, wasLastIn = WorldLayout.SECONDARY)
+
+        val outcome = claim(merge = OFFSET) as ClaimOutcome.Claimed
+
+        assertEquals("primary", outcome.liveWorld, "the only save they have")
+        assertNull(outcome.bucketWorld)
+        assertEquals(MergeOnClaim.LeftWhereItWas, outcome.merge)
+        assertEquals(3.5, liveSave().getListOrEmpty("Pos").getDoubleOr(0, 0.0), "and it did not move")
+    }
+
+    @Test
+    fun `a player the sweep never saw still claims by the record's own lastServer`() {
+        // Nobody swept them, because at cutover they had no record to sweep — so
+        // whatever their record says now, it says it for itself, and there is no
+        // stamp to prefer over it.
+        quarantined("primary", pos = Triple(3.5, 64.0, 4.5))
+        quarantined("secondary", pos = Triple(1000.5, 70.0, -2000.5))
+        players.setLastWorld(alice, "secondary")
+
+        val outcome = claim(merge = OFFSET) as ClaimOutcome.Claimed
+
+        assertEquals("secondary", outcome.liveWorld)
+        assertEquals(1000.5 + 8192, liveSave().getListOrEmpty("Pos").getDoubleOr(0, 0.0))
     }
 
     /** A Portal-era backend save for [username], already in the quarantine under [world]. */

@@ -28,6 +28,17 @@ import net.minecraft.world.level.dimension.DimensionType
  *
  * Height is never touched by any of it, which is why nothing here has a Y at
  * all: a merge offset is a horizontal move and cannot express anything else.
+ *
+ * **How far Secondary actually moved is not stated here** (merge spec, User
+ * Story 39; tickets 10 and 14). That is a fact about one save rather than about
+ * the arithmetic, so it lives in that save's own [MergeMarker], written by the
+ * run that moved the landmass and read back by the claim path for as long as a
+ * quarantined save can still be claimed. It was a constant in this file once,
+ * null until an operator edited it in source between planning the merge and
+ * running it; nothing warned them if they forgot, and forgetting left the claim
+ * path unable to move anybody for the whole life of the quarantine. A value the
+ * operation writes about itself has no step anyone can skip and cannot disagree
+ * with what actually happened.
  */
 object MergeGeometry {
 
@@ -46,30 +57,6 @@ object MergeGeometry {
      * every function here refuses it rather than quietly inventing an answer.
      */
     val RELOCATED_ROLES = listOf(DimensionRole.OVERWORLD, DimensionRole.NETHER)
-
-    /**
-     * **How far Secondary was moved on this deployment**, or null while the merge
-     * has not been run here (merge spec, User Story 39; ticket 10).
-     *
-     * This is the one line of the merge that outlives it. Everything else the
-     * merge does is offline and happens once, but the Portal cutover quarantined
-     * roughly thirteen thousand offline-keyed saves that are claimed lazily as
-     * their owners come back — some of them years from now — and each of those
-     * claims has to apply the very same move the sweep applied on the night. So
-     * the offset stops being a value the tool worked out and becomes a fact about
-     * the save, and it is stated here, beside [Footprint] and the arithmetic that
-     * consumes it, so that the merge and [OrphanedSaveClaim] cannot hold two
-     * different answers.
-     *
-     * Null is the honest value for every server that has not been merged,
-     * including this repository until the operation is actually performed: a
-     * claim then behaves exactly as it did before the merge existed. Filling it
-     * in is a step of the merge runbook, not an optimisation — [WorldMerge] takes
-     * its offset from here when the operator names none, so the value that ends
-     * up in the save is this one rather than a copy of it, and a claim years
-     * later cannot land somewhere the landmass is not.
-     */
-    val APPLIED_OFFSET: MergeOffset? = null
 
     /**
      * How many overworld blocks one of [role]'s blocks stands for: 1 in the

@@ -44,6 +44,11 @@ object OrphanedSaveClaimFeature {
                 stats = server.getWorldPath(LevelResource.PLAYER_STATS_DIR),
                 players = persistence.players,
                 records = persistence.playersDir,
+                // The run directory, because that is what the merge was pointed
+                // at and where it left its account of itself. A server that has
+                // never been merged has no marker there and the claim path stays
+                // exactly as it was.
+                mergeMarker = MergeMarker.of(server.serverDirectory),
             )
         }
     }

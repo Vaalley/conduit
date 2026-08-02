@@ -217,7 +217,8 @@ class MergedDeploymentFixture(val root: Path) {
     private fun playerdata(uuid: UUID, suffix: String): Path =
         levelDir.resolve("playerdata/$uuid$suffix")
 
-    private fun recordFile(uuid: UUID): Path = targetDir.resolve("mctraveler/players/$uuid.json")
+    /** Where [uuid]'s record is, for the tests that read it with the mod's own readers. */
+    fun recordFile(uuid: UUID): Path = targetDir.resolve("mctraveler/players/$uuid.json")
 
     /** Every file in the run directory, by path and size — the whole of what "wrote nothing" means. */
     fun contents(): Map<String, Long> {
