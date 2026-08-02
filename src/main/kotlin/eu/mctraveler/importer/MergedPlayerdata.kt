@@ -1,7 +1,5 @@
 package eu.mctraveler.importer
 
-import eu.mctraveler.persistence.PerWorldBucket
-import eu.mctraveler.persistence.RespawnPoint
 import eu.mctraveler.worlds.DimensionRole
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.nbt.DoubleTag

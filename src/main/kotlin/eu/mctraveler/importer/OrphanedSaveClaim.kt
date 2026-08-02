@@ -1,6 +1,5 @@
 package eu.mctraveler.importer
 
-import eu.mctraveler.persistence.PerWorldBucket
 import eu.mctraveler.persistence.PlayerStore
 import java.nio.file.Files
 import java.nio.file.Path
@@ -155,10 +154,12 @@ class OrphanedSaveClaim(
     private val stats: Path,
     private val players: PlayerStore,
     /**
-     * Where [players] keeps its records. The merge stamp is a raw field the store
-     * does not model, so a claim writes it into the record directly — which is
-     * exactly what the sweep does with it, and is what lets both go through
-     * [MergeStamp].
+     * Where [players] keeps its records. Two of the fields a claim writes are
+     * ones the store does not model — the merge stamp, which it never did, and
+     * the Per-World Bucket, which it stopped modelling when the Worlds were
+     * retired — so a claim writes both into the record directly. That is exactly
+     * what the sweep does with them, which is what lets both go through
+     * [MergeStamp] and [PerWorldBuckets] rather than through second spellings.
      */
     private val records: Path,
     /**
@@ -327,7 +328,9 @@ class OrphanedSaveClaim(
         // it, the next login claims again from an untouched quarantine;
         // interrupted after it, the next login is refused by the guard and the
         // leftover quarantine files are an operator's cleanup, not a data loss.
-        claim.bucket?.let { (world, seeded) -> players.setBucket(uuid, world.id, seeded) }
+        claim.bucket?.let { (world, seeded) ->
+            PerWorldBuckets.into(records.resolve("$uuid$RECORD_SUFFIX"), world.id, seeded)
+        }
         if (players.lastWorld(uuid) != claim.recordWorld.id) players.setLastWorld(uuid, claim.recordWorld.id)
         stamp(uuid, claim)
         takeSidecar(quarantine.advancements(claim.live.id, offlineUuid), advancements.resolve("$uuid.json"))

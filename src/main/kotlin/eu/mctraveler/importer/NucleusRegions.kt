@@ -77,16 +77,23 @@ object NucleusRegions {
     }
 
     /**
-     * The embassies whose stored destination names a world this server does not
-     * have, as the operator reads them. Not a refusal: a destination naming a
-     * world nobody kept is simply not somewhere to go
-     * ([RegionWorlds.dimensionFor]), and the embassy itself is still worth
-     * importing — but it is worth being told about before players find it.
+     * The embassies whose stored destination names a world the migration has no
+     * dimension for, as the operator reads them. Not a refusal: such a
+     * destination is simply not somewhere to go, and the embassy itself is still
+     * worth importing — but it is worth being told about before players find it.
+     *
+     * The question is asked of [RegionImport], which is the importer's own map
+     * of the Portal's world strings, rather than of the live [RegionWorlds].
+     * `importNucleus` runs before `mergeWorlds` — that is the documented order —
+     * so a destination in `last_nether` is an ordinary embassy pointing at a
+     * place that exists, and the merge is what will rewrite it onto Primary
+     * later. Asking the live server instead would report every Secondary embassy
+     * as broken on the one run where they are all fine.
      */
     fun unknownDestinationWorlds(regions: List<Region>): List<String> =
         regions.mapNotNull { region ->
             val world = EmbassyDestination.of(region)?.world ?: return@mapNotNull null
-            if (RegionWorlds.dimensionFor(world) != null) null else "${region.title} → \"$world\""
+            if (RegionImport.dimensionOf(world) != null) null else "${region.title} → \"$world\""
         }
 
     private fun convert(data: JsonObject, parent: Region?): Region {

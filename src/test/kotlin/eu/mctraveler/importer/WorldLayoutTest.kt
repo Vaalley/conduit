@@ -11,10 +11,15 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 
 /**
- * The importer's copy of the World topology. It cannot ask the live Worlds
- * service (that needs a running server), so these tests pin it to the two
- * places the shipped mod states the same thing: the trio roles and the region
- * store's dimension ↔ legacy-world map.
+ * The importer's copy of the World topology — which, since the Worlds were
+ * retired, is the only copy left.
+ *
+ * Primary's half is still cross-checked against the shipped mod's own statement
+ * of it, because the live server still has those dimensions and the two must not
+ * drift. Secondary's half can no longer be cross-checked against anything, which
+ * is exactly why it is pinned here as literals: `mergeWorlds` runs offline
+ * against a save that still has Secondary's dimension folders and Secondary's
+ * `last*` Regions in it, and if these values are wrong it will not find them.
  */
 class WorldLayoutTest {
     companion object {
@@ -34,10 +39,34 @@ class WorldLayoutTest {
     }
 
     @Test
+    fun `Primary's legacy world strings are the live region store's own`() {
+        assertEquals(RegionWorlds.legacyName(Level.OVERWORLD), WorldLayout.PRIMARY.legacyWorld(DimensionRole.OVERWORLD))
+        assertEquals(RegionWorlds.legacyName(Level.NETHER), WorldLayout.PRIMARY.legacyWorld(DimensionRole.NETHER))
+        assertEquals(RegionWorlds.legacyName(Level.END), WorldLayout.PRIMARY.legacyWorld(DimensionRole.END))
+        // ...and those are still the Portal's, which is what a relocated Region
+        // comes to say and what the live server reads back.
+        assertEquals("world", WorldLayout.PRIMARY.legacyWorld(DimensionRole.OVERWORLD))
+        assertEquals("world_nether", WorldLayout.PRIMARY.legacyWorld(DimensionRole.NETHER))
+        assertEquals("world_the_end", WorldLayout.PRIMARY.legacyWorld(DimensionRole.END))
+    }
+
+    @Test
+    fun `Secondary's dimensions are the ones its chunk data is still filed under`() {
+        // The merge tool finds Secondary's region files by these ids, and this
+        // build no longer ships anything that could confirm them.
+        assertEquals("mctraveler:secondary", WorldLayout.SECONDARY.dimensionId(DimensionRole.OVERWORLD))
+        assertEquals("mctraveler:secondary_nether", WorldLayout.SECONDARY.dimensionId(DimensionRole.NETHER))
+        assertEquals("mctraveler:secondary_end", WorldLayout.SECONDARY.dimensionId(DimensionRole.END))
+    }
+
+    @Test
     fun `Secondary's trio is the one regions are already stored against`() {
-        assertEquals("last", RegionWorlds.legacyName(WorldLayout.SECONDARY.dimension(DimensionRole.OVERWORLD)))
-        assertEquals("last_nether", RegionWorlds.legacyName(WorldLayout.SECONDARY.dimension(DimensionRole.NETHER)))
-        assertEquals("last_the_end", RegionWorlds.legacyName(WorldLayout.SECONDARY.dimension(DimensionRole.END)))
+        assertEquals("last", WorldLayout.SECONDARY.legacyWorld(DimensionRole.OVERWORLD))
+        assertEquals("last_nether", WorldLayout.SECONDARY.legacyWorld(DimensionRole.NETHER))
+        assertEquals("last_the_end", WorldLayout.SECONDARY.legacyWorld(DimensionRole.END))
+        // And the live Region layer deliberately no longer answers to them, so
+        // these two statements cannot be collapsed into one again.
+        assertNull(RegionWorlds.dimensionFor("last"))
     }
 
     @Test

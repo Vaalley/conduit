@@ -2,11 +2,9 @@ package eu.mctraveler.importer
 
 import com.google.gson.JsonParser
 import eu.mctraveler.embassy.EmbassyDestination
-import eu.mctraveler.persistence.JsonPlayerStore
 import eu.mctraveler.region.Region
 import eu.mctraveler.region.RegionService
 import eu.mctraveler.region.RegionStore
-import eu.mctraveler.region.RegionWorlds
 import eu.mctraveler.worlds.DimensionRole
 import java.nio.file.Files
 import java.nio.file.Path
@@ -242,11 +240,7 @@ class MergeEnd(
      */
     private fun landingFor(uuid: UUID): EndLanding = landings.getOrPut(uuid) {
         val record = staging.latest(recordsDir.resolve("$uuid$RECORD_SUFFIX"))
-        val banked = if (Files.exists(record)) {
-            JsonPlayerStore(record.parent).bucket(uuid, WorldLayout.SECONDARY.id)
-        } else {
-            null
-        }
+        val banked = PerWorldBuckets.of(record, WorldLayout.SECONDARY.id)
         val base = banked?.takeIf { DimensionRole.fromId(it.dimension) == DimensionRole.OVERWORLD }
         if (base != null) {
             EndLanding(uuid, base.x, base.y, base.z, ownBase = true)
@@ -441,7 +435,7 @@ class MergeEnd(
         const val OPT_IN = "--accept-end-loss"
 
         /** Secondary's End as `regions.json` spells it, derived so it is never spelled twice. */
-        val END_WORLD: String = RegionWorlds.legacyName(WorldLayout.SECONDARY.dimension(DimensionRole.END))
+        val END_WORLD: String = WorldLayout.SECONDARY.legacyWorld(DimensionRole.END)
 
         /** Secondary's End as a player save spells it. */
         val END_DIMENSION: String = WorldLayout.SECONDARY.dimensionId(DimensionRole.END)

@@ -1,7 +1,6 @@
 package eu.mctraveler.importer
 
 import eu.mctraveler.persistence.JsonPlayerStore
-import eu.mctraveler.persistence.PerWorldBucket
 import eu.mctraveler.persistence.PortalJson
 import eu.mctraveler.worlds.BankedPositions
 import eu.mctraveler.worlds.DimensionRole
@@ -313,8 +312,11 @@ class PlayerSweep(private val plan: MergePlan, private val offset: MergeOffset) 
      * The record is copied into staging and edited there through the very
      * [JsonPlayerStore] the live server uses, so the guarantee that unknown fields
      * survive read-modify-write byte-for-byte is the store's own, already proven,
-     * rather than a second implementation of it. A record with nothing to change
-     * has its staged copy dropped again, and so is never written at all.
+     * rather than a second implementation of it. The bucket is the one field the
+     * store no longer models — the Worlds it belonged to are being retired — so
+     * that half goes through [PerWorldBuckets], which is the same guarantee by
+     * the same means. A record with nothing to change has its staged copy dropped
+     * again, and so is never written at all.
      */
     private fun sweepRecord(
         uuid: UUID,
@@ -336,11 +338,11 @@ class PlayerSweep(private val plan: MergePlan, private val offset: MergeOffset) 
         val liveWorld = wasLastIn ?: WorldLayout.PRIMARY
         val bankedWorld = WorldLayout.all.first { it !== liveWorld }
 
-        val secondary = store.bucket(uuid, WorldLayout.SECONDARY.id)
+        val secondary = PerWorldBuckets.of(staged, WorldLayout.SECONDARY.id)
         if (secondary != null && isOutsideTheBorder(secondary)) outside += uuid
         val movedSecondary = secondary?.let { MergedPlayerdata.merged(it, offset) }
         if (movedSecondary != null && movedSecondary != secondary) {
-            store.setBucket(uuid, WorldLayout.SECONDARY.id, movedSecondary)
+            PerWorldBuckets.into(staged, WorldLayout.SECONDARY.id, movedSecondary)
             changed = true
         }
 
@@ -350,7 +352,7 @@ class PlayerSweep(private val plan: MergePlan, private val offset: MergeOffset) 
         val bankedBucket = if (bankedWorld === WorldLayout.SECONDARY) {
             movedSecondary
         } else {
-            store.bucket(uuid, WorldLayout.PRIMARY.id)
+            PerWorldBuckets.of(staged, WorldLayout.PRIMARY.id)
         }
         bankedBucket?.let { bankedPosition(uuid, bankedWorld, it) }?.let(banked::add)
 

@@ -5,7 +5,6 @@ import eu.mctraveler.embassy.EmbassyOrigins
 import eu.mctraveler.region.RegionWorlds
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.text.Paint
-import eu.mctraveler.worlds.WorldsFeature
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
@@ -152,19 +151,29 @@ class EmbassiesGameTest {
         helper.succeed()
     }
 
-    // ---- the dimension is in no World ----
+    // ---- the dimension is none of the three ----
 
+    /**
+     * The Embassies are their own place (ADR 0003), and the Region layer knows
+     * it: they are stored under Nucleus's own world name rather than under any
+     * of the three the map is made of.
+     *
+     * This case also asserted that the Worlds service claimed no World for the
+     * dimension. That assertion went with the service — there is no longer
+     * anything that could claim it — and the legacy name is what is left of the
+     * same question, which is the half that was always about stored data.
+     */
     @GameTest
-    fun embassiesBelongsToNoWorldSoTravelIgnoresIt(helper: GameTestHelper) {
-        val worlds = checkNotNull(WorldsFeature.worlds) { "the Worlds service is not up" }
-        helper.assertTrue(
-            worlds.worldOf(EmbassiesFeature.DIMENSION) == null,
-            "the embassies dimension was claimed by a World (ADR 0003: it is outside every trio)",
-        )
+    fun embassiesIsStoredUnderItsOwnWorldName(helper: GameTestHelper) {
         helper.assertValueEqual(
             RegionWorlds.legacyName(EmbassiesFeature.DIMENSION),
             "embassies",
             "the legacy world string embassy regions are stored under",
+        )
+        helper.assertValueEqual(
+            RegionWorlds.locateInfo(RegionWorlds.legacyName(EmbassiesFeature.DIMENSION)),
+            "embassies",
+            "how /rg locate names a region in the embassies dimension",
         )
         helper.succeed()
     }

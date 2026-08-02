@@ -2,9 +2,7 @@ package eu.mctraveler.crystal
 
 import eu.mctraveler.embassy.EmbassiesFeature
 import eu.mctraveler.text.Paint
-import eu.mctraveler.worlds.DimensionRole
 import eu.mctraveler.worlds.Landing
-import eu.mctraveler.worlds.WorldsFeature
 import java.util.UUID
 import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
@@ -274,12 +272,17 @@ object CrystalMenu {
         )
     }
 
-    /** Spawn town, in Primary's overworld (spec story 30) — Nucleus's `kSpawnLocation`. */
+    /**
+     * Spawn town, in the overworld (spec story 30) — Nucleus's `kSpawnLocation`.
+     *
+     * This used to ask the Worlds service for *Primary's* overworld, because
+     * there were two and only one of them had a spawn town in it. Since the
+     * merge there is one map, so the overworld is the overworld and vanilla's
+     * own key names it.
+     */
     private fun spawn(player: ServerPlayer): Landing? {
         val server = player.level().server
-        val primary = WorldsFeature.worlds?.byId("primary")?.dimension(DimensionRole.OVERWORLD)
-            ?: Level.OVERWORLD
-        val level = server.getLevel(primary) ?: server.overworld()
+        val level = server.getLevel(Level.OVERWORLD) ?: server.overworld()
         return Landing(level, 16.5, 71.0, -15.5, 180.0f, 0.0f)
     }
 

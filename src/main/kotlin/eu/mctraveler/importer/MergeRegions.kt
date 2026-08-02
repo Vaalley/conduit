@@ -75,7 +75,7 @@ data class MergeRegionsReport(
  * A Region is a player-owned protected cuboid, and it records where it is the
  * way the Portal did: a legacy world string and a pair of un-normalised corners.
  * The merge does not change what a Region protects, only where that is — so
- * every Region recorded against `last`, `last_nether` (see [RegionWorlds]) comes
+ * every Region recorded against `last`, `last_nether` (see [WorldLayout]) comes
  * out naming Primary's `world`, `world_nether` and standing at the relocated
  * coordinates, and everything else about it is carried across untouched.
  *
@@ -319,17 +319,21 @@ class MergeRegions(
     private companion object {
         /**
          * Secondary's legacy world strings, by the trio role each one names.
-         * Derived from [RegionWorlds] and [WorldLayout] rather than spelled out,
-         * so the strings the sweep matches on are the strings the live server
-         * writes — there is only ever one statement of that mapping.
+         * Taken from [WorldLayout] rather than spelled out again, so the strings
+         * the sweep matches on and the strings the tool's own statement of
+         * Secondary carries are one statement.
          */
         val SECONDARY_ROLES: Map<String, DimensionRole> = DimensionRole.entries.associate {
-            RegionWorlds.legacyName(WorldLayout.SECONDARY.dimension(it)) to it
+            WorldLayout.SECONDARY.legacyWorld(it) to it
         }
 
-        /** Primary's legacy world string for each trio role — what a relocated Region comes to say. */
+        /**
+         * Primary's legacy world string for each trio role — what a relocated
+         * Region comes to say. [WorldLayout] derives these from [RegionWorlds],
+         * so what the sweep writes stays what the live server reads.
+         */
         val PRIMARY_WORLDS: Map<DimensionRole, String> = DimensionRole.entries.associateWith {
-            RegionWorlds.legacyName(WorldLayout.PRIMARY.dimension(it))
+            WorldLayout.PRIMARY.legacyWorld(it)
         }
     }
 }

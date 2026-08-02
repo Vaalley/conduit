@@ -1,7 +1,6 @@
 package eu.mctraveler.gametest
 
 import com.mojang.authlib.GameProfile
-import eu.mctraveler.worlds.WorldsFeature
 import io.netty.channel.embedded.EmbeddedChannel
 import java.util.Optional
 import java.util.UUID
@@ -77,20 +76,6 @@ fun ServerPlayer.arriveIn(level: ServerLevel, x: Double, y: Double, z: Double) {
     }
     hasChangedDimension()
     connection.handleAcceptPlayerLoad(ServerboundPlayerLoadedPacket())
-}
-
-/**
- * Travels the player to the other World — what `/switch` did until the merge
- * turned it into a signpost that moves nobody (ticket 08).
- *
- * The tests that call this are about Travel, Position Memory and the Per-World
- * Bucket, not about the command, so they reach the Worlds service the command
- * used to reach and assert exactly what they always asserted. Travel itself goes
- * in ticket 09, and these cases go with it.
- */
-fun ServerPlayer.travelToTheOtherWorld() {
-    val worlds = checkNotNull(WorldsFeature.worlds) { "the Worlds service is not running" }
-    worlds.travel(this, worlds.switchDestination(this))
 }
 
 /** A [ServerPlayer] that records every system message it is sent, so tests can assert exact Portal wording. */

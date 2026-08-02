@@ -182,6 +182,12 @@ class RegionAdminCommandGameTest {
     }
 
     // ---- /rg locate ----
+    //
+    // The Portal printed `server/dimension` here, and so did this port until the
+    // merge: a Region genuinely lived on one of two backend servers. There is one
+    // map now, so the server half named something that does not exist and was
+    // removed (merge spec, User Story 25). The dimension half is unchanged, and
+    // is what these cases pin.
 
     @GameTest
     fun locateFindsARegionByTitleSubstring(helper: GameTestHelper) {
@@ -194,7 +200,7 @@ class RegionAdminCommandGameTest {
             Paint(
                 Paint.yellow("Qx7Lonely Keep"),
                 " - ", Paint.white("60009/~/109"),
-                "/", Paint.green("primary/overworld"),
+                "/", Paint.green("overworld"),
             ),
             "the single-result locate reply",
         )
@@ -212,7 +218,7 @@ class RegionAdminCommandGameTest {
         val expected = Paint(
             Paint.yellow("Plain Fields"),
             " - ", Paint.white("61009/~/209"),
-            "/", Paint.green("primary/overworld"),
+            "/", Paint.green("overworld"),
         )
         admin.runCommand("rg locate qx8own")
         helper.assertValueEqual(admin.messages.last(), expected, "the member-name locate reply")
@@ -240,7 +246,7 @@ class RegionAdminCommandGameTest {
             expected.add(
                 Paint(
                     " - ", Paint.yellow("Zq7Keep%02d".format(i)), " ",
-                    Paint.gray("${70000 + 200 * (i - 1) + 9}/9/primary/overworld"),
+                    Paint.gray("${70000 + 200 * (i - 1) + 9}/9/overworld"),
                 ),
             )
         }

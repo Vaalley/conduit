@@ -127,12 +127,15 @@ class OrphanedSaveClaimTest {
         assertEquals("primary", outcome.bucketWorld)
         assertEquals(500.5, liveSave().getListOrEmpty("Pos").getDoubleOr(0, 0.0), "the last World's save is live")
         assertEquals("mctraveler:secondary", liveSave().getStringOr("Dimension", ""), "re-pointed at its World")
-        val bucket = checkNotNull(players.bucket(alice, "primary"))
+        val bucket = checkNotNull(PerWorldBuckets.of(records.resolve("$alice.json"), "primary"))
         assertEquals("nether", bucket.dimension)
         assertEquals(10.5, bucket.x)
         assertEquals(-20.5, bucket.z)
         assertEquals(30f, bucket.yaw)
-        assertNull(players.bucket(alice, "secondary"), "the World they are in needs no bucket")
+        assertNull(
+            PerWorldBuckets.of(records.resolve("$alice.json"), "secondary"),
+            "the World they are in needs no bucket",
+        )
     }
 
     @Test
@@ -415,7 +418,7 @@ class OrphanedSaveClaimTest {
         val outcome = claim(merge = OFFSET) as ClaimOutcome.Claimed
 
         assertEquals("secondary", outcome.bucketWorld)
-        val bucket = checkNotNull(players.bucket(alice, "secondary"))
+        val bucket = checkNotNull(PerWorldBuckets.of(records.resolve("$alice.json"), "secondary"))
         assertEquals(600.5 + 1024, bucket.x, "the banked position is in merged coordinates")
         assertEquals(-800.5 - 512, bucket.z)
         assertEquals(3.5, liveSave().getListOrEmpty("Pos").getDoubleOr(0, 0.0), "the Primary save is untouched")
@@ -582,7 +585,7 @@ class OrphanedSaveClaimTest {
         // And the other half seeds the Per-World Bucket, untransformed, because
         // it came out of Primary's quarantine and nothing of Primary's moved.
         assertEquals("primary", outcome.bucketWorld)
-        val bucket = checkNotNull(players.bucket(alice, "primary"))
+        val bucket = checkNotNull(PerWorldBuckets.of(records.resolve("$alice.json"), "primary"))
         assertEquals(3.5, bucket.x)
         assertEquals(4.5, bucket.z)
         assertEquals("primary", players.lastWorld(alice), "the record still names the one World that is left")

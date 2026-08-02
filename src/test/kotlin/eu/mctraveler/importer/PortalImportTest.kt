@@ -100,6 +100,13 @@ class PortalImportTest {
 
     private fun players() = JsonPlayerStore(target.resolve("mctraveler/players"))
 
+    /**
+     * One migrated player's record. The Per-World Bucket is legacy data the
+     * live store no longer models, so it is read back the way the merge tool
+     * reads it — see [PerWorldBuckets].
+     */
+    private fun record(uuid: UUID) = target.resolve("mctraveler/players/$uuid.json")
+
     private fun playerdata(uuid: UUID) =
         NbtIo.readCompressed(target.resolve("world/playerdata/$uuid.dat"), NbtAccounter.unlimitedHeap())
 
@@ -179,7 +186,11 @@ class PortalImportTest {
         // Wanderer's Portal record says Secondary, so Secondary is still live; the
         // Primary pair collapses to the newer file for the bucket.
         assertEquals(500.5, playerdata(wanderer).getList("Pos").get().getDouble(0).get())
-        assertEquals(999.5, players().bucket(wanderer, "primary")!!.x, "the newer Primary save seeds the bucket")
+        assertEquals(
+            999.5,
+            PerWorldBuckets.of(record(wanderer), "primary")!!.x,
+            "the newer Primary save seeds the bucket",
+        )
     }
 
     @Test
@@ -242,7 +253,7 @@ class PortalImportTest {
     fun `the other World's save becomes that World's Per-World Bucket`() {
         migrate()
 
-        val bucket = checkNotNull(players().bucket(wanderer, "primary"))
+        val bucket = checkNotNull(PerWorldBuckets.of(record(wanderer), "primary"))
         assertEquals("nether", bucket.dimension)
         assertEquals(10.5, bucket.x)
         assertEquals(-20.5, bucket.z)
@@ -254,7 +265,7 @@ class PortalImportTest {
     fun `a bed in the other World comes with the bucket`() {
         migrate()
 
-        val respawn = checkNotNull(players().bucket(wanderer, "primary")?.respawn)
+        val respawn = checkNotNull(PerWorldBuckets.of(record(wanderer), "primary")?.respawn)
         assertEquals("nether", respawn.dimension)
         assertEquals(100, respawn.x)
         assertEquals(200, respawn.z)
@@ -264,7 +275,7 @@ class PortalImportTest {
     fun `the World a player is already in needs no bucket`() {
         migrate()
 
-        assertNull(players().bucket(wanderer, "secondary"))
+        assertNull(PerWorldBuckets.of(record(wanderer), "secondary"))
     }
 
     @Test

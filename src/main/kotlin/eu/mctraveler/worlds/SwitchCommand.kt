@@ -96,10 +96,11 @@ object SwitchCommand {
         "${floor(x).toInt()}/${floor(y).toInt()}/${floor(z).toInt()}"
 
     /**
-     * A dimension as a player names it. Only the vanilla trio has a name worth
-     * printing; anything else — the Embassies, and Secondary's own dimensions
-     * until they are retired — is simply itself, which is the same stance the
-     * Region layer takes on a dimension outside every World.
+     * A dimension as a player names it. The three vanilla dimensions are the
+     * whole map now, so they are the only ones with a name worth printing;
+     * anything else — the Embassies, and any dimension a future feature adds —
+     * is simply itself, which is the same stance the Region layer takes on a
+     * dimension it has no legacy name for.
      */
     private fun placeName(dimension: String): String = PLACE_NAMES[dimension] ?: dimension
 
