@@ -68,7 +68,37 @@ object ChunkProbeMain {
         }
     }
 
+    /**
+     * Every `minecraft:bee` anywhere in the chunk, with the NBT path it sits at.
+     *
+     * The path is the whole point. The audit reports what it found and not where
+     * it found it, so a refusal naming `minecraft:bee.Pos` cannot be told from a
+     * bee standing in a field, a bee sealed in a hive, or a bee inside a hive
+     * that somebody picked up and put in a barrel — and those are three different
+     * questions about whether the position is a place at all.
+     */
+    private fun findBees(tag: net.minecraft.nbt.Tag, path: String, out: MutableList<String>) {
+        when (tag) {
+            is CompoundTag -> {
+                if (tag.getStringOr("id", "") == "minecraft:bee") {
+                    val p = tag.getListOrEmpty("Pos")
+                    out += "$path  Pos=${(0 until p.size).map { p.getDoubleOr(it, 0.0) }}"
+                }
+                for (key in tag.keySet()) tag.get(key)?.let { findBees(it, "$path.$key", out) }
+            }
+            is net.minecraft.nbt.ListTag ->
+                for (i in 0 until tag.size) tag.get(i)?.let { findBees(it, "$path[$i]", out) }
+            else -> Unit
+        }
+    }
+
     private fun report(tag: CompoundTag) {
+        val bees = mutableListOf<String>()
+        findBees(tag, "<chunk>", bees)
+        if (bees.isNotEmpty()) {
+            println("  BEES FOUND       : ${bees.size}")
+            bees.take(6).forEach { println("      $it") }
+        }
         println("  root keys        : ${tag.keySet().sorted()}")
         println("  DataVersion      : ${tag.getIntOr("DataVersion", -1)}")
         println("  Status (root)    : ${tag.getStringOr("Status", "<absent>")}")
