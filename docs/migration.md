@@ -5,9 +5,17 @@ backend server directories plus the Portal's own data files — into a Fabric se
 directory ready to boot. It is safe to rehearse: it refuses to touch a run directory that
 already holds a migrated save, and writes nothing at all unless the whole migration succeeds.
 
-It is the first of two imports. The embassies predate the Portal and are in none of its files;
-they come across separately, from the retired Nucleus server, before the new build's first
-boot — see `docs/nucleus-import.md`.
+It is the first of three cutover operations. The embassies predate the Portal and are in none of
+its files; they come across separately, from the retired Nucleus server, before the new build's
+first boot — see `docs/nucleus-import.md`. Later, in its own downtime window, `mergeWorlds`
+collapses the two Worlds this migration produces into one map — see `docs/merge.md`.
+
+**This runbook describes the two-World server**, because that is what `migrate` builds. Where it
+mentions Travel, `/switch` moving a player between Worlds, or a Per-World Bucket, it is
+describing the state between the Portal cutover and the merge; afterwards there is one map,
+`/switch` is a signpost, and the Worlds are retired (ADR 0004). The quarantine section is the
+exception — it stays live for the whole life of the quarantine and already covers both sides of
+the merge.
 
 ## What it carries over
 
@@ -191,7 +199,8 @@ The migration prints a summary. Then:
    the version jump on first boot: the level directory is relaid out
    (`playerdata` → `players/data`, `region` → `dimensions/minecraft/overworld/region`, …) and
    every chunk and save is upgraded as it loads. This first boot takes longer than usual.
-4. Verify, in this order:
+4. Verify, in this order (this is the two-World server; after the merge the checks are
+   `docs/merge.md`'s):
    - the log lists `mctraveler:secondary`, `mctraveler:secondary_nether`, `mctraveler:secondary_end`;
    - an operator from the old server has operator status (`/op` list, or just use an admin command);
    - a well-travelled player logs in to the World they left, at the position they left;
@@ -208,13 +217,17 @@ Cutover facts to communicate, not bugs to fix:
 - **Secondary's world seed.** The merged save keeps Primary's `level.dat`, and the whole server
   generates from one seed. Secondary's already-generated chunks come over intact, but terrain
   generated *beyond* its current frontier will not match what the old Secondary backend would
-  have generated. Expect seams at the edge of explored Secondary terrain.
+  have generated. Expect seams at the edge of explored Secondary terrain. One seed has a second
+  consequence that only shows up at the merge: every chunk Secondary generates from now on is a
+  twin of Primary's chunk at the same coordinates, and after the merge both exist in one map at
+  different places. Nothing can prevent that — see `docs/merge.md`.
 - **Secondary's level-wide saved data is not imported** — maps, in-progress raids, its world
   border, force-loaded chunks and scoreboard objectives. Map ids are level-wide and cannot be
   merged with Primary's without renumbering every map item. Primary's carry over normally.
 - **Advancements and statistics come from the live World only.** A player's progress on the
   other backend is dropped: two sets cannot merge into the one shared set the port keeps
-  (ADR 0001).
+  (ADR 0001, superseded by ADR 0004 once the Worlds are retired — the one shared set is
+  unchanged by that).
 - **Whitelists and bans are not imported.** The Portal did its own authentication; set them up
   fresh if you want them.
 - **Playerdata that predates 1.16** (a player who has not logged in for years) names its
