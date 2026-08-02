@@ -63,6 +63,39 @@ data class ChunkCompletionReport(
 }
 
 /**
+ * The arbitrary-NBT escape hatches, whose contents are somebody's stored
+ * data rather than the world's geography.
+ *
+ * [ChunkAudit] and [ChunkCompletion] both read this rather than each keeping its own copy. The
+ * two must not drift: the completion pass moves what the audit then checks, so a
+ * key one of them treats as opaque and the other does not is either a
+ * coordinate quietly left behind or a merge refused over nothing.
+ *
+ * `minecraft:bees` is here for the gap that refused the live merge: three
+ * hundred bees at
+ * `block_entities[].Items[].components.minecraft:bees[].entity_data`, which is
+ * a beehive somebody picked up with silk touch and left in a barrel. A bee
+ * sealed in a hive in a box is not standing anywhere — the position is whatever
+ * it held when the hive was broken, and vanilla gives it a fresh one when it
+ * comes out — so it is the bucketed axolotl again.
+ *
+ * **The namespace is the whole distinction, and it is load-bearing.** Namespaced
+ * `minecraft:bees` is an *item component*, on an item that is not anywhere.
+ * Bare `bees` is a placed bee nest's own field, on a block that is somewhere
+ * real, and the `hive_pos` of the bees inside it points at that block and must
+ * move with it — which is exactly what ticket 17 taught the completion pass to
+ * finish. Excluding the bare spelling too would silently undo that, and
+ * `WorldMergeAuditTest` refuses to let it happen.
+ */
+internal val OPAQUE_NBT = setOf(
+    "minecraft:custom_data",
+    "minecraft:entity_data",
+    "minecraft:block_entity_data",
+    "minecraft:bucket_entity_data",
+    "minecraft:bees",
+)
+
+/**
  * The coordinates the relocation tool forgot, finished before the audit looks
  * (merge spec, "Relocation"; ticket 17).
  *
@@ -126,6 +159,7 @@ data class ChunkCompletionReport(
  * placement measured it, which is the audit's test and no other, so a coordinate
  * that already moved is never moved twice.
  */
+
 class ChunkCompletion(
     /** Primary's dimensions as they are being rebuilt inside the staging area. */
     private val stagedLevelDir: Path,
@@ -187,7 +221,7 @@ class ChunkCompletion(
                     // Somebody's stored data rather than the world's geography, and
                     // a place in a dimension being deleted has nowhere to be moved
                     // to; both are spelled out in this class's own documentation.
-                    key in OPAQUE || key in NOT_OURS_TO_MOVE -> Unit
+                    key in OPAQUE_NBT || key in NOT_OURS_TO_MOVE -> Unit
                     // Repaired by the audit, which knows the dimension a target
                     // names; completing it here would apply the offset twice.
                     key == LODESTONE_TRACKER -> Unit
@@ -257,16 +291,6 @@ class ChunkCompletion(
 
         const val BLOCK_POS_LENGTH = 3
 
-        /**
-         * The arbitrary-NBT escape hatches, whose contents are somebody's stored
-         * data rather than the world's geography.
-         */
-        val OPAQUE = setOf(
-            "minecraft:custom_data",
-            "minecraft:entity_data",
-            "minecraft:block_entity_data",
-            "minecraft:bucket_entity_data",
-        )
 
         /**
          * An end gateway's exit portal, which names a place in the End. Secondary's

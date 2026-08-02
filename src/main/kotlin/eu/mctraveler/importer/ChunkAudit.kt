@@ -646,29 +646,11 @@ class ChunkAudit(
          * The arbitrary-NBT escape hatches, whose contents are somebody's stored
          * data rather than the world's geography.
          *
-         * Both spellings of each, because the same stored NBT is reached by two
-         * routes. As an item *component* it carries the namespace; nested inside
-         * another component it does not, and the live merge refused over exactly
-         * that gap — three hundred bees at
-         * `block_entities[].Items[].components.minecraft:bees[].entity_data`,
-         * which is a beehive somebody picked up with silk touch and left in a
-         * barrel. A bee sealed in a hive in a box is not standing anywhere: the
-         * position is whatever it held when the hive was broken, and vanilla
-         * gives it a fresh one when it comes out. The relocation leaves it alone,
-         * so flagging it refused a sound merge over nothing — the same reasoning
-         * the bucketed axolotl above is excluded for.
+         * [ChunkCompletion]'s own set, deliberately, rather than a second copy of
+         * it. This phase exists to prove that one left nothing behind, and it can
+         * only do that honestly if the two agree on what was never its to move.
          */
-        private val OPAQUE = setOf(
-            "minecraft:custom_data",
-            "minecraft:entity_data",
-            "minecraft:block_entity_data",
-            "minecraft:bucket_entity_data",
-            "minecraft:bees",
-            "custom_data",
-            "entity_data",
-            "block_entity_data",
-            "bucket_entity_data",
-        )
+        private val OPAQUE = OPAQUE_NBT
 
         private const val BLOCK_POS_LENGTH = 3
         private const val CHUNK_POS_LENGTH = 2
