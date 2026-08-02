@@ -29,6 +29,14 @@ data class MergePlan(
      * merge touches the save (merge spec, User Story 5).
      */
     val planOnly: Boolean = false,
+    /**
+     * Go ahead even though Regions, players or Embassy destinations are still
+     * anchored in Secondary's End, which this merge destroys. Off by default:
+     * the loss is other people's builds and the only irreversible thing in the
+     * merge, so it is something the operator says rather than something that
+     * happens to them (merge spec, "The End"). See [MergeEnd].
+     */
+    val acceptEndLoss: Boolean = false,
 ) {
     init {
         require(clearance >= 0) { "the clearance cannot be negative, got $clearance" }

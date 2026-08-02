@@ -3,6 +3,7 @@ package eu.mctraveler.importer
 import java.nio.file.Files
 import java.nio.file.Path
 import net.minecraft.SharedConstants
+import net.minecraft.core.BlockPos
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.nbt.DoubleTag
 import net.minecraft.nbt.ListTag
@@ -46,8 +47,21 @@ object SyntheticChunks {
     /** This server's chunk format version, so the tool dispatches the way it will in production. */
     val dataVersion: Int get() = SharedConstants.getCurrentVersion().dataVersion().version()
 
-    /** One chunk's worth of terrain, entity and point-of-interest data. */
-    data class Chunk(val x: Int, val z: Int, val status: String = FULL)
+    /**
+     * One chunk's worth of terrain, entity and point-of-interest data.
+     *
+     * [beds] are absolute block positions inside this chunk holding a bed rather
+     * than stone. They exist because the merge's respawn cross-check has to find
+     * a real block at a real coordinate: a respawn point and the bed it names
+     * travel by two different routes, and only an actual bed in an actual
+     * section proves they arrived at the same place.
+     */
+    data class Chunk(
+        val x: Int,
+        val z: Int,
+        val status: String = FULL,
+        val beds: List<BlockPos> = emptyList(),
+    )
 
     /**
      * Writes [chunks] into [dimension]'s `region`, `entities` and `poi` folders
@@ -122,15 +136,11 @@ object SyntheticChunks {
         tag.putLong("LastUpdate", 0L)
         tag.putLong("InhabitedTime", 0L)
 
-        val section = CompoundTag()
-        section.putByte("Y", MIN_SECTION.toByte())
-        val blockStates = CompoundTag()
-        val palette = ListTag()
-        palette.add(CompoundTag().also { it.putString("Name", "minecraft:stone") })
-        blockStates.put("palette", palette)
-        section.put("block_states", blockStates)
         val sections = ListTag()
-        sections.add(section)
+        val beds = chunk.beds.groupBy { it.y shr SECTION_SHIFT }
+        for (sectionY in (beds.keys + MIN_SECTION).sorted()) {
+            sections.add(section(sectionY, beds[sectionY].orEmpty()))
+        }
         tag.put("sections", sections)
 
         // A chest at the chunk's own north-west corner. Its x/z are absolute, so
@@ -153,6 +163,39 @@ object SyntheticChunks {
             it.put("References", CompoundTag())
         })
         return tag
+    }
+
+    /**
+     * One section of sixteen cubic metres: stone, with a bed wherever [beds]
+     * asks for one.
+     *
+     * A section of a single block state stores no indices at all — there is
+     * nothing to tell apart — which is why the plain sections below carry a
+     * palette and no `data`. As soon as there are two states every one of the
+     * 4096 blocks needs an index into the palette, at the four bits a section
+     * palette is never indexed with fewer of, sixteen to a long and never
+     * straddling one.
+     */
+    private fun section(y: Int, beds: List<BlockPos>): CompoundTag {
+        val palette = ListTag()
+        palette.add(CompoundTag().also { it.putString("Name", "minecraft:stone") })
+        val blockStates = CompoundTag()
+        if (beds.isNotEmpty()) {
+            palette.add(CompoundTag().also { it.putString("Name", BED) })
+            val data = LongArray(BLOCKS_PER_SECTION / ENTRIES_PER_LONG)
+            for (bed in beds) {
+                val index = ((bed.y and BLOCK_MASK) shl (AXIS_BITS * 2)) or
+                    ((bed.z and BLOCK_MASK) shl AXIS_BITS) or (bed.x and BLOCK_MASK)
+                data[index / ENTRIES_PER_LONG] = data[index / ENTRIES_PER_LONG] or
+                    (1L shl (index % ENTRIES_PER_LONG * PALETTE_BITS))
+            }
+            blockStates.putLongArray("data", data)
+        }
+        blockStates.put("palette", palette)
+        return CompoundTag().apply {
+            putByte("Y", y.toByte())
+            put("block_states", blockStates)
+        }
     }
 
     /** One cow, standing in the middle of the chunk. */
@@ -205,4 +248,13 @@ object SyntheticChunks {
 
     /** The bottom section of a 26.2 overworld chunk, in sections. */
     private const val MIN_SECTION = -4
+
+    /** The bed a [Chunk] puts down, and the arithmetic of packing a section's block indices. */
+    private const val BED = "minecraft:red_bed"
+    private const val SECTION_SHIFT = 4
+    private const val BLOCK_MASK = 15
+    private const val AXIS_BITS = 4
+    private const val BLOCKS_PER_SECTION = 4096
+    private const val PALETTE_BITS = 4
+    private const val ENTRIES_PER_LONG = Long.SIZE_BITS / PALETTE_BITS
 }

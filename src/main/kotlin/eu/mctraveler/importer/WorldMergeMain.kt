@@ -39,6 +39,9 @@ object WorldMergeMain {
                                 Both axes must be multiples of ${MergeGeometry.OFFSET_ALIGNMENT}
           --search-limit <n>    how many ${MergeGeometry.OFFSET_ALIGNMENT}-block steps out to look
                                                                        [default: ${WorldMerge.DEFAULT_SEARCH_LIMIT}]
+          ${MergeEnd.OPT_IN}    go ahead even though Regions, players or Embassy destinations
+                                are still anchored in Secondary's End. Their builds there are
+                                DELETED. Run without it first and read what it names
     """.trimIndent()
 
     @JvmStatic
@@ -103,6 +106,7 @@ object WorldMergeMain {
         searchLimit = options["search-limit"]?.let { number("search-limit", it) }
             ?: WorldMerge.DEFAULT_SEARCH_LIMIT,
         planOnly = options.containsKey("plan-only"),
+        acceptEndLoss = options.containsKey(MergeEnd.OPT_IN.removePrefix("--")),
     )
 
     /**

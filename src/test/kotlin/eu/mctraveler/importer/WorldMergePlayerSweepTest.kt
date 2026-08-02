@@ -66,8 +66,13 @@ class WorldMergePlayerSweepTest {
         deployment = MergedDeploymentFixture(dir).build()
     }
 
-    private fun merge(): MergeReport =
-        WorldMerge(deployment.plan(offset = OFFSET, planOnly = false)).run()
+    /**
+     * [acceptEndLoss] is only ever passed by the test that leaves a player in
+     * Secondary's End: the End gate refuses the whole merge over one otherwise,
+     * and what this suite is about is what the sweep did before that gate ran.
+     */
+    private fun merge(acceptEndLoss: Boolean = false): MergeReport =
+        WorldMerge(deployment.plan(offset = OFFSET, planOnly = false, acceptEndLoss = acceptEndLoss)).run()
 
     // ---- the two mirrors ----------------------------------------------------
 
@@ -453,16 +458,18 @@ class WorldMergePlayerSweepTest {
 
     @Test
     fun `a player standing in Secondary's End is left where they are, and named`() {
+        deployment.withWorldSpawn(0, 64, 0)
         deployment.playerSave(ALICE, save("mctraveler:secondary_end", x = 1.0, y = 50.0, z = 2.0))
         deployment.playerRecord(ALICE, """{"lastServer":"secondary"}""")
 
-        val report = merge()
-
         // The End is discarded rather than relocated, so it has no offset and
-        // there is nowhere to move them to. The End gate decides their landing.
-        val live = deployment.savedPlayer(ALICE)
-        assertEquals("mctraveler:secondary_end", live.getStringOr("Dimension", ""))
-        assertEquals(listOf(1.0, 50.0, 2.0), positionIn(live))
+        // there is nowhere for this sweep to move them to: it names them and
+        // leaves them exactly as they are. Where they end up is the End gate's
+        // decision and is asserted in WorldMergeEndGateTest — which is also why
+        // the loss has to be accepted here, or that gate stops the whole merge
+        // over this one player.
+        val report = merge(acceptEndLoss = true)
+
         assertEquals(listOf(ALICE), report.players.anchoredInSecondaryEnd)
         assertTrue(
             report.lines().contains(
