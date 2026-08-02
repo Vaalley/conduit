@@ -20,7 +20,7 @@ val sourceSets = the<SourceSetContainer>()
 // a dependency of anything here and is reached only as a subprocess.
 //
 // **This is not the released 2.8.** The released one is unusable for this merge,
-// in two ways ticket 16 found and fixed at source rather than routed around:
+// in ways tickets 16 and 17 found and fixed at source rather than routed around:
 //
 //   - `--mode select` races. `Selection.merge` mutates a non-thread-safe fastutil
 //     map from every per-region-file job at once, so about one run in twenty
@@ -95,7 +95,8 @@ val provideMcaSelector = tasks.register("provideMcaSelector") {
                 "MCA Selector $version is not at $source, and the merge will not run without it.\n" +
                     "\n" +
                     "This is a patched build, not a download: the released 2.8 loses chunks to a race\n" +
-                    "and leaves four kinds of 26.2 coordinate behind when it relocates. Build it with\n" +
+                    "and leaves most of what 26.2 records inside an entity behind when it relocates.\n" +
+                    "Build it with\n" +
                     "\n" +
                     "  git clone --branch 2.8 https://github.com/Querz/mcaselector.git \\\n" +
                     "      ~/.mctraveler/src/mcaselector\n" +
