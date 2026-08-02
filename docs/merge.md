@@ -189,11 +189,222 @@ that is your rollback — so Secondary's folders come out of a merge byte-for-by
 
 ## Run it
 
-PLACEHOLDER command and options.
+Plan first, check the placement against the real map, then run for real with the offset the plan
+chose:
+
+```sh
+./gradlew mergeWorlds --args="--target /srv/mctraveler-fabric/run --plan-only"
+./gradlew mergeWorlds --args="--target /srv/mctraveler-fabric/run --offset 8192,-4096 --accept-end-loss"
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--target <dir>` | the live server's run directory (`regions.json`, `mctraveler/`, `world/`), with the server stopped |
+| `--plan-only` | choose the offset, print it and write **nothing at all** |
+| `--level-name <name>` | the level directory to work in; must match the server's `level-name` (default `world`) |
+| `--clearance <blocks>` | empty ground to leave around the landmass, in **nether** blocks; the overworld is given eight times as much (default `512`) |
+| `--offset <x>,<z>` | place Secondary here instead of searching. Checked by the same test a searched offset passes. Both axes must be multiples of 4096 |
+| `--search-limit <n>` | how many 4096-block steps out to look (default `64`, maximum `256`) |
+| `--border <blocks>` | Secondary's world border, in blocks from the origin on each horizontal axis (default `50000`) |
+| `--bleed <blocks>` | how far past the border terrain is still carried (default `512`, one region file) |
+| `--accept-end-loss` | go ahead even though something is still anchored in Secondary's End. Run without it first and read what it names |
+| `--sample <n>` | relocated chunks of **each** dimension compared block for block against their source (default `64`; `0` compares nothing and proves nothing) |
+
+**Pass `--offset` on the night.** It is not a shortcut past the search — a supplied offset goes
+through exactly the test a searched one passes, and is refused by name if it fails. What it buys
+is that the rehearsal and the night put the landmass in the same place, which is the only way the
+rehearsal is evidence about the run. The command prints the flag to use after every plan.
+
+There is nothing to fill in between planning and running. The offset the run applies is written
+into `mctraveler/merge.json` by the run itself, and everything downstream — the claim path most
+of all — reads it back from there, so there is no constant to edit and no step that can be
+skipped.
+
+### `--border` and `--bleed`
+
+`--border 50000` is the border Secondary actually ran. The tool cannot measure it, so if it is
+wrong nothing will say so; it is the one value in the merge that has to be checked against the
+server's own configuration beforehand. Chunks past it are **left behind**: not moved, not deleted,
+still in Secondary's folders after the merge — and gone for good when the Worlds-retirement build
+removes those folders. Carrying them is actively harmful, because the placement search sizes its
+slot from the whole footprint and a single chunk generated a million blocks out would demand an
+enormous free area in Primary.
+
+`--bleed 512` exists so the ground does not end at a visible wall at the border, and it is the
+smallest value that can do anything at all, because the clip carries whole region files. The clip
+rounds *inward*: a file is carried only when all of it lies within border + bleed.
+
+**The border is not divided by eight in the nether.** It is a vanilla world border, which applies
+at the same coordinates in every dimension, so the nether is clipped at ±50,000 *nether* blocks.
+That is deliberate, and it is what catches a stray in the nether at all.
+
+### `--accept-end-loss`, precisely
+
+It is a decision, not a formality, and it does **not** decide whether Secondary's End is
+destroyed. The End goes either way — its chunk data is discarded and every player save is
+scrubbed of references to it, whether or not the flag is given, because that dimension stops
+existing regardless. What the flag permits is the loss of things that are *anchored* there:
+Regions in Secondary's End are deleted, Embassy destinations pointing into it are cleared rather
+than left aiming at nothing, and the players standing in it are put down elsewhere — at their
+Secondary overworld bucket position if they have one, and at the relocated world spawn otherwise.
+
+Run without it first, read the list, tell the people on it, then pass it.
 
 ## What it prints
 
-PLACEHOLDER report walkthrough.
+One section per phase, in the order the phases ran. The numbers below are illustrative; the
+shape is not.
+
+```
+Merged the merge of Secondary into Primary in /srv/mctraveler-fabric/run:
+  offset                   : x +8192, z -4096  (nether x +1024, z -512)
+  offset came from         : --offset, checked rather than trusted
+  clearance asked for      : 512 nether blocks, 4096 in the overworld
+  overworld
+    Secondary's footprint  : x -12288…14335  z -9216…11775  (2013 region files)
+    lands at               : x -4096…22527  z -13312…7679
+    clearance achieved     : 4096 blocks
+    Primary has reached    : x -8192…9215  z -7168…8191
+  nether
+    Secondary's footprint  : x -1536…2047  z -1536…1535  (49 region files)
+    lands at               : x -512…3071  z -2048…1023
+    clearance achieved     : 512 blocks
+    Primary has reached    : x -1024…1535  z -1024…1023
+  Secondary's border       : ±50000 blocks, with 512 of bleed carried past it
+  left outside the border  : nothing — every region file of Secondary is inside it
+  overworld
+    chunks relocated       : 418327
+    chunks dropped         : 1104 (not fully generated)
+    files written          : 2013
+    bytes transferred      : 9214859264
+  nether
+    chunks relocated       : 28788
+    chunks dropped         : 83 (not fully generated)
+    files written          : 49
+    bytes transferred      : 533354496
+  relocated in total       : 447115 chunks, 1187 dropped, 9748213760 bytes
+  discarded                : Secondary's End — 31 files
+  sample size              : 64 chunks from each relocated dimension
+  chunks compared          : 128 — overworld 64 of 418327, nether 64 of 28788
+  sampled diff             : every sampled chunk matched its source, block for block
+  coordinates completed    : none — the relocation tool moved everything it should have
+  chunks audited           : 447115
+  coordinates checked      : 3918442
+  repaired automatically   : 7 lodestone compass targets
+  needs an operator        : 2, listed below and never rewritten
+    command block          : overworld 412, 68, -1180 — /tp @p 85 64 53
+    cannot be repaired     : a lodestone compass pointing into Secondary's End
+  Regions moved            : 184 — overworld 171, nether 13
+  Regions left alone       : 602
+  Embassy destinations     : 6 moved to Primary
+  regions.json             : rewritten
+  players swept            : 1842
+  players left alone       : 11106
+  banked positions         : 973
+  Secondary's End          : discarded — nothing was anchored in it
+  respawn points moved     : 1197 — 1181 confirmed against the relocated chunks, 16 had no bed before the merge either
+
+The merge is committed and /srv/mctraveler-fabric/run now carries the merge stamp, so this will
+refuse to run again. Secondary's End and its level-wide saved data were discarded rather than
+moved.
+```
+
+A `--plan-only` run prints the placement and the border section, and then says so:
+
+```
+Nothing was written. Check that distance against the live map before the real run — Secondary
+has grown since the Portal cutover — and pass --offset 8192,-4096 when you run it for real, so
+the rehearsal and the night put the landmass in the same place.
+```
+
+### Lines worth stopping on
+
+**`offset came from`.** On the night this must say `--offset, checked rather than trusted`. If it
+says `the search — the nearest clear slot, N tried`, you did not pass the offset the rehearsal
+chose, and the landmass may have gone somewhere else.
+
+**`clearance achieved`.** Blocks of genuinely empty ground between the landed footprint and
+Primary's nearest chunk data. Region-file granularity: adjacent files read as zero.
+
+**`left outside the border`.** `nothing — every region file of Secondary is inside it` is the
+expected answer. It names region *files*, not chunks, and says how far past the border the
+furthest one reached. Tens of thousands of blocks out is a stray teleport or an admin excursion,
+and is exactly what the clip is for. **A few hundred blocks past the border, or a lot of files,
+is somebody's base** — stop and find out whose, because the clip will leave it behind and the
+merge will not mention it again.
+
+**`chunks dropped`.** Chunks vanilla had not finished generating, left behind so the frontier
+regenerates cleanly rather than half from one seed and half from another. Expected and
+uninteresting. It is a different count from `chunks outside border`, and the two never overlap.
+
+**`chunks compared`.** `none` means either you passed `--sample 0` or there was no readable chunk
+data to sample — and the next line says outright that nothing here says the terrain arrived. On a
+real run this should be `--sample` × 2.
+
+**`coordinates completed`.** See below; this is the one line whose meaning is not obvious.
+
+**`repaired automatically` and `needs an operator`.** The first is work already done — lodestone
+compass targets re-pointed at the relocated landmass, recursively through containers and bundles
+wherever they were found. The second is **an action list for after the server is back up, not a
+refusal**. Command blocks holding literal coordinates are listed with their position and their
+command and are never rewritten, because a command is a program and the numbers in one can be a
+place, a count, a score or a tick.
+
+**`Regions outside border`, `destinations outside it`, `players outside border`, `beds outside
+the border`.** These lines appear only when the count is non-zero, and each is a person to tell.
+They are swept like everyone else — that is the deliberate call — but the chunks under them
+stayed in Secondary, so a Region will protect terrain regenerated from Primary's seed, a player
+will log in somewhere that looks nothing like where they logged out, and a bed's owner will
+respawn at the world spawn instead. **They are named in no other report**, so this count is the
+only warning there will be.
+
+**`still in Secondary's End` and `Region deleted`.** The same Region can appear under both, and
+it is not a double count: the first is what the Regions sweep found and left, the second is what
+the End gate then destroyed, in phase order.
+
+**`banked positions`.** How many players had a second base recorded for them in
+`mctraveler/banked-positions.json`, which is what `/switch` reads back. Nobody's banked position
+is restored to them — it is told to them.
+
+### A non-zero `coordinates completed`
+
+Zero is the expected reading and the boring one: MCA Selector moved every coordinate Minecraft
+26.2 writes, and there was nothing left for the merge to finish. A non-zero count is a finding,
+and looks like this:
+
+```
+  coordinates completed    : 2 in 1 chunk, which the relocation tool did not move. See below.
+    the tool left behind   : minecraft:bee_nest.flower_pos — 1 coordinate
+    the tool left behind   : minecraft:bee.hive_pos — 1 coordinate
+    what this means        : MCA Selector has fallen behind what Minecraft writes. The merge
+                             finished these itself and the audit below still checked all of
+                             them, so the map is sound — but the patch wants widening before
+                             the next run.
+```
+
+It means the pinned tool does not know about a coordinate the game writes, and the merge applied
+the offset itself rather than stopping. **It is not a reason to abort the run.** The audit runs
+afterwards, unchanged, over the completed chunks, and would still have refused if anything were
+left — so a merge that prints this and then completes is a merge whose map is sound.
+
+What to do about it, in order:
+
+1. **Nothing, during the window.** The run is good. Do not stop it, and do not try to widen the
+   patch at 2am.
+2. **Afterwards, record the field names.** They are the whole value of the section: each names a
+   field to add to `gradle/mcaselector/2.8-mctraveler1.patch`, keyed by NBT name rather than by
+   entity id.
+3. **Expect it to be non-zero on the first real run.** The tool's *block entity* switch was
+   deliberately left unfixed, so that the completion pass was proved against a defect that is
+   real rather than mocked. A bee nest in a relocated chunk is what will show up here, and it is
+   expected rather than alarming.
+4. **Compare it between the rehearsal and the real run.** They should match. A count that grew
+   means the save changed underneath, and is worth understanding before reopening.
+
+The one thing this does *not* clear is an end gateway's `exit_portal`. It names a place in the
+End, and Secondary's End is discarded, so the merge cannot know where to point it and
+deliberately does not try. If the audit refuses over one, that is a genuine decision for a
+person: the gateway is in relocated terrain and its destination no longer exists.
 
 ## It refuses rather than half-merging
 
