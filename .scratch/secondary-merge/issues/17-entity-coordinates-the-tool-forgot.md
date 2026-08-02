@@ -38,9 +38,15 @@ stopping and telling you.
 
 **Status:** ready-for-agent
 
-- [ ] A bee's `hive_pos` and `flower_pos` are relocated, in the patched build, additively,
-      and the patch in this repo is updated to match
+- [ ] **Every** remaining inline block position the entity switch does not cover is
+      enumerated, in both `ChunkFilter_25w15a` and `ChunkFilter_21w37a`, against 26.2's actual
+      entity NBT — bees are unlikely to be the only one, and the list is the deliverable, not
+      the bee. Vanilla's `InlineBlockPosFormatFix` and the entity classes are the reference
+- [ ] All of them, bees included, are relocated in the patched build, additively, with the
+      patch in this repo updated and the pinned sha256 in the build updated to the rebuilt jar
 - [ ] A Secondary chunk containing a bee with a hive relocates and passes the audit
+- [ ] The audit's deliberately-stale-coordinate test uses one the enumeration shows is
+      genuinely still unrelocated, and the fixture's doc comment says which and why
 - [ ] A completion pass runs after the relocation and before the audit, applying the offset
       to coordinates that should have moved and did not
 - [ ] It uses the same shape-based rule the audit uses, and the same exclusions — a velocity,
