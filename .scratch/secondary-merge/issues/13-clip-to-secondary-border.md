@@ -22,9 +22,9 @@ border is swept exactly like any other. The operator's call, and the risk is sma
 consequence is worth knowing, so the report counts them: such a player's coordinates move
 while their chunks do not, so they arrive in terrain that regenerates from Primary's seed.
 
-**Blocked by:** 15 — Choosing the chunks ourselves. Ticket 15 replaces MCA Selector's racy
-`--mode select` with a selection we compute, which is where this clip belongs: a predicate on
-a list we are already building, rather than a filter over somebody else's output.
+**Blocked by:** 16 — Fixing MCA Selector rather than working around it. The clip is a filter
+over the selection before it is handed to the import, so it needs a selection that can be
+trusted to be the same twice — which is what 16 delivers.
 
 **Status:** ready-for-agent
 

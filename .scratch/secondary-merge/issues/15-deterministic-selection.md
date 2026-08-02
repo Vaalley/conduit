@@ -27,10 +27,22 @@ one from what landed on disk — so the guard that could not work now can. And t
 clip to Secondary's world border becomes a predicate on a selection we are already
 computing, rather than a filter over somebody else's output.
 
-**Blocked by:** None — tickets 01 and 02 are complete. Land after wave 3 is reconciled, and
-before ticket 13, which builds on the selection this produces.
+**Blocked by:** None.
 
-**Status:** ready-for-agent
+**Status:** wontfix — superseded by 16 — Fixing MCA Selector rather than working around it
+
+Superseded before it was started. The race is a missing lock on `Selection.merge`, and MCA
+Selector is MIT licensed, so fixing it at source is both smaller than this ticket and keeps
+the tool's per-version relocation chain — which matters more than it looked, because
+Secondary's chunks are a mix of DataVersions and that chain is what copes with the mixture.
+Ticket 16 carries the fix, alongside the four relocation fields ticket 03's audit found.
+
+What this ticket would additionally have bought is a *selected* count derived independently
+of the *relocated* count, so the two agreeing would have been evidence rather than a
+tautology. That is worth naming as a real loss. It is covered instead by ticket 03's audit,
+which checks a property over every relocated chunk, and by ticket 04's sampled diff, which
+compares relocated chunks against their sources — both stronger evidence than two counts
+agreeing.
 
 - [ ] The selection is computed by reading the source chunks, never by asking MCA Selector
       for it
