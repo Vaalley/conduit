@@ -82,6 +82,22 @@ open class McaSelector(private val jar: Path, private val java: Path = currentJa
      * Note that MCA Selector treats a target holding no region files at all as
      * "no files" and returns **successfully** having done nothing, so callers
      * must check what arrived rather than trust the exit status.
+     *
+     * **Single-threaded, deliberately.** Ticket 16 fixed a data race in
+     * `--mode select`; nobody had reason to look at `--mode import` until it
+     * killed a real run. Relocating the live Secondary — six million chunks
+     * rather than the handful a test fixture holds — died after thirteen minutes
+     * with a SIGSEGV inside `CompoundTag.getIntArrayTag`, reading an array
+     * through the pointer `0x1000000`. A wild reference rather than a null one is
+     * heap corruption, and five worker threads is where that comes from.
+     *
+     * The merge is a one-shot operation on other people's worlds, so it buys
+     * certainty with wall-clock rather than the other way round: an import that
+     * takes longer costs a downtime window, and an import that corrupts a chunk
+     * costs somebody their house. Upstream's own parallelism is not something
+     * this repository can vouch for, and — unlike the selection race — a chunk
+     * mangled here would be *inside* the data every later phase then checks
+     * against itself, which is exactly the shape of thing an audit cannot see.
      */
     open fun relocate(from: Path, into: Path, selection: Path, chunksX: Int, chunksZ: Int): String = run(
         "relocating $from into $into",
@@ -91,6 +107,7 @@ open class McaSelector(private val jar: Path, private val java: Path = currentJa
         "--source-selection", selection.toString(),
         "--x-offset", chunksX.toString(),
         "--z-offset", chunksZ.toString(),
+        "--process-threads", "1",
     )
 
     /**
