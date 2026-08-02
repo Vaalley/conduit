@@ -1,25 +1,23 @@
 # MCTraveler
 
-MCTraveler is a community Minecraft survival server whose custom gameplay is being ported from a standalone TypeScript proxy (the Portal) to a server-side Fabric mod, collapsing a two-server topology into one server with multiple Worlds.
+MCTraveler is a community Minecraft survival server whose custom gameplay is being ported from a standalone TypeScript proxy (the Portal) to a server-side Fabric mod, collapsing a two-server topology into one server with one continuous map.
 
 ## Language
 
-**World**:
-One of the overworld-style places players inhabit and travel between — Primary or Secondary today. Formerly a separate backend server; now a trio of dimensions (overworld, nether, end) on the single server.
-_Avoid_: server (for a place players play in), dimension (in player-facing language)
+**The map**:
+The vanilla trio of dimensions — overworld, nether, end — which is everywhere players live, build and respawn. There is one of each. The server once ran two such trios, called Worlds, and the terms for that topology (World, Travel, Per-World Bucket, Position Memory) are retired: see ADR 0004 and `docs/merge.md`.
+_Avoid_: World, trio (for the map as a whole), server (for a place players play in)
 
-**Travel**:
-A player's move from one World to another. Restores that player's Per-World Bucket in the destination World.
-_Avoid_: server switch, transfer
+**Secondary**:
+The landmass that was once a World of its own, now relocated into the map at a fixed offset and reachable on foot. It is a place with a known footprint — not a destination, not a dimension, and with no spawn or per-player state of its own. Primary is not a term at all any more; it is simply the map.
+_Avoid_: the Secondary World, the second World, Secondary's dimensions
 
-**Per-World Bucket**:
-The player state each World keeps separately: Position Memory, respawn point (bed/anchor), and the dimension within the World the player last occupied. All other player state (inventory, XP, ender chest, advancements, stats) is shared across Worlds.
-
-**Position Memory**:
-The per-World record of where a player last stood, restored when they Travel back. Part of the Per-World Bucket.
+**The merge**:
+The one-time offline operation (`mergeWorlds`) that relocated Secondary's chunk data into the map, rewrote everything that recorded a place in it, and discarded Secondary's End. It stamps `mctraveler/merge.json` with the offset it applied, which the claim path reads for the life of the quarantine.
+_Avoid_: the migration (that is the Portal cutover), the import (that is Nucleus)
 
 **Region**:
-A player-owned protected cuboid in a World's dimension, with members, flags, and optional sub-regions. Protection applies to player actions and (since the port) environmental damage.
+A player-owned protected cuboid in a dimension, with members, flags, and optional sub-regions. Protection applies to player actions and (since the port) environmental damage. Regions record their dimension as one of the Portal's legacy world strings — `world`, `world_nether`, `world_the_end`, plus `embassies` — and that is stored-data compatibility, deliberately kept, **not** a surviving World concept. Do not "clean it up".
 
 **Teleportation Crystal**:
 A craftable hand-held teleporter: a re-skinned Echo Shard, identified by a custom-data marker, in three tiers. The tier is its charge capacity — how far into an empty Energy pool it still works.
@@ -45,5 +43,5 @@ _Avoid_: proxy (ambiguous once the Fabric mod exists)
 The pre-Portal legacy system — the MCTravelerNucleus Paper plugin. Source of the Embassies and Teleportation Crystal features and of their era's data (embassies world, embassy regions, crystal energy).
 
 **Embassies**:
-The plot-museum dimension (`mctraveler:embassies`): flat void, admin-allocated 11×11 plots on a chunk spiral, each an EMBASSY-flagged region with a respawn-anchor teleporter to its saved destination. An out-of-trio dimension, not a World (ADR 0003) — entered and left only by teleport, with the player's origin restored on void-fall, disconnect, or server stop.
-_Avoid_: embassy world as a World, third World
+The plot-museum dimension (`mctraveler:embassies`): flat void, admin-allocated 11×11 plots on a chunk spiral, each an EMBASSY-flagged region with a respawn-anchor teleporter to its saved destination. A dimension outside the map, not part of it (ADR 0003) — entered and left only by teleport, with the player's origin restored on void-fall, disconnect, or server stop, and no per-player state persisted for it.
+_Avoid_: the embassy world, a place players live
