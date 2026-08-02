@@ -46,6 +46,15 @@ open class McaSelector(private val jar: Path, private val java: Path = currentJa
      * The selection is taken from the terrain folder, so a chunk that somehow has
      * entity or point-of-interest data but no terrain is not carried. That is the
      * conservative direction: such a chunk has no blocks to stand on.
+     *
+     * This runs at the tool's own thread count. It did not always: the released
+     * 2.8 mutates a non-thread-safe map from every per-region-file job at once, so
+     * about one run in twenty silently returned a whole region file's worth of
+     * chunks fewer than it matched, and exited 0 — player builds left behind in
+     * Secondary with the merge reporting success. The lock that fixes it is part
+     * of the patched build the tool is pinned to (ticket 16), so the `1` that used
+     * to be forced here is gone rather than kept as a belt on top of braces: a fix
+     * nobody exercises is a fix nobody would notice losing.
      */
     fun select(from: Path, into: Path): String = run(
         "selecting the finished chunks of $from",
@@ -53,17 +62,6 @@ open class McaSelector(private val jar: Path, private val java: Path = currentJa
         "--world", from.toString(),
         "--query", "Status = $FULL_STATUS",
         "--output", into.toString(),
-        // Single-threaded, because the tool's selection races: `Selection.merge`
-        // is handed to `ChunkFilterSelector.selectFilter` as a per-job callback
-        // and mutates a non-thread-safe map, so about one run in twenty silently
-        // loses a whole region file's worth of chunks — player builds left behind
-        // in Secondary, with the merge reporting success. One thread was stable
-        // in 120 of 120 runs where the default lost 5.
-        //
-        // This is a stopgap the merge can afford: selecting is a header scan, so
-        // the cost is small beside the relocation it feeds. Ticket 16 fixes the
-        // race in a patched build of the tool, and this line goes with it.
-        "--process-threads", "1",
     )
 
     /**

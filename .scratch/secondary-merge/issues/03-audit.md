@@ -18,7 +18,7 @@ point-of-interest record at the same place, or the whole trading hall is quietly
 
 **Blocked by:** 02 — Relocating Secondary's chunk data.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [x] Every relocated chunk is walked and every coordinate-bearing field examined
 - [x] A structural coordinate still pointing into Secondary's old footprint fails the
@@ -34,10 +34,10 @@ point-of-interest record at the same place, or the whole trading hall is quietly
       point-of-interest record at the same position, or the merge fails naming the villager
       and the place
 - [x] The report separates what was repaired automatically from what needs an operator
-- [ ] A test fixture containing one of every coordinate-bearing thing — a stocked chest, a
+- [x] A test fixture containing one of every coordinate-bearing thing — a stocked chest, a
       villager with a job site, an item frame, a painting, a leashed animal, a lodestone
       compass nested inside a shulker box inside a chest — passes the audit after a real
-      relocation
+      relocation *(closed by ticket 16, which fixed the relocation this was waiting on)*
 - [x] A test that deliberately leaves one structural coordinate stale proves the merge
       refuses and writes nothing
 
@@ -85,6 +85,23 @@ caught up.
 
 `WorldMergeAuditTest` pins each of the four down by name, so the day the relocation learns
 them those tests are what say so.
+
+**Closed by ticket 16**, which patched the tool rather than working around it. The four
+fields now arrive relocated and the last acceptance criterion above is met: the fixture
+passes the audit after a real relocation. The two tests that asserted a refusal now assert
+arrival, and they carry both spellings at once so an additive fix is what they prove.
+
+The finding above understated one thing, worth recording because it is the sort of bug that
+hides: the villager memories were not merely read at the wrong depth. `ChunkFilter_25w15a`
+dereferences a static `Relocate.instance` that `VersionHandler` never assigned, so at 26.2
+*every* entity threw NPE partway through its relocation and the per-entity `catchAndLog`
+swallowed it. The relocation reported success having half-relocated every entity in the save.
+The fields that appeared to work were simply the ones handled before the throw.
+
+One field of the same kind is still not relocated and was deliberately left: a bee's
+`hive_pos`. It is what `one structural coordinate left behind fails the whole merge and
+writes nothing` now leaves stale, so this suite still proves the refusal path over something
+real rather than something invented.
 
 ### Judgement calls
 

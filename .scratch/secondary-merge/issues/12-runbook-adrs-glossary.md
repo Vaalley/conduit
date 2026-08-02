@@ -44,3 +44,36 @@ leaving it describing two Worlds is leaving a trap.
 - [ ] The glossary retires World, Travel, Per-World Bucket and Position Memory, redefines
       Secondary as a place, and rewords every entry that was defined against a World
 - [ ] The existing migration runbook is updated where the merge changes it
+- [ ] It records that the relocation tool is a **patched** MCA Selector, why, and how to
+      rebuild it from `gradle/mcaselector/2.8-mctraveler1.patch` — ticket 16 wrote the
+      material into its own Comments because this runbook did not exist yet
+
+## Comments
+
+### From ticket 16 — what the runbook must say about the relocation tool
+
+The merge does not run a released MCA Selector. It runs a local build of the 2.8 tag with
+`gradle/mcaselector/2.8-mctraveler1.patch` applied, pinned by path and sha256 in
+`gradle/merge-worlds.gradle.kts`. The runbook needs three things about it.
+
+**Why it exists.** Released 2.8 has two defects that make it unusable here, both found by
+this project and both fixed at source: `--mode select` loses a whole region file's worth of
+chunks in about one run in twenty, silently and with exit 0; and it leaves a leash, an item
+frame's and a painting's tile position and every villager's memories naming Secondary. The
+audit refuses on the second, so a merge on stock 2.8 could not complete at all.
+
+**Where it lives and how to rebuild it.** The build prints the whole procedure when the jar
+is missing, so the shortest correct instruction in the runbook is to run `./gradlew
+provideMcaSelector` and follow what it says. For reference, that is: clone the 2.8 tag to
+`~/.mctraveler/src/mcaselector`, `git apply` the patch, `./gradlew shadowJar`, and copy
+`build/libs/mcaselector-2.8-all.jar` to `~/.mctraveler/tools/mcaselector-2.8-mctraveler1.jar`.
+It needs a JDK 21 and downloads JavaFX, which its build needs even though the merge only ever
+runs it headless. The build is reproducible, so the rebuilt jar matches the pinned checksum
+exactly — a mismatch means something is wrong, not that a rebuild drifted.
+
+**What it still does not do.** The tool moves an entity's positions from a list of the entity
+types that have them, and the list is not complete: a bee's `hive_pos` and `flower_pos` are
+not on it. The audit refuses on those, naming the bee and the chunk, so it is a refusal rather
+than a silent loss — but it *is* a refusal the operator cannot clear, and a rehearsal against
+production is what will say whether Secondary has any bees in a relocated chunk. That is worth
+finding out before the downtime window rather than during it.

@@ -22,10 +22,12 @@ import net.minecraft.world.level.Level
  * save built this way relocates exactly as the other merge tests' does and every
  * number below can be worked out by hand.
  *
- * The three parts are separate because MCA Selector does not relocate all of them
- * (see `WorldMergeAuditTest`): [writeInto] is what it moves faithfully, and
- * [addTheInlineBlockPositions] and [addVillager] are what it leaves behind. A test
- * composes the fixture it means to make a claim about.
+ * The parts are separate so a test composes the fixture it means to make a claim
+ * about. [writeInto] is the chunk every test starts from;
+ * [addTheInlineBlockPositions] and [addVillager] add the spellings 26.2 writes,
+ * which the merge's patched relocation tool moves and the stock one did not (ticket
+ * 16); [addBee] adds the one this fixture knows of that is *still* left behind, so
+ * that a test proving the merge refuses has something honest to refuse over.
  */
 object CoordinateBearingChunks {
 
@@ -62,6 +64,7 @@ object CoordinateBearingChunks {
 
     val COW = Triple(88.0, 64.0, 56.0)
     val VILLAGER = Triple(89.0, 64.0, 57.0)
+    val BEE = Triple(87.0, 64.0, 55.0)
 
     /** The structure the chunk is part of, and the piece of it standing here. */
     val STRUCTURE_BOX = intArrayOf(80, 64, 48, 95, 79, 63)
@@ -76,11 +79,11 @@ object CoordinateBearingChunks {
      * entities standing in it and the points of interest they claim.
      *
      * The item frame and the painting carry their tile positions in the spelling
-     * that was on disk before 1.21.5 inlined it, because that is the one the
-     * relocation tool still moves — and, since chunk data is only upgraded when it
-     * is *loaded*, the one a Secondary chunk nobody has visited since the Portal
-     * cutover still has. What 26.2 writes instead is
-     * [addTheInlineBlockPositions].
+     * that was on disk before 1.21.5 inlined it. Since chunk data is only upgraded
+     * when it is *loaded*, that is the one a Secondary chunk nobody has visited
+     * since the Portal cutover still has, and it has to keep relocating however
+     * well the merge learns the new one. What 26.2 writes instead is
+     * [addTheInlineBlockPositions], which a test adds on top rather than instead.
      */
     fun writeInto(levelDir: Path, dimension: ResourceKey<Level>) {
         val storage = Footprint.storageFolder(levelDir, dimension)
@@ -94,10 +97,13 @@ object CoordinateBearingChunks {
      * position: a leash tied to a fence, and the tile an item frame and a painting
      * hang on.
      *
-     * These are separate from [writeInto] because MCA Selector 2.8 does not know
-     * them — it still moves `Leash` and `TileX`/`TileY`/`TileZ`, the spellings
-     * 1.21.5's `InlineBlockPosFormatFix` replaced — so a save carrying them comes
-     * out of the relocation with the old coordinates still in it.
+     * These are separate from [writeInto] so that a chunk can be made to carry the
+     * old spellings, the new ones, or both. Both is the interesting case and the one
+     * the audit suite uses: [writeInto] lays down `Leash` and `TileX`/`TileY`/`TileZ`
+     * and this adds `leash` and `block_pos` beside them, so a relocation that learned
+     * the new spelling by forgetting the old one is a red test rather than a quiet
+     * one. The stock MCA Selector 2.8 moved only the old ones; the patched build the
+     * merge pins moves both (ticket 16).
      */
     fun addTheInlineBlockPositions(levelDir: Path, dimension: ResourceKey<Level>) {
         edit(levelDir, dimension, "entities", "entities") { tag ->
@@ -115,13 +121,12 @@ object CoordinateBearingChunks {
     /**
      * A villager remembering the three places it has claimed.
      *
-     * The positions are given rather than assumed because the two claims a test
-     * can make about a villager are opposite ones: written in Secondary's own
-     * coordinates it is the relocation's job to move them, and written in the
-     * merged ones it is already where a correct relocation would have left it —
-     * which is the only state in which the cross-check against the
-     * point-of-interest records is the thing being tested rather than the
-     * relocation.
+     * The positions are given rather than assumed so that a test can put a memory
+     * somewhere the point-of-interest records do not claim, which is the only way
+     * to ask the cross-check across the two files anything. Ordinarily they are
+     * Secondary's own coordinates and the relocation is what moves them; the
+     * memories go inside `value`, as `ExpirableValue` writes them, and
+     * [addVillagerRememberingFlatly] is the older shape that must keep working too.
      */
     fun addVillager(
         levelDir: Path,
@@ -150,6 +155,63 @@ object CoordinateBearingChunks {
                             )
                         },
                     )
+                },
+            )
+        }
+    }
+
+    /**
+     * A villager whose memories are written flat — the global position sitting on
+     * the memory itself rather than inside `value`.
+     *
+     * `ExpirableValue` has wrapped a memory in `value` for many versions, but a
+     * chunk is only rewritten when something loads it, so Secondary still holds
+     * chunks from before it. This is what proves the relocation's fix for the
+     * wrapped shape was additive: both have to move, because the same save has
+     * both.
+     */
+    fun addVillagerRememberingFlatly(levelDir: Path, dimension: ResourceKey<Level>, home: Block) {
+        edit(levelDir, dimension, "entities", "entities") { tag ->
+            tag.getListOrEmpty("Entities").add(
+                CompoundTag().apply {
+                    putString("id", "minecraft:villager")
+                    put("Pos", vec3(VILLAGER))
+                    putIntArray("UUID", intArrayOf(7, 7, 7, 7))
+                    put(
+                        "Brain",
+                        CompoundTag().apply {
+                            put(
+                                "memories",
+                                CompoundTag().apply {
+                                    put("minecraft:home", globalPos(SECONDARY_OVERWORLD, home))
+                                },
+                            )
+                        },
+                    )
+                },
+            )
+        }
+    }
+
+    /**
+     * A bee remembering the hive it came out of.
+     *
+     * Kept apart from [writeInto] because this one really is left behind. The
+     * relocation tool moves an entity's positions from a list of the entity types
+     * that have them, and it has no case for a bee, so `hive_pos` and `flower_pos`
+     * arrive still naming Secondary. That is the same shape of defect as the leash
+     * and the tile positions ticket 16 fixed, and it is still open — which is why
+     * this is what `WorldMergeAuditTest` leaves stale on purpose to prove the merge
+     * refuses. Fixing it upstream means finding a new one for that test.
+     */
+    fun addBee(levelDir: Path, dimension: ResourceKey<Level>, hive: Block) {
+        edit(levelDir, dimension, "entities", "entities") { tag ->
+            tag.getListOrEmpty("Entities").add(
+                CompoundTag().apply {
+                    putString("id", "minecraft:bee")
+                    put("Pos", vec3(BEE))
+                    putIntArray("UUID", intArrayOf(8, 8, 8, 8))
+                    putIntArray("hive_pos", hive.toIntArray())
                 },
             )
         }
