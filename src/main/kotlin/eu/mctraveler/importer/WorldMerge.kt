@@ -140,10 +140,25 @@ internal fun reportLine(key: String, value: String): String = key.padEnd(REPORT_
  * Where on Primary's map Secondary can be put down.
  *
  * A slot is a point on the [MergeGeometry.OFFSET_ALIGNMENT] lattice, and it is a
- * candidate when Secondary's footprint *plus its clearance ring* would land on
- * no Primary chunk data — in the overworld and in the nether both, since the
- * offset moves them together and either can rule a slot out on its own. Slots
- * are tried in ascending distance from the origin, so the nearest viable
+ * candidate when two things are true of it — in the overworld and in the nether
+ * both, since the offset moves them together and either can rule a slot out on
+ * its own:
+ *
+ * - Secondary's footprint *plus its clearance ring* lands on no Primary chunk
+ *   data. That is the room the operator asked for when they stated a clearance.
+ * - The landed footprint does not overlap the footprint Secondary is being moved
+ *   off. This one is not about elbow room at all; it is what keeps the merge
+ *   checkable. The audit decides whether a coordinate travelled by asking
+ *   whether it still points into Secondary's old footprint, and inside an
+ *   overlap that question has no answer — a coordinate there reads identically
+ *   whether it moved or not. Ticket 03 recorded the blind spot and assumed the
+ *   first condition ruled it out, on the grounds that Primary's chunk data is
+ *   what covers the ground Secondary sits on. Ticket 13 found that a Secondary
+ *   clipped to its border spans about a hundred region files, so against a small
+ *   Primary the nearest slot clear of Primary can still sit inside the box
+ *   Secondary used to occupy. The search enforces it rather than assuming it.
+ *
+ * Slots are tried in ascending distance from the origin, so the nearest viable
  * placement wins and the relocated landmass ends up as close to the rest of the
  * map as the operator's clearance allows.
  *
@@ -159,23 +174,34 @@ class PlacementSearch(
 
     private data class Clash(val role: DimensionRole, val file: RegionFilePos)
 
-    /** The nearest slot within [limit] steps that clears the requested clearance. */
+    /** One dimension landing back on the ground it is being moved off, and where. */
+    private data class OwnGround(
+        val role: DimensionRole,
+        val source: RegionFileArea,
+        val lands: RegionFileArea,
+    )
+
+    /** The nearest slot within [limit] steps that satisfies both conditions. */
     fun nearestSlot(limit: Int): MergePlacement {
         var considered = 0
+        var onItsOwnGround = 0
+        var crowdingPrimary = 0
         for (offset in slots(limit)) {
             considered++
+            // Asked first because it is answered from two rectangles rather than
+            // from a list of files, and because it is the one condition no amount
+            // of clearance can buy its way out of.
+            if (ownGround(offset) != null) {
+                onItsOwnGround++
+                continue
+            }
             // One clash is all it takes; the search never needs the rest of them.
             if (clashes(offset, limit = 1).isEmpty()) {
                 return placement(offset, supplied = false, slotsConsidered = considered)
             }
+            crowdingPrimary++
         }
-        throw MigrationRefused(
-            "no ${MergeGeometry.OFFSET_ALIGNMENT}-aligned slot within " +
-                "${limit * MergeGeometry.OFFSET_ALIGNMENT} blocks of the origin clears $clearance " +
-                "nether blocks of Primary's chunk data — $considered slots tried, and " +
-                MergeGeometry.RELOCATED_ROLES.joinToString("; ", transform = ::reach) +
-                ". Ask for less clearance, or search further out",
-        )
+        throw MigrationRefused(exhausted(limit, considered, onItsOwnGround, crowdingPrimary))
     }
 
     /** [offset] put through the test a searched slot has to pass. */
@@ -186,6 +212,9 @@ class PlacementSearch(
                     "exactly where it is — the landmass has to move",
             )
         }
+        // Before the clearance, because "ask for less clearance" is advice that
+        // cannot help an offset which is simply not far enough to have left.
+        ownGround(offset)?.let { throw MigrationRefused(refusal(offset, it)) }
         val clashes = clashes(offset, limit = CLASHES_NAMED + 1)
         if (clashes.isEmpty()) return placement(offset, supplied = true, slotsConsidered = 1)
         throw MigrationRefused(refusal(offset, clashes))
@@ -224,6 +253,25 @@ class PlacementSearch(
         return found
     }
 
+    /**
+     * The first dimension [offset] would set back down on ground Secondary still
+     * covers, or null when the landing clears its own footprint everywhere.
+     *
+     * The comparison is against the same rectangle the audit will later ask its
+     * "did this coordinate move?" question about — Secondary's footprint as the
+     * placement records it, clipped to the border like everything else the merge
+     * carries — so what the search rules out and what the audit cannot read are
+     * the same box rather than two boxes that happen to agree today.
+     */
+    private fun ownGround(offset: MergeOffset): OwnGround? {
+        for (role in MergeGeometry.RELOCATED_ROLES) {
+            val source = secondary[role]?.bounds ?: continue
+            val lands = source.movedBy(offset, role)
+            if (lands.overlaps(source)) return OwnGround(role, source, lands)
+        }
+        return null
+    }
+
     /** Where [role]'s footprint lands under [offset], with its clearance ring around it. */
     private fun ringed(role: DimensionRole, offset: MergeOffset): RegionFileArea? =
         secondary[role]?.bounds?.movedBy(offset, role)?.grownBy(ringFiles(role))
@@ -251,6 +299,38 @@ class PlacementSearch(
             )
         },
     )
+
+    /**
+     * The refusal when the lattice ran out, told as a tally of the two conditions
+     * rather than as one number.
+     *
+     * "No slot found" on its own leaves the operator guessing which lever to
+     * pull. A slot count against each condition says it outright: slots lost to
+     * Primary's chunk data mean less clearance or a wider search, and slots lost
+     * to Secondary's own ground mean the landmass has to be thrown further than
+     * this search was allowed to look, which no clearance will change.
+     */
+    private fun exhausted(limit: Int, considered: Int, onItsOwnGround: Int, crowdingPrimary: Int): String =
+        "no ${MergeGeometry.OFFSET_ALIGNMENT}-aligned slot within " +
+            "${limit * MergeGeometry.OFFSET_ALIGNMENT} blocks of the origin can take Secondary — " +
+            "$considered slots tried, $onItsOwnGround of them ruled out by the ground Secondary is " +
+            "being moved off and $crowdingPrimary by Primary's chunk data ($clearance nether blocks " +
+            "of clearance), and " +
+            MergeGeometry.RELOCATED_ROLES.joinToString("; ", transform = ::reach) +
+            ". Ask for less clearance, or search further out"
+
+    /**
+     * The refusal for an offset that has not moved Secondary off itself, named
+     * after both rectangles because the overlap between them is the whole of the
+     * problem and the operator has to see how far short the offset fell.
+     */
+    private fun refusal(offset: MergeOffset, ground: OwnGround): String =
+        "the offset ${offset.describe(DimensionRole.OVERWORLD)} would set Secondary's " +
+            "${ground.role.id} back down on ground it already covers: it lands on " +
+            "${ground.lands.describeBlocks()}, and Secondary's ${ground.role.id} is at " +
+            "${ground.source.describeBlocks()}. Inside that overlap the audit cannot tell a " +
+            "coordinate that moved from one that never left, so the landmass has to clear the " +
+            "place it is being moved off"
 
     /**
      * The refusal, named after the files it refused over. Only the first

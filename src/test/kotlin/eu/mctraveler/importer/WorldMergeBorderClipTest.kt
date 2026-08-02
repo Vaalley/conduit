@@ -78,14 +78,16 @@ class WorldMergeBorderClipTest {
          *
          * Two reasons, and both are about this suite's geography rather than
          * about the clip. A Secondary clipped to ±50,000 spans a hundred region
-         * files, so the nearest clear slot the search finds — `x +8192, z +0`,
-         * which is all Primary's tiny fixture footprint demands — would set the
-         * landmass down *inside the box Secondary used to occupy*, and the audit
-         * would read every arriving coordinate as one that had never left. And a
-         * zero Z would let a clip that lost the Z axis, flipped its sign or
-         * swapped the two pass every assertion here. So: 16 region files east and
-         * 8 north in the overworld, an eighth of each in the nether, checked by
-         * exactly the test a searched offset passes.
+         * files, so the slot Primary's tiny fixture footprint alone would give up
+         * — `x +8192, z +0` — sets the landmass down *inside the box Secondary
+         * used to occupy*, and the audit would read every arriving coordinate as
+         * one that had never left. Ticket 18 taught the search to refuse that
+         * slot, so it now answers `x +0, z +8192` here rather than needing to be
+         * told; this offset is still stated because a zero Z would let a clip
+         * that lost the Z axis, flipped its sign or swapped the two pass every
+         * assertion below. So: 16 region files east and 8 north in the overworld,
+         * an eighth of each in the nether, checked by exactly the test a searched
+         * offset passes — including, now, that it clears Secondary's own ground.
          */
         private val OFFSET = MergeOffset(8192, -4096)
     }
