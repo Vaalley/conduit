@@ -230,18 +230,22 @@ class WorldMergeAuditTest {
 
     @Test
     fun `one structural coordinate left behind fails the whole merge and writes nothing`() {
-        // A bee's memory of its hive. The relocation tool has a case for each entity
-        // type that carries a position, and it has none for a bee, so `hive_pos`
-        // arrives in Primary still naming a block in Secondary — a bee that will
-        // never find its way home. This is the same class of defect ticket 16 fixed
-        // for leashes, tiles and villager memories and a real one still open; it
-        // stands here because a test that proves the merge refuses needs a
-        // coordinate that genuinely does not move, and inventing one would prove
-        // less than finding one.
-        CoordinateBearingChunks.addBee(
+        // An end gateway's exit portal. The relocation tool does not move it — it
+        // looks for `ExitPortal` and 26.2 writes `exit_portal` — so this arrives in
+        // Primary still naming a block in Secondary, exactly as a bee's hive did
+        // before ticket 17 taught the tool about it.
+        //
+        // What makes it the right thing to leave here is that ChunkCompletion
+        // *deliberately* does not finish it, and would finish a bee's hive: an exit
+        // portal names a place in the End, and Secondary's End is discarded rather
+        // than relocated, so there is no destination to point it at and the
+        // overworld's offset would invent one. So this is a coordinate that is
+        // genuinely left standing after every phase that could have moved it has
+        // run, which is what makes the refusal below real rather than arranged.
+        CoordinateBearingChunks.addEndGateway(
             save.levelDir,
             save.secondaryDimension(overworld),
-            hive = CoordinateBearingChunks.LEASH_KNOT,
+            exitPortal = CoordinateBearingChunks.END_GATEWAY_EXIT,
         )
         val before = save.contents()
 
@@ -255,7 +259,7 @@ class WorldMergeAuditTest {
         )
         assertTrue(
             refusal.message!!.contains(
-                "overworld: in chunk 517, -253: minecraft:bee.hive_pos still names 86, 64, 54",
+                "overworld: in chunk 517, -253: minecraft:end_gateway.exit_portal still names 88, 70, 56",
             ),
             refusal.message,
         )
@@ -394,6 +398,95 @@ class WorldMergeAuditTest {
         assertEquals("{\n  \"regions\": {}\n}\n", save.regionsJson())
     }
 
+    // ---- what the tool is still behind on, and what finishes it --------------
+
+    @Test
+    fun `a bee's hive and flower arrive relocated`() {
+        // The fifth defect ticket 16 found and deliberately left. The tool moved an
+        // entity's positions from a switch over entity ids with no case for a bee,
+        // so a bee arrived in Primary still remembering a hive in Secondary — and
+        // since bee nests generate in flower forests, birch forests and meadows,
+        // that refused a real merge on ordinary terrain.
+        CoordinateBearingChunks.addBee(
+            save.levelDir,
+            save.secondaryDimension(overworld),
+            hive = CoordinateBearingChunks.LEASH_KNOT,
+            flower = CoordinateBearingChunks.BEE_NEST_FLOWER,
+        )
+
+        merge()
+
+        val bee = entityIn(relocated("entities", "entities"), "minecraft:bee")
+        assertEquals(merged(CoordinateBearingChunks.LEASH_KNOT).toList(), intArrayIn(bee, "hive_pos"))
+        assertEquals(merged(CoordinateBearingChunks.BEE_NEST_FLOWER).toList(), intArrayIn(bee, "flower_pos"))
+    }
+
+    @Test
+    fun `a coordinate the tool does not know about is completed rather than refused over`() {
+        // A bee nest, whose block entity the tool relocates from a *second*
+        // hand-written switch that has not followed the renames at all: it looks for
+        // `FlowerPos` and `Bees`/`EntityData` where 26.2 writes `flower_pos`, `bees`
+        // and `entity_data`. Before ticket 17 this refused the merge. Now the
+        // completion pass finishes it and the audit — unchanged, and running
+        // afterwards — finds nothing left.
+        beeNest()
+
+        val report = merge()
+
+        val nest = blockEntityIn(relocated("region", "chunk"), "minecraft:bee_nest")
+        assertEquals(
+            merged(CoordinateBearingChunks.BEE_NEST_FLOWER).toList(),
+            intArrayIn(nest, CoordinateBearingChunks.FLOWER_POS),
+        )
+        assertEquals(merged(CoordinateBearingChunks.LEASH_KNOT).toList(), intArrayIn(storedBeeIn(nest), "hive_pos"))
+        // And the audit still ran and still had nothing to refuse over.
+        assertEquals(CHUNKS_RELOCATED, report.audit.chunksAudited)
+    }
+
+    @Test
+    fun `the report names every coordinate the completion pass had to finish`() {
+        // Ticket 03 refused to let the audit repair structural leftovers, because an
+        // audit that patches over the relocation's gaps stops being able to tell
+        // anyone the gaps are there. This is the answer to that: the merge finishes
+        // and says exactly what it had to finish, so the operator reads "the tool has
+        // fallen behind again" rather than nothing at all.
+        beeNest()
+
+        val report = merge().completion
+
+        assertEquals(2, report.completed)
+        assertEquals(1, report.chunksCompleted)
+        assertEquals(
+            setOf("minecraft:bee_nest.flower_pos — 1 coordinate", "minecraft:bee.hive_pos — 1 coordinate"),
+            report.kinds.map { it.describe() }.toSet(),
+        )
+        assertTrue(
+            report.lines().any {
+                it.startsWith("coordinates completed") && it.contains("2 in 1 chunk")
+            },
+            "${report.lines()}",
+        )
+        assertTrue(
+            report.lines().any { it.contains("MCA Selector has fallen behind what Minecraft writes") },
+            "${report.lines()}",
+        )
+    }
+
+    @Test
+    fun `a merge with nothing to complete says the tool moved everything`() {
+        // The ordinary case, and the one an operator should see: a silent zero would
+        // read the same as a section that never ran.
+        villagerRemembering()
+
+        val report = merge().completion
+
+        assertEquals(0, report.completed)
+        assertEquals(
+            listOf("coordinates completed    : none — the relocation tool moved everything it should have"),
+            report.lines(),
+        )
+    }
+
     // ---- the report ----------------------------------------------------------
 
     @Test
@@ -471,6 +564,20 @@ class WorldMergeAuditTest {
         meetingPoint = meetingPoint,
         remembers = dimension,
     )
+
+    /** A bee nest holding one bee, in Secondary's own coordinates. */
+    private fun beeNest() = CoordinateBearingChunks.addBeeNest(
+        save.levelDir,
+        save.secondaryDimension(overworld),
+        flower = CoordinateBearingChunks.BEE_NEST_FLOWER,
+        hive = CoordinateBearingChunks.LEASH_KNOT,
+    )
+
+    /** The one bee stored inside a nest, out of the occupant's own entity data. */
+    private fun storedBeeIn(nest: CompoundTag): CompoundTag =
+        nest.getListOrEmpty(CoordinateBearingChunks.BEES)
+            .getCompoundOrEmpty(0)
+            .getCompoundOrEmpty(CoordinateBearingChunks.ENTITY_DATA)
 
     /** [item] added to the chest in Secondary's rich chunk, before the merge runs. */
     private fun putInTheChest(item: CompoundTag) =

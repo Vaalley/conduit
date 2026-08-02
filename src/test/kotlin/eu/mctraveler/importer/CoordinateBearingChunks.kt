@@ -24,10 +24,12 @@ import net.minecraft.world.level.Level
  *
  * The parts are separate so a test composes the fixture it means to make a claim
  * about. [writeInto] is the chunk every test starts from;
- * [addTheInlineBlockPositions] and [addVillager] add the spellings 26.2 writes,
- * which the merge's patched relocation tool moves and the stock one did not (ticket
- * 16); [addBee] adds the one this fixture knows of that is *still* left behind, so
- * that a test proving the merge refuses has something honest to refuse over.
+ * [addTheInlineBlockPositions], [addVillager] and [addBee] add the spellings 26.2
+ * writes, which the merge's patched relocation tool moves and the stock one did not
+ * (tickets 16 and 17); [addBeeNest] adds what the tool is *still* behind on, which
+ * is what [ChunkCompletion] is proved against; and [addEndGateway] adds the one
+ * coordinate the completion pass deliberately will not finish, so that a test
+ * proving the merge still refuses has something honest to refuse over.
  */
 object CoordinateBearingChunks {
 
@@ -65,6 +67,21 @@ object CoordinateBearingChunks {
     val COW = Triple(88.0, 64.0, 56.0)
     val VILLAGER = Triple(89.0, 64.0, 57.0)
     val BEE = Triple(87.0, 64.0, 55.0)
+
+    /** The nest block itself, and the flower its bees were working. */
+    val BEE_NEST = Block(93, 64, 61)
+    val BEE_NEST_FLOWER = Block(94, 64, 62)
+
+    /** The gateway block, and the place in the End it sends anyone who steps in. */
+    val END_GATEWAY = Block(95, 64, 63)
+    val END_GATEWAY_EXIT = Block(88, 70, 56)
+
+    // What 26.2 calls the fields the relocation tool still looks for under their
+    // pre-1.21.5 names — `FlowerPos`, `Bees`, `EntityData` and `ExitPortal`.
+    const val FLOWER_POS = "flower_pos"
+    const val BEES = "bees"
+    const val ENTITY_DATA = "entity_data"
+    const val EXIT_PORTAL = "exit_portal"
 
     /** The structure the chunk is part of, and the piece of it standing here. */
     val STRUCTURE_BOX = intArrayOf(80, 64, 48, 95, 79, 63)
@@ -194,17 +211,15 @@ object CoordinateBearingChunks {
     }
 
     /**
-     * A bee remembering the hive it came out of.
+     * A bee remembering the hive it came out of and the flower it was working.
      *
-     * Kept apart from [writeInto] because this one really is left behind. The
-     * relocation tool moves an entity's positions from a list of the entity types
-     * that have them, and it has no case for a bee, so `hive_pos` and `flower_pos`
-     * arrive still naming Secondary. That is the same shape of defect as the leash
-     * and the tile positions ticket 16 fixed, and it is still open — which is why
-     * this is what `WorldMergeAuditTest` leaves stale on purpose to prove the merge
-     * refuses. Fixing it upstream means finding a new one for that test.
+     * This used to be the fixture's example of a coordinate the tool leaves behind,
+     * and ticket 17 is what stopped it being one: the patched build now moves
+     * `hive_pos` and `flower_pos` like any other inlined block position. It stays
+     * here as the proof of that, because a bee that arrives remembering a hive in
+     * Secondary is a bee that will never go home again.
      */
-    fun addBee(levelDir: Path, dimension: ResourceKey<Level>, hive: Block) {
+    fun addBee(levelDir: Path, dimension: ResourceKey<Level>, hive: Block, flower: Block? = null) {
         edit(levelDir, dimension, "entities", "entities") { tag ->
             tag.getListOrEmpty("Entities").add(
                 CompoundTag().apply {
@@ -212,6 +227,77 @@ object CoordinateBearingChunks {
                     put("Pos", vec3(BEE))
                     putIntArray("UUID", intArrayOf(8, 8, 8, 8))
                     putIntArray("hive_pos", hive.toIntArray())
+                    flower?.let { putIntArray("flower_pos", it.toIntArray()) }
+                },
+            )
+        }
+    }
+
+    /**
+     * A bee nest with a bee asleep inside it — the coordinates the relocation tool
+     * is *still* behind on, and so what [ChunkCompletion] is tested against.
+     *
+     * MCA Selector relocates a block entity from a second hand-written switch, and
+     * that one has not followed 1.21.5's renames at all: it looks for `FlowerPos`
+     * and `Bees`/`EntityData`, where 26.2 writes [FLOWER_POS], [BEES] and
+     * [ENTITY_DATA]. So the nest's own position moves and everything it remembers
+     * does not — the flower its bees were working, and each stored bee's memory of
+     * the nest it is sitting in.
+     *
+     * This is a live defect rather than an invented one, which is what ticket 17
+     * needs it to be: the completion pass has to be proved against a field the tool
+     * genuinely does not know about, and a mock would prove only that the pass can
+     * move a number. Bee nests generate in flower forests, birch forests and
+     * meadows, so it is not a rare shape either.
+     */
+    fun addBeeNest(levelDir: Path, dimension: ResourceKey<Level>, flower: Block, hive: Block) {
+        edit(levelDir, dimension, "region", "chunk") { tag ->
+            tag.getListOrEmpty("block_entities").add(
+                blockEntity("minecraft:bee_nest", BEE_NEST).apply {
+                    putIntArray(FLOWER_POS, flower.toIntArray())
+                    put(
+                        BEES,
+                        ListTag().apply {
+                            add(
+                                CompoundTag().apply {
+                                    put(
+                                        ENTITY_DATA,
+                                        CompoundTag().apply {
+                                            putString("id", "minecraft:bee")
+                                            putIntArray("hive_pos", hive.toIntArray())
+                                        },
+                                    )
+                                    putInt("ticks_in_hive", 0)
+                                    putInt("min_ticks_in_hive", 600)
+                                },
+                            )
+                        },
+                    )
+                },
+            )
+        }
+    }
+
+    /**
+     * An end gateway, and the one block position in a chunk the merge deliberately
+     * will not finish.
+     *
+     * The tool does not relocate it — it looks for `ExitPortal`, where 26.2 writes
+     * [EXIT_PORTAL] — so this arrives naming Secondary exactly as a bee's hive used
+     * to. What makes it different is that [ChunkCompletion] refuses to complete it
+     * on purpose: an exit portal names a place in the End, and Secondary's End is
+     * discarded rather than relocated, so there is no destination to point it at
+     * and the overworld's offset would invent one. It is therefore what proves the
+     * audit still refuses after the completion pass has run — a coordinate that is
+     * genuinely left standing rather than one contrived to be.
+     */
+    fun addEndGateway(levelDir: Path, dimension: ResourceKey<Level>, exitPortal: Block) {
+        edit(levelDir, dimension, "region", "chunk") { tag ->
+            tag.getListOrEmpty("block_entities").add(
+                blockEntity("minecraft:end_gateway", END_GATEWAY).apply {
+                    putIntArray(EXIT_PORTAL, exitPortal.toIntArray())
+                    putLong("Age", 0L)
+                    putBoolean("ExactTeleport", true)
                 },
             )
         }

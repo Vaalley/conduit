@@ -32,6 +32,16 @@ val sourceSets = the<SourceSetContainer>()
 //     `InlineBlockPosFormatFix` renames were never followed, the last because a
 //     static field the entity relocation dereferences for *every* entity was left
 //     null, so each one was abandoned partway through.
+//   - and the same renames were unfollowed far more widely than those three.
+//     Upstream moves an entity's positions from a hand-written switch over entity
+//     ids that still speaks only the pre-1.21.5 spellings, so a bee's hive, a
+//     phantom's anchor, a vex's bound origin, a mob's home, anything asleep in a
+//     bed, an end crystal's beam target, a wandering trader's target and every
+//     patrolling raider's arrived naming Secondary too — as did a glow item frame's
+//     and a leash knot's tile, which upstream never listed in either spelling.
+//     Ticket 17 enumerated these from 26.2's own entity classes and keyed them by
+//     name instead, so the list no longer has to be crossed with the entity ids
+//     that carry them.
 //
 // The fixes are gradle/mcaselector/2.8-mctraveler1.patch, kept in this repo so
 // they are reviewable in our own history and so a lost jar costs a clone, an
@@ -47,7 +57,7 @@ val mcaSelectorVersion = "2.8-mctraveler1"
 //   shasum -a 256 <jar>
 // whenever the patch changes, and never take the new value from a jar that just
 // failed this check.
-val mcaSelectorSha256 = "3446ed7853b3765a6a6b739ce27aa42a8d1b6c2c976f8968c6c29f0d8e95e3da"
+val mcaSelectorSha256 = "f7d088d34019803ccf978a4e978176b0ddbc95d5d96d2e6cfd85997b54b041b1"
 
 // Where the built jar is expected to live. Outside the repo, because it is 18 MB
 // of somebody else's build output; durable, because rebuilding it is a minute of

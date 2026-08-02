@@ -149,6 +149,18 @@ third test was added for a villager whose memories are written flat, without `Ex
    merge and writes nothing` leaves stale, so it is pinned by a test rather than only written
    down. **A rehearsal must find out whether Secondary has bees in relocated chunks**: if it
    does, the merge refuses and someone has to widen this patch first.
+
+   *Closed by ticket 17, which took the instinct behind "there is no reason to think bees are
+   the last" seriously and enumerated the rest from Minecraft 26.2's own entity classes rather
+   than waiting to run into them. Bees were not close to last: `sleeping_pos` on anything that
+   sleeps, `home_pos` on any restricted mob, a phantom's anchor, a vex's bound origin, an end
+   crystal's beam target, a wandering trader's and every patrolling raider's target, and a
+   glow item frame's and a leash knot's tile — the last two never handled in either spelling.
+   The patch now keys the inlined positions by NBT name instead of by entity id, which is what
+   stops the list needing to be complete. Ticket 17 also added a completion pass that finishes
+   whatever the tool still misses and reports it, so a field nobody has found yet no longer
+   refuses a merge in the downtime window. The stale coordinate that test leaves behind is now
+   an end gateway's `exit_portal`.*
 2. **Entity UUIDs are now re-rolled, and one test changed to say so.** `Helper.fixEntityUUID`
    randomises a relocated entity's UUID by design, so an imported chunk cannot collide with an
    entity the target world already holds. It had not been running, because the null static
