@@ -77,7 +77,21 @@ object ChunkProbeMain {
             println("  Level keys       : ${level.keySet().sorted()}")
             println("  Status (Level)   : ${level.getStringOr("Status", "<absent>")}")
         }
-        println("  xPos/zPos        : ${tag.getIntOr("xPos", 999999)}, ${tag.getIntOr("zPos", 999999)}")
-        println("  sections         : ${tag.getListOrEmpty("sections").size}")
+        // Both layouts, because a save is a mixture of them: 1.18 and later keep
+        // everything at the root, and anything older keeps it under `Level` with
+        // its own spellings.
+        val fields = if (level.isEmpty) tag else level
+        val sections = if (level.isEmpty) {
+            fields.getListOrEmpty("sections")
+        } else {
+            fields.getListOrEmpty("Sections")
+        }
+        println("  xPos/zPos        : ${fields.getIntOr("xPos", 999999)}, ${fields.getIntOr("zPos", 999999)}")
+        println("  sections         : ${sections.size}")
+        val ys = (0 until sections.size).map { sections.getCompoundOrEmpty(it) }
+        println("  section Y values : ${ys.map { it.getIntOr("Y", -999) }.sorted()}")
+        for (section in ys.sortedBy { it.getIntOr("Y", -999) }) {
+            println("      Y=${section.getIntOr("Y", -999)}  keys=${section.keySet().sorted()}")
+        }
     }
 }
