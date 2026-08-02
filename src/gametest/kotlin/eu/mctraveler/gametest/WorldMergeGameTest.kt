@@ -5,10 +5,14 @@ import eu.mctraveler.importer.RespawnCheckReport
 import eu.mctraveler.importer.WorldLayout
 import eu.mctraveler.region.RegionWorlds
 import eu.mctraveler.region.RegionsFeature
+import eu.mctraveler.text.Paint
+import eu.mctraveler.worlds.BankedPositions
 import eu.mctraveler.worlds.DimensionRole
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.util.Collections
 import kotlin.math.abs
+import kotlin.math.floor
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.core.BlockPos
@@ -369,6 +373,74 @@ class WorldMergeGameTest {
             "how many nether portals stand around the twin — a new one means vanilla dug rather " +
                 "than found, which is what an unlinked pair looks like from the player's side",
         )
+        helper.succeed()
+    }
+
+    /**
+     * `/switch` names the player's other base at the coordinates the merge moved
+     * it to (merge spec, User Stories 34–35).
+     *
+     * `SwitchSignpostGameTest` pins the wording, against an artifact written by
+     * hand. What it cannot say is that the merge writes that shape, or that the
+     * numbers in it are merged ones: its fixture is a file a test authored, so it
+     * would go on passing if the sweep banked a player's *unmoved* Secondary
+     * coordinates — which is a signpost sending thirteen thousand people to where
+     * their base used to be. So the artifact here is the one the merge wrote, and
+     * the line is restated in full because the claim is about the wording and the
+     * coordinates together.
+     *
+     * The player is last in Primary, so it is their Secondary bucket that gets
+     * banked: the banked position is always the World the player was *not* in,
+     * and Primary is the one the merge does not move.
+     */
+    @GameTest(maxTicks = 600)
+    fun switchNamesTheOtherBaseWhereTheMergeMovedIt(helper: GameTestHelper) {
+        val server = helper.level.server
+        val merged = MergedSave.of(server)
+        val at = MergedSave.merged(MergedSave.BANKED, DimensionRole.OVERWORLD)
+
+        val banked = merged.report.players.banked.single()
+        helper.assertValueEqual(banked.uuid, MergedSave.SIGNPOST, "whose other base the merge banked")
+        helper.assertValueEqual(
+            listOf(banked.world, banked.dimension),
+            listOf("secondary", Level.OVERWORLD.identifier().toString()),
+            "the World the other base was in, and the dimension it is in now",
+        )
+        helper.assertValueEqual(
+            listOf(banked.x, banked.y, banked.z),
+            listOf(at.x, at.y, at.z),
+            "the coordinates the merge banked the other base at",
+        )
+
+        // The merge's own artifact where the running server reads it. Taken away
+        // again afterwards, because every server that has not been merged has no
+        // such file and `SwitchSignpostGameTest` is about a server in that state.
+        val artifact = server.serverDirectory.resolve("mctraveler").resolve(BankedPositions.FILE_NAME)
+        Files.createDirectories(artifact.parent)
+        Files.copy(merged.bankedPositions(), artifact, StandardCopyOption.REPLACE_EXISTING)
+
+        val player = TestPlayers.login(server, MergedSave.SIGNPOST_NAME, MergedSave.SIGNPOST)
+        try {
+            server.commands.performPrefixedCommand(player.createCommandSourceStack(), "switch")
+
+            val said = player.messages.last().textRuns()
+            val otherBase = Paint.gray(
+                "Your other base — where you last stood in ",
+                Paint.green("Secondary"),
+                " — is now at ",
+                Paint.white("${floor(at.x).toInt()}/${floor(at.y).toInt()}/${floor(at.z).toInt()}"),
+                " in ",
+                Paint.green("the Overworld"),
+                ".",
+            ).textRuns()
+            helper.assertTrue(
+                Collections.indexOfSubList(said, otherBase) >= 0,
+                "the signpost did not name the other base where the merge put it; it said $said",
+            )
+        } finally {
+            Files.deleteIfExists(artifact)
+            TestPlayers.logout(player)
+        }
         helper.succeed()
     }
 
