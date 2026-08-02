@@ -21,19 +21,19 @@ reported.
 
 **Blocked by:** None.
 
-**Status:** ready-for-agent
+**Status:** in-progress — everything but the runbook timings, which want real numbers from the run in flight
 
-- [ ] Each phase announces itself when it starts, so the sequence is visible as it happens
+- [x] Each phase announces itself when it starts, so the sequence is visible as it happens
       rather than only in the final report
-- [ ] The phases that walk every chunk — the audit, the completion pass — report progress
+- [x] The phases that walk every chunk — the audit, the completion pass — report progress
       against a total they already know, often enough to be useful and rarely enough not to
       drown the log
-- [ ] Progress is legible when the output is a terminal *and* when it is a file: no reliance on
+- [x] Progress is legible when the output is a terminal *and* when it is a file: no reliance on
       carriage returns to overwrite a line, since the runbook now tells operators to capture the
       run with `script`
-- [ ] An operator can answer "which phase, and how much is left" from the output alone, with no
+- [x] An operator can answer "which phase, and how much is left" from the output alone, with no
       `jstack`, no `/proc`, and no knowledge of the source
-- [ ] The final report is unchanged — it is what the operator keeps, and this ticket adds to
+- [x] The final report is unchanged — it is what the operator keeps, and this ticket adds to
       what they see on the way, rather than replacing it
 - [ ] The timings each phase reports are recorded in the runbook, so the next migration starts
       with real numbers instead of an estimate
@@ -47,3 +47,23 @@ single-threaded, and the audit substantially longer than the 33 minutes inferred
 rate — the read total passed 229 GB against 60 GB of staged data, so the walk re-reads far more
 than one pass. Nobody could have known that before tonight, which is the point: the numbers
 only exist once something reports them.
+
+### What it looks like
+
+Each phase names what it does to the world rather than the class that does it, since the
+operator reading it is answering "how much longer" and may be relaying that to people waiting
+to play:
+
+```
+[merge] moving the chunks across…
+[merge] moving the chunks across — done in 48m 12s
+[merge] finishing the coordinates the tool left behind…
+  completing overworld chunk: region file 100 of 36387  (31s elapsed)
+```
+
+The two phases that walk every region file share one reader ([StagedChunks]), so instrumenting
+the walk covered both at once — and the walk was already the only thing that knew the total.
+
+One line per hundred region files: about four hundred lines a walk on the live save. Often
+enough that a stall shows inside a minute or two, rarely enough that the captured log stays
+readable.
