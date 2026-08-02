@@ -1,21 +1,29 @@
 package eu.mctraveler.gametest
 
 import eu.mctraveler.embassy.EmbassiesFeature
+import eu.mctraveler.importer.RespawnCheckReport
 import eu.mctraveler.importer.WorldLayout
 import eu.mctraveler.region.RegionWorlds
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.worlds.DimensionRole
 import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import kotlin.math.abs
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.gametest.framework.GameTestHelper
+import net.minecraft.network.protocol.game.ServerboundClientCommandPacket
+import net.minecraft.network.protocol.game.ServerboundPlayerLoadedPacket
 import net.minecraft.resources.ResourceKey
 import net.minecraft.server.MinecraftServer
 import net.minecraft.server.level.ServerLevel
+import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.item.Items
 import net.minecraft.world.level.ChunkPos
+import net.minecraft.world.level.GameType
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.entity.ChestBlockEntity
+import net.minecraft.world.level.storage.LevelResource
 
 /**
  * The merge against a running server (ticket 11), which is the last line of
@@ -199,6 +207,107 @@ class WorldMergeGameTest {
         helper.succeed()
     }
 
+    /**
+     * A player whose respawn point the merge transformed dies and wakes on their
+     * own bed (merge spec, User Story 28).
+     *
+     * This is the case with two authors. The respawn point was moved by the
+     * player sweep and the bed it names was moved by the chunk relocation;
+     * neither pass can see the other, each is perfectly self-consistent whatever
+     * the other did, and a disagreement between them wakes somebody inside solid
+     * rock. Ticket 07's cross-check compares the two at merge time, in the files
+     * — asserted here as well, because it is the claim this case is the other
+     * end of. What only a server can add is that vanilla agrees: it is vanilla
+     * that reads the swept save, vanilla that looks for a bed at the coordinates
+     * the save now claims, and vanilla that stands the player up beside it or
+     * sends them to the world spawn saying their bed was missing.
+     */
+    @GameTest(maxTicks = 600)
+    fun aTransformedRespawnPointWakesThePlayerOnTheirOwnBed(helper: GameTestHelper) {
+        val server = helper.level.server
+        val merged = MergedSave.of(server)
+        val bed = MergedSave.merged(MergedSave.BED, DimensionRole.OVERWORLD)
+        val standing = MergedSave.merged(MergedSave.STANDING, DimensionRole.OVERWORLD)
+
+        helper.assertTrue(
+            merged.report.section<RespawnCheckReport>().confirmed > 0,
+            "the merge confirmed no respawn point against the relocated chunks, so there is no " +
+                "file-level claim here for the game to agree or disagree with",
+        )
+
+        // The swept save put where a merged server keeps its playerdata, which is
+        // the only door a login reads it through. Loom reuses the run directory
+        // and the settler dies below, so it is laid down fresh each run rather
+        // than found half-played.
+        Files.copy(
+            merged.playerSave(MergedSave.SETTLER),
+            server.getWorldPath(LevelResource.PLAYER_DATA_DIR).resolve("${MergedSave.SETTLER}.dat"),
+            StandardCopyOption.REPLACE_EXISTING,
+        )
+
+        var settler: ServerPlayer = TestPlayers.login(server, MergedSave.SETTLER_NAME, MergedSave.SETTLER)
+        try {
+            helper.assertValueEqual(
+                settler.level().dimension(),
+                Level.OVERWORLD,
+                "the dimension a swept Secondary save logs into",
+            )
+            helper.assertValueEqual(
+                listOf(settler.x, settler.y, settler.z),
+                listOf(standing.x, standing.y, standing.z),
+                "where a swept Secondary save leaves the player standing",
+            )
+
+            settler = dieAndRespawn(server, settler)
+            helper.assertValueEqual(
+                settler.level().dimension(),
+                Level.OVERWORLD,
+                "the dimension a transformed respawn point wakes the player in",
+            )
+            helper.assertTrue(
+                abs(settler.x - bed.x) <= BED_STAND_UP_RADIUS &&
+                    abs(settler.y - bed.y) <= BED_STAND_UP_RADIUS &&
+                    abs(settler.z - bed.z) <= BED_STAND_UP_RADIUS,
+                "the settler woke at ${settler.x}, ${settler.y}, ${settler.z} rather than beside the " +
+                    "bed the merge moved to $bed — which is what a respawn point and a bed that " +
+                    "disagree looks like from the player's side",
+            )
+        } finally {
+            TestPlayers.logout(settler)
+        }
+        helper.succeed()
+    }
+
+    /**
+     * A real death and the client's own "respawn" press. Returns the fresh
+     * [ServerPlayer] the player list swaps in, since respawning replaces the
+     * entity.
+     */
+    private fun dieAndRespawn(server: MinecraftServer, player: ServerPlayer): ServerPlayer {
+        player.setGameMode(GameType.SURVIVAL)
+        player.isInvulnerable = false
+        // The two acknowledgements a real client sends before the server stops
+        // shielding it — the dimension change is over, and its level has
+        // rendered. Without both the player is invulnerable, and so unkillable.
+        player.hasChangedDimension()
+        player.connection.handleAcceptPlayerLoad(ServerboundPlayerLoadedPacket())
+        player.kill(player.level())
+        check(player.health <= 0.0f) { "the settler survived a deliberate kill" }
+        player.connection.handleClientCommand(
+            ServerboundClientCommandPacket(ServerboundClientCommandPacket.Action.PERFORM_RESPAWN),
+        )
+        val respawned = checkNotNull(server.playerList.getPlayer(player.uuid)) {
+            "the settler did not come back from the dead"
+        }
+        respawned.isInvulnerable = true
+        return respawned
+    }
+
     private fun level(server: MinecraftServer, dimension: ResourceKey<Level>): ServerLevel =
         checkNotNull(server.getLevel(dimension)) { "${dimension.identifier()} is not loaded" }
+
+    private companion object {
+        /** How far beside a bed vanilla stands a sleeper up, as `RespawnAndPortalsGameTest` measures it. */
+        const val BED_STAND_UP_RADIUS = 3.0
+    }
 }
