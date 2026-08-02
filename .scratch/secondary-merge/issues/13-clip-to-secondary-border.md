@@ -22,8 +22,9 @@ border is swept exactly like any other. The operator's call, and the risk is sma
 consequence is worth knowing, so the report counts them: such a player's coordinates move
 while their chunks do not, so they arrive in terrain that regenerates from Primary's seed.
 
-**Blocked by:** None — tickets 01 and 02 are complete. Should land after wave 3 is
-reconciled, because it touches the same command surface.
+**Blocked by:** 15 — Choosing the chunks ourselves. Ticket 15 replaces MCA Selector's racy
+`--mode select` with a selection we compute, which is where this clip belongs: a predicate on
+a list we are already building, rather than a filter over somebody else's output.
 
 **Status:** ready-for-agent
 
