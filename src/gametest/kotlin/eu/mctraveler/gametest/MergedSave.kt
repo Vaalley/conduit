@@ -69,7 +69,7 @@ import net.minecraft.world.phys.Vec3
 class MergedSave private constructor(
     /** The run directory the merge ran against, holding everything it wrote. */
     val runDir: Path,
-    /** What the merge said it did, so a case can hold the operator's own account to account. */
+    /** What the merge said it did, so a case can check the game against the operator's own account. */
     val report: MergeReport,
 ) {
 
@@ -257,7 +257,7 @@ class MergedSave private constructor(
         fun merged(at: Vec3, role: DimensionRole): Vec3 =
             Vec3(OFFSET.mergedX(at.x, role), at.y, OFFSET.mergedZ(at.z, role))
 
-        private var merged: MergedSave? = null
+        private var built: MergedSave? = null
 
         /**
          * The merge, run once for this server and then read back by every case.
@@ -267,7 +267,7 @@ class MergedSave private constructor(
          * case's tick budget is spent on it.
          */
         fun of(server: MinecraftServer): MergedSave =
-            merged ?: build(server).also { merged = it }
+            built ?: build(server).also { built = it }
 
         /**
          * The whole operation: a two-World save assembled out of chunks this
