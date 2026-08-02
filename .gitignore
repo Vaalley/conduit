@@ -19,3 +19,6 @@ classes/
 # OS
 .DS_Store
 .claude/worktrees/
+
+# Personal Claude Code overrides (machine-specific paths)
+.claude/settings.local.json
