@@ -120,6 +120,14 @@ class SampledDiff(
     private val offset: MergeOffset,
     /** How many chunks of each relocated dimension the operator asked to have compared. */
     private val sampleSize: Int,
+    /**
+     * How much of Secondary was carried at all (ticket 13). The sample is drawn
+     * from what the merge undertook to move, never from the whole save: a chunk
+     * the border kept out is *meant* not to have arrived, and comparing it
+     * against the empty space where it was never going to be would fail the merge
+     * over the clip working.
+     */
+    private val border: SecondaryBorder,
 ) {
 
     fun verify(): SampledDiffReport = SampledDiffReport(
@@ -198,6 +206,10 @@ class SampledDiff(
         if (!Files.isDirectory(folder)) return emptyList()
         val files = Files.newDirectoryStream(folder, "r.*.mca").use { entries ->
             entries.mapNotNull { file -> RegionFilePos.parse(file.name)?.let { it to file } }
+                // What the border kept out was never going to arrive, so it is not
+                // in the inventory the sample is drawn from and not in the count
+                // the report states the sample as a fraction of.
+                .filter { border.keeps(it.first) }
                 .sortedWith(compareBy({ it.first.x }, { it.first.z }))
         }
         return files.flatMap { (at, file) -> positionsIn(file, at) }

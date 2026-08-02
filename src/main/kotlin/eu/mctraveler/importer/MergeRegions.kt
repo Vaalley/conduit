@@ -25,6 +25,19 @@ data class MergeRegionsReport(
     val endAnchored: List<String>,
     /** False when there was nothing to change and `regions.json` was left untouched. */
     val rewroteFile: Boolean,
+    /**
+     * Regions whose cuboid is not wholly inside Secondary's world border, and
+     * Embassy destinations anchored past it (ticket 13).
+     *
+     * Counted, never refused over: the merge's deliberate call is that these are
+     * swept exactly like any other, and the consequence — coordinates that move
+     * while the chunks under them stay in Secondary, so the owner arrives in
+     * terrain regenerated from Primary's seed — is recorded rather than
+     * prevented. Almost certainly nobody is out there; this is how the operator
+     * finds out whether that held.
+     */
+    val regionsOutsideBorder: Int = 0,
+    val destinationsOutsideBorder: Int = 0,
 ) : MergeSection {
     val movedCount: Int get() = moved.values.sum()
 
@@ -44,7 +57,16 @@ data class MergeRegionsReport(
             if (destinationsRewritten == 0) "none moved" else "$destinationsRewritten moved to Primary",
         ),
         reportLine("regions.json", if (rewroteFile) "rewritten" else "left exactly as it was"),
-    ) + endAnchored.map { reportLine("still in Secondary's End", it) }
+    ) + outsideBorderLines() + endAnchored.map { reportLine("still in Secondary's End", it) }
+
+    /** Said only when there were any; see [regionsOutsideBorder] and [DimensionRelocation.lines]. */
+    private fun outsideBorderLines(): List<String> = listOfNotNull(
+        outsideBorderLine("Regions outside border", regionsOutsideBorder),
+        outsideBorderLine("destinations outside it", destinationsOutsideBorder),
+    )
+
+    private fun outsideBorderLine(key: String, count: Int): String? = count.takeIf { it > 0 }
+        ?.let { reportLine(key, "$it — swept anyway; the chunks under them stayed in Secondary") }
 }
 
 /**
@@ -91,6 +113,8 @@ class MergeRegions(
     targetDir: Path,
     private val staging: MergeStaging,
     private val offset: MergeOffset,
+    /** Only counted against, never refused over; see [MergeRegionsReport.regionsOutsideBorder]. */
+    private val border: SecondaryBorder,
 ) {
 
     private val regionsFile: Path = targetDir.resolve(WorldMerge.REGIONS_FILE)
@@ -99,6 +123,8 @@ class MergeRegions(
     private var untouched = 0
     private var destinationsRewritten = 0
     private val endAnchored = mutableListOf<String>()
+    private var regionsOutsideBorder = 0
+    private var destinationsOutsideBorder = 0
 
     /**
      * The whole sweep: read the live file, move what belongs to Secondary, and
@@ -123,6 +149,8 @@ class MergeRegions(
             destinationsRewritten = destinationsRewritten,
             endAnchored = endAnchored.toList(),
             rewroteFile = rewrite,
+            regionsOutsideBorder = regionsOutsideBorder,
+            destinationsOutsideBorder = destinationsOutsideBorder,
         )
     }
 
@@ -177,6 +205,12 @@ class MergeRegions(
             endY = region.endY,
         )
         refuseIfItLandsOnPrimary(landed, live)
+        // The whole cuboid, not a corner of it: a Region straddling the border
+        // has part of its ground left behind too, and the count is there to be
+        // looked at rather than to be exact about which half.
+        if (!border.contains(region.minX, region.minZ) || !border.contains(region.maxX, region.maxZ)) {
+            regionsOutsideBorder++
+        }
         landed.members.addAll(region.members)
         landed.flags.addAll(region.flags)
         // The values are the JSON Gson parsed out of the file and are re-emitted
@@ -201,6 +235,7 @@ class MergeRegions(
             endAnchored += "the destination of the Embassy Region \"${region.title}\""
             return
         }
+        if (!border.contains(destination.x, destination.z)) destinationsOutsideBorder++
         region.metadata[EmbassyDestination.KEY] = destination.copy(
             world = PRIMARY_WORLDS.getValue(role),
             x = offset.mergedX(destination.x, role),

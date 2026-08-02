@@ -39,6 +39,15 @@ object WorldMergeMain {
                                 Both axes must be multiples of ${MergeGeometry.OFFSET_ALIGNMENT}
           --search-limit <n>    how many ${MergeGeometry.OFFSET_ALIGNMENT}-block steps out to look
                                                                        [default: ${WorldMerge.DEFAULT_SEARCH_LIMIT}]
+          --border <blocks>     Secondary's world border, in blocks from the origin on each
+                                horizontal axis. Chunks past it are LEFT BEHIND — a stray
+                                teleport is not worth the free area it would demand in Primary.
+                                It is a vanilla world border, so it is NOT divided by eight in
+                                the nether                             [default: ${WorldMerge.DEFAULT_BORDER}]
+          --bleed <blocks>      how far past the border terrain is still carried, so the ground
+                                does not end at a visible wall. Whole region files, so the
+                                effective edge is the last one entirely inside border + bleed
+                                                                       [default: ${WorldMerge.DEFAULT_BLEED}]
           ${MergeEnd.OPT_IN}    go ahead even though Regions, players or Embassy destinations
                                 are still anchored in Secondary's End. Their builds there are
                                 DELETED. Run without it first and read what it names
@@ -112,6 +121,10 @@ object WorldMergeMain {
         planOnly = options.containsKey("plan-only"),
         acceptEndLoss = options.containsKey(MergeEnd.OPT_IN.removePrefix("--")),
         sample = options["sample"]?.let { number("sample", it) } ?: WorldMerge.DEFAULT_SAMPLE,
+        border = SecondaryBorder(
+            halfExtent = options["border"]?.let { number("border", it) } ?: WorldMerge.DEFAULT_BORDER,
+            bleed = options["bleed"]?.let { number("bleed", it) } ?: WorldMerge.DEFAULT_BLEED,
+        ),
     )
 
     /**

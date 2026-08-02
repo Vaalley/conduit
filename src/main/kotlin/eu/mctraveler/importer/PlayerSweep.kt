@@ -86,18 +86,40 @@ data class PlayerSweepReport(
      * loss.
      */
     val anchoredInSecondaryEnd: List<UUID>,
+    /**
+     * Players standing, or with a Secondary bucket, outside Secondary's world
+     * border (ticket 13).
+     *
+     * Counted, never refused over — the merge's deliberate call. Their
+     * coordinates move like everyone else's while the chunks under them stay in
+     * Secondary, so they arrive in terrain that regenerates from Primary's seed.
+     * Almost certainly nobody; this is how the operator finds out.
+     */
+    val anchoredOutsideBorder: List<UUID> = emptyList(),
 ) : MergeSection {
     override fun lines(): List<String> = listOf(
         reportLine("players swept", "$swept"),
         reportLine("players left alone", "$leftAlone"),
         reportLine("banked positions", "${banked.size}"),
-    ) + if (anchoredInSecondaryEnd.isEmpty()) {
+    ) + outsideBorderLine() + if (anchoredInSecondaryEnd.isEmpty()) {
         emptyList()
     } else {
         listOf(
             reportLine(
                 "left in Secondary's End",
                 "${anchoredInSecondaryEnd.size} — not moved; the End is discarded, not relocated",
+            ),
+        )
+    }
+
+    /** Said only when there were any; see [anchoredOutsideBorder] and [DimensionRelocation.lines]. */
+    private fun outsideBorderLine(): List<String> = if (anchoredOutsideBorder.isEmpty()) {
+        emptyList()
+    } else {
+        listOf(
+            reportLine(
+                "players outside border",
+                "${anchoredOutsideBorder.size} — swept anyway; the chunks under them stayed in Secondary",
             ),
         )
     }
@@ -136,13 +158,16 @@ class PlayerSweep(private val plan: MergePlan, private val offset: MergeOffset) 
         var leftAlone = 0
         val banked = mutableListOf<BankedPosition>()
         val inTheEnd = mutableListOf<UUID>()
+        // A set, because a player can be out past the border twice over — standing
+        // there and with a bucket there — and is still one player to tell about it.
+        val outside = sortedSetOf<UUID>(compareBy(UUID::toString))
 
         for (uuid in players()) {
             try {
                 // Both halves always run: a player's save and their record can
                 // need moving independently of each other.
-                val save = sweepSave(uuid, staging, inTheEnd)
-                val record = sweepRecord(uuid, staging, banked)
+                val save = sweepSave(uuid, staging, inTheEnd, outside)
+                val record = sweepRecord(uuid, staging, banked, outside)
                 if (save || record) swept++ else leftAlone++
             } catch (failure: Exception) {
                 throw IllegalStateException("could not sweep player $uuid: ${failure.message}", failure)
@@ -154,7 +179,7 @@ class PlayerSweep(private val plan: MergePlan, private val offset: MergeOffset) 
         // every server that never merged is in that state — so the two cases are
         // the same case, and the smaller footprint is the honest one.
         if (banked.isNotEmpty()) writeBankedPositions(staging, banked)
-        return PlayerSweepReport(swept, leftAlone, banked, inTheEnd)
+        return PlayerSweepReport(swept, leftAlone, banked, inTheEnd, outside.toList())
     }
 
     /**
@@ -200,13 +225,19 @@ class PlayerSweep(private val plan: MergePlan, private val offset: MergeOffset) 
      * Secondary's old coordinates on exactly the day their save went bad, which is
      * the worst possible day for it.
      */
-    private fun sweepSave(uuid: UUID, staging: MergeStaging, inTheEnd: MutableList<UUID>): Boolean {
+    private fun sweepSave(
+        uuid: UUID,
+        staging: MergeStaging,
+        inTheEnd: MutableList<UUID>,
+        outside: MutableSet<UUID>,
+    ): Boolean {
         var touched = false
         for (suffix in SAVE_SUFFIXES) {
             val file = playerdataDir.resolve("$uuid$suffix")
             if (Files.notExists(file)) continue
             val tag = NbtIo.readCompressed(file, NbtAccounter.unlimitedHeap())
             if (suffix == LIVE_SAVE_SUFFIX && isInSecondarysEnd(tag)) inTheEnd += uuid
+            if (suffix == LIVE_SAVE_SUFFIX && isOutsideTheBorder(tag)) outside += uuid
             val merged = MergedPlayerdata.merged(tag, offset)
             if (merged == tag) continue
             NbtIo.writeCompressed(merged, staging.replacing(file))
@@ -217,6 +248,25 @@ class PlayerSweep(private val plan: MergePlan, private val offset: MergeOffset) 
 
     private fun isInSecondarysEnd(tag: CompoundTag): Boolean =
         tag.getStringOr("Dimension", "") == WorldLayout.SECONDARY.dimensionId(DimensionRole.END)
+
+    /**
+     * Whether [tag] leaves its owner standing outside Secondary's world border,
+     * in a dimension the merge relocates.
+     *
+     * Only where they are standing, deliberately: a bed or a lodestone out past
+     * the border is a place they can no longer reach either way, while their
+     * position is where the merge is about to put them down. The End does not
+     * count — being anchored in a dimension that is about to stop existing is the
+     * End gate's business, and a player would otherwise be counted twice for two
+     * different problems.
+     */
+    private fun isOutsideTheBorder(tag: CompoundTag): Boolean {
+        val role = SECONDARY_DIMENSIONS[tag.getStringOr("Dimension", "")] ?: return false
+        if (role !in MergeGeometry.RELOCATED_ROLES) return false
+        val position = tag.getListOrEmpty("Pos")
+        if (position.size != VEC3_LENGTH) return false
+        return !plan.border.contains(position.getDoubleOr(0, 0.0), position.getDoubleOr(2, 0.0))
+    }
 
     // ---- the record ---------------------------------------------------------
 
@@ -230,7 +280,12 @@ class PlayerSweep(private val plan: MergePlan, private val offset: MergeOffset) 
      * rather than a second implementation of it. A record with nothing to change
      * has its staged copy dropped again, and so is never written at all.
      */
-    private fun sweepRecord(uuid: UUID, staging: MergeStaging, banked: MutableList<BankedPosition>): Boolean {
+    private fun sweepRecord(
+        uuid: UUID,
+        staging: MergeStaging,
+        banked: MutableList<BankedPosition>,
+        outside: MutableSet<UUID>,
+    ): Boolean {
         val live = recordsDir.resolve("$uuid$RECORD_SUFFIX")
         if (Files.notExists(live)) return false
         val staged = staging.replacing(live)
@@ -245,6 +300,7 @@ class PlayerSweep(private val plan: MergePlan, private val offset: MergeOffset) 
         val bankedWorld = WorldLayout.all.first { it !== liveWorld }
 
         val secondary = store.bucket(uuid, WorldLayout.SECONDARY.id)
+        if (secondary != null && isOutsideTheBorder(secondary)) outside += uuid
         val movedSecondary = secondary?.let { MergedPlayerdata.merged(it, offset) }
         if (movedSecondary != null && movedSecondary != secondary) {
             store.setBucket(uuid, WorldLayout.SECONDARY.id, movedSecondary)
@@ -293,6 +349,17 @@ class PlayerSweep(private val plan: MergePlan, private val offset: MergeOffset) 
             y = bucket.y,
             z = bucket.z,
         )
+    }
+
+    /**
+     * Whether [bucket] — a Secondary Per-World Bucket — remembers a place outside
+     * Secondary's world border; see [isOutsideTheBorder] for why it is the
+     * position and not the respawn point.
+     */
+    private fun isOutsideTheBorder(bucket: PerWorldBucket): Boolean {
+        val role = DimensionRole.fromId(bucket.dimension) ?: return false
+        if (role !in MergeGeometry.RELOCATED_ROLES) return false
+        return !plan.border.contains(bucket.x, bucket.z)
     }
 
     /** Adds the merge stamp to a staged record, leaving every other field's bytes alone. */
@@ -346,5 +413,13 @@ class PlayerSweep(private val plan: MergePlan, private val offset: MergeOffset) 
         /** Vanilla's live save and the backup `PlayerDataStorage.load` falls back to. */
         val SAVE_SUFFIXES = listOf(LIVE_SAVE_SUFFIX, ".dat_old")
         const val RECORD_SUFFIX = ".json"
+
+        /** How a save this server keeps spells each of Secondary's dimensions. */
+        val SECONDARY_DIMENSIONS: Map<String, DimensionRole> = DimensionRole.entries.associate {
+            WorldLayout.SECONDARY.dimensionId(it) to it
+        }
+
+        /** A `Vec3.CODEC` position is three doubles; anything else is not a place. */
+        const val VEC3_LENGTH = 3
     }
 }

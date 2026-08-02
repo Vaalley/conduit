@@ -25,6 +25,17 @@ data class RespawnCheckReport(
      * has not taken anything from them, and says so rather than staying quiet.
      */
     val alreadyWithoutABed: Int,
+    /**
+     * Respawn points whose bed stands outside Secondary's world border, and so
+     * was never carried across (ticket 13).
+     *
+     * Not a disagreement between the two passes and so not a refusal: the bed did
+     * not arrive because the operator said it should not, and refusing here would
+     * gate the merge on exactly what the border clip declines to gate it on. It
+     * is counted because the consequence is real — its owner will respawn at the
+     * world spawn instead — and somebody has to be able to tell them.
+     */
+    val bedOutsideTheBorder: Int = 0,
 ) : MergeSection {
     override fun lines(): List<String> = listOf(
         reportLine(
@@ -36,7 +47,16 @@ data class RespawnCheckReport(
                     ", $alreadyWithoutABed had no bed before the merge either"
                 },
         ),
-    )
+    ) + if (bedOutsideTheBorder == 0) {
+        emptyList()
+    } else {
+        listOf(
+            reportLine(
+                "beds outside the border",
+                "$bedOutsideTheBorder — not carried, so their owners respawn at the world spawn",
+            ),
+        )
+    }
 }
 
 /**
@@ -82,10 +102,18 @@ class RespawnBeds(
     fun check(): RespawnCheckReport {
         var confirmed = 0
         var withoutABed = 0
+        var outsideTheBorder = 0
         for ((live, uuid) in movedSaves()) {
             val before = respawnPointIn(NbtIo.readCompressed(live, NbtAccounter.unlimitedHeap()))
             val role = before?.let(::secondaryRole) ?: continue
             if (role !in MergeGeometry.RELOCATED_ROLES) continue
+            // A bed the border kept out cannot have arrived, and the two passes
+            // have not disagreed about anything: the point moved because every
+            // point moves, and the chunk stayed because the operator said so.
+            if (!plan.border.contains(before.x, before.z)) {
+                outsideTheBorder++
+                continue
+            }
             if (!hasRespawnBlock(levelDir, WorldLayout.SECONDARY.dimension(role), before)) {
                 withoutABed++
                 continue
@@ -97,7 +125,7 @@ class RespawnBeds(
             }
             confirmed++
         }
-        return RespawnCheckReport(confirmed, withoutABed)
+        return RespawnCheckReport(confirmed, withoutABed, outsideTheBorder)
     }
 
     // ---- the refusals -------------------------------------------------------

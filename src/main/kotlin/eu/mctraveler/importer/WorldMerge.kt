@@ -45,6 +45,15 @@ data class MergePlan(
      * spec, User Story 19); see [SampledDiff].
      */
     val sample: Int = WorldMerge.DEFAULT_SAMPLE,
+
+    /**
+     * How much of Secondary comes across at all: the world border it ran, and how
+     * far past that border terrain is still carried so the ground does not end at
+     * a visible wall (merge spec, "What comes across"). Both halves are the
+     * operator's to state and both are echoed in the plan, so a rehearsal and the
+     * real run can be compared. See [SecondaryBorder].
+     */
+    val border: SecondaryBorder = SecondaryBorder(),
 ) {
     init {
         require(clearance >= 0) { "the clearance cannot be negative, got $clearance" }
@@ -312,8 +321,16 @@ class WorldMerge(private val plan: MergePlan) {
         refuseUnlessLiveRunDirectory()
         refuseIfAlreadyMerged()
 
-        val secondary = footprints(WorldLayout.SECONDARY)
-        refuseIfSecondaryIsMissing(secondary)
+        val measured = footprints(WorldLayout.SECONDARY)
+        refuseIfSecondaryIsMissing(measured)
+
+        // The clip comes before the search rather than before the relocation,
+        // because what it takes out is measured ground: a chunk left outside the
+        // border must not be in the footprint the slot is sized from, or the
+        // search would reserve room in Primary for terrain that never arrives.
+        val secondary = measured.mapValues { (_, footprint) -> footprint.clippedTo(plan.border) }
+        val clip = clipReport(measured)
+        refuseIfTheBorderLeavesNothing(secondary)
 
         val search = PlacementSearch(secondary, footprints(WorldLayout.PRIMARY), plan.clearance)
         // The declared offset is the real run's: once it is filled in, the merge
@@ -322,8 +339,12 @@ class WorldMerge(private val plan: MergePlan) {
         // forgetting a flag. Until then this is null and the search answers.
         val declared = plan.offset ?: MergeGeometry.APPLIED_OFFSET
         val placement = declared?.let(search::checked) ?: search.nearestSlot(plan.searchLimit)
-        if (plan.planOnly) return MergeReport(placement)
-        return MergeStaging(plan, staging, levelDir).write(placement)
+        if (plan.planOnly) return MergeReport(placement, listOf(clip))
+        // The clip is not a phase of the staging — it was decided up here, and it
+        // constrained every phase down there — so it leads the sections rather
+        // than being staged among them.
+        val written = MergeStaging(plan, staging, levelDir).write(placement)
+        return written.copy(sections = listOf(clip) + written.sections)
     }
 
     // ---- refusals -----------------------------------------------------------
@@ -386,10 +407,40 @@ class WorldMerge(private val plan: MergePlan) {
         )
     }
 
+    /**
+     * A border that carries none of Secondary is a mistyped option rather than a
+     * map with nothing on it, and relocating nothing while reporting success is
+     * the worst answer available. Named after the numbers that produced it, so
+     * the operator can see which of the two they got wrong (merge spec, User
+     * Story 49).
+     */
+    private fun refuseIfTheBorderLeavesNothing(clipped: Map<DimensionRole, Footprint>) {
+        if (clipped.values.any { !it.isEmpty }) return
+        throw MigrationRefused(
+            "Secondary's border of ${plan.border.describe()} carries none of Secondary's chunk data: " +
+                "every region file it has lies outside ${plan.border.files.describeBlocks()}. " +
+                "Check --border and --bleed against the border Secondary actually ran",
+        )
+    }
+
     // ---- measuring ----------------------------------------------------------
 
     private fun footprints(world: WorldTrio): Map<DimensionRole, Footprint> =
         MergeGeometry.RELOCATED_ROLES.associateWith { Footprint.of(levelDir, world.dimension(it)) }
+
+    /**
+     * What the clip took out of [measured], for the report — the region files of
+     * Secondary that are not coming across, by the dimension each is in.
+     *
+     * Derived from the unclipped measurement rather than counted as the clip is
+     * applied, so the two can never disagree about what was left behind.
+     */
+    private fun clipReport(measured: Map<DimensionRole, Footprint>) = BorderClipReport(
+        border = plan.border,
+        leftOutside = measured
+            .mapValues { (_, footprint) -> footprint.files.filterNot(plan.border::keeps) }
+            .filterValues { it.isNotEmpty() },
+    )
 
     companion object {
         /**
@@ -411,6 +462,23 @@ class WorldMerge(private val plan: MergePlan) {
          * enough that nobody is tempted to turn it off to save a minute.
          */
         const val DEFAULT_SAMPLE = 64
+
+        /**
+         * Blocks from the origin to Secondary's world border on each horizontal
+         * axis. The operator's own number, from the server that ran it, and an
+         * option rather than a constant because a rehearsal against a copy of
+         * production has to be able to state it and be believed.
+         */
+        const val DEFAULT_BORDER = 50_000
+
+        /**
+         * Blocks of terrain carried past the border, so a player standing at it
+         * sees ground continuing rather than the edge of the import. One region
+         * file wide, which is what [MergeGeometry.OFFSET_ALIGNMENT] moves whole in
+         * both dimensions — so the bleed costs the clip nothing it was not
+         * already working in.
+         */
+        const val DEFAULT_BLEED = MergeGeometry.REGION_FILE_BLOCKS
 
         /** As far as the search will ever be asked to look, so a slip cannot ask for millions of slots. */
         const val MAX_SEARCH_LIMIT = 256
