@@ -75,7 +75,7 @@ class MigrationGameTest {
 
                 // Their Primary save became Primary's Per-World Bucket, so
                 // Travel puts them back exactly where the other backend had them.
-                server.commands.performPrefixedCommand(player.createCommandSourceStack(), "switch")
+                player.travelToTheOtherWorld()
                 helper.assertValueEqual(
                     player.level().dimension(),
                     Level.NETHER,

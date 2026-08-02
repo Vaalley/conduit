@@ -3,6 +3,7 @@ package eu.mctraveler.importer
 import eu.mctraveler.persistence.JsonPlayerStore
 import eu.mctraveler.persistence.PerWorldBucket
 import eu.mctraveler.persistence.PortalJson
+import eu.mctraveler.worlds.BankedPositions
 import eu.mctraveler.worlds.DimensionRole
 import java.nio.file.Files
 import java.nio.file.Path
@@ -325,8 +326,12 @@ class PlayerSweep(private val plan: MergePlan, private val offset: MergeOffset) 
         const val PLAYERDATA_DIRECTORY = "playerdata"
         const val RECORDS_DIRECTORY = "${WorldMerge.MOD_DIRECTORY}/players"
 
-        /** Where the merge leaves every banked position, for `/switch` to read back. */
-        const val BANKED_POSITIONS_FILE = "${WorldMerge.MOD_DIRECTORY}/banked-positions.json"
+        /**
+         * Where the merge leaves every banked position. The name comes from the
+         * signpost that reads it back, so the writer and the only reader cannot
+         * drift apart into two files neither of them finds.
+         */
+        const val BANKED_POSITIONS_FILE = "${WorldMerge.MOD_DIRECTORY}/${BankedPositions.FILE_NAME}"
 
         const val LIVE_SAVE_SUFFIX = ".dat"
 

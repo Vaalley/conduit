@@ -7,7 +7,6 @@ import net.minecraft.core.registries.Registries
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.resources.Identifier
 import net.minecraft.resources.ResourceKey
-import net.minecraft.server.MinecraftServer
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 import net.minecraft.world.level.Level
@@ -45,8 +44,18 @@ class WorldsGameTest {
         helper.succeed()
     }
 
+    /**
+     * Travel toggles between the two Worlds.
+     *
+     * This case used to assert the Portal's `Switching to <World>...` line
+     * alongside the move, because `/switch` was the only way to Travel. That
+     * message no longer exists anywhere: the merge turned `/switch` into a
+     * signpost that moves nobody (ticket 08), and its wording is pinned in
+     * [SwitchSignpostGameTest]. The toggle itself is untouched and asserted
+     * here, straight through Travel, until Travel goes in ticket 09.
+     */
     @GameTest(maxTicks = 600)
-    fun switchTogglesWorldsWithThePortalsExactMessages(helper: GameTestHelper) {
+    fun travelTogglesBetweenTheTwoWorlds(helper: GameTestHelper) {
         val server = helper.level.server
         val player = TestPlayers.login(server, "SwitchTester")
         try {
@@ -55,32 +64,14 @@ class WorldsGameTest {
                     "not ${player.level().dimension().identifier()}"
             }
 
-            runSwitch(server, player)
-            helper.assertValueEqual(
-                player.messages.last().textRuns(),
-                listOf(
-                    TextRun("Switching to ", "gray"),
-                    TextRun("Secondary", "green"),
-                    TextRun("...", "gray"),
-                ),
-                "the /switch message toward Secondary",
-            )
+            player.travelToTheOtherWorld()
             helper.assertValueEqual(
                 player.level().dimension(),
                 secondaryDimension("secondary"),
                 "the player's dimension after switching to Secondary",
             )
 
-            runSwitch(server, player)
-            helper.assertValueEqual(
-                player.messages.last().textRuns(),
-                listOf(
-                    TextRun("Switching to ", "gray"),
-                    TextRun("Primary", "green"),
-                    TextRun("...", "gray"),
-                ),
-                "the /switch message back toward Primary",
-            )
+            player.travelToTheOtherWorld()
             helper.assertValueEqual(
                 player.level().dimension(),
                 Level.OVERWORLD,
@@ -103,7 +94,7 @@ class WorldsGameTest {
             check(player.teleportTo(nether, 100.5, 40.0, -8.5, emptySet(), 90.0f, 10.0f, false))
 
             // First visit to Secondary lands at its spawn, on its own terrain.
-            runSwitch(server, player)
+            player.travelToTheOtherWorld()
             val secondary = checkNotNull(server.getLevel(secondaryDimension("secondary")))
             helper.assertValueEqual(
                 player.level().dimension(),
@@ -124,7 +115,7 @@ class WorldsGameTest {
             // Stand somewhere distinct in Secondary, then Travel away and back:
             // each World must restore exactly where the player last stood.
             check(player.teleportTo(secondary, -50.5, 80.0, 30.5, emptySet(), 45.0f, -5.0f, false))
-            runSwitch(server, player)
+            player.travelToTheOtherWorld()
             helper.assertValueEqual(
                 player.level().dimension(),
                 Level.NETHER,
@@ -141,7 +132,7 @@ class WorldsGameTest {
                 "the rotation restored by Primary's Position Memory",
             )
 
-            runSwitch(server, player)
+            player.travelToTheOtherWorld()
             helper.assertValueEqual(
                 player.level().dimension(),
                 secondary.dimension(),
@@ -167,7 +158,7 @@ class WorldsGameTest {
         val firstSession = TestPlayers.login(server, "ReturnTester", uuid)
         val secondary = checkNotNull(server.getLevel(secondaryDimension("secondary")))
         try {
-            runSwitch(server, firstSession)
+            firstSession.travelToTheOtherWorld()
             helper.assertValueEqual(
                 store.lastWorld(uuid) ?: "<unset>",
                 "secondary",
@@ -247,7 +238,7 @@ class WorldsGameTest {
                 helper.assertValueEqual(player.foodData.saturationLevel, 2.5f, "saturation $after")
             }
 
-            runSwitch(server, player)
+            player.travelToTheOtherWorld()
             helper.assertValueEqual(
                 player.level().dimension(),
                 secondaryDimension("secondary"),
@@ -255,16 +246,12 @@ class WorldsGameTest {
             )
             assertStateIntact("after Travel to Secondary")
 
-            runSwitch(server, player)
+            player.travelToTheOtherWorld()
             assertStateIntact("after Travel back to Primary")
         } finally {
             TestPlayers.logout(player)
         }
         helper.succeed()
-    }
-
-    private fun runSwitch(server: MinecraftServer, player: CapturingPlayer) {
-        server.commands.performPrefixedCommand(player.createCommandSourceStack(), "switch")
     }
 
     private fun secondaryDimension(path: String): ResourceKey<Level> =
