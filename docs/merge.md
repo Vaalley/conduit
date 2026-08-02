@@ -187,11 +187,11 @@ Nothing about Secondary's own chunk data is modified by any of this: the merge o
 `--worlds move` is deliberately not offered, because a moved source would compromise the backup
 that is your rollback — so Secondary's folders come out of a merge byte-for-byte identical.
 
-### Four things a real save taught us that a test save cannot
+### Five things a real save taught us that a test save cannot
 
 Every fixture in the test suite is a handful of chunks written by a 26.2 server. A live
 Secondary is six million chunks written by a decade of Minecraft versions, and the difference is
-not one of degree. All four of these were found by rehearsing against real data, and every one
+not one of degree. All five of these were found by rehearsing against real data, and every one
 of them would otherwise have been found in the downtime window.
 
 **Run it under `script`, not through a pipe.** Gradle's output is block-buffered when its stdout
@@ -224,6 +224,29 @@ version that generated it wrote — the live Secondary carries 1.15-era chunks b
 Anything that reads chunk NBT has to cope with both layouts, and the failure mode is quiet: a
 reader that looks only at the modern shape finds *nothing* rather than erroring, and an empty
 list compares equal to an empty list.
+
+**A stored entity is not a standing entity, and the namespace is how you tell.** The audit
+refused a live merge over three hundred `minecraft:bee.Pos` coordinates. None of them was a bee:
+they were bees sealed inside beehive *items*, sitting in barrels, at
+`block_entities[].Items[].components.minecraft:bees[].entity_data` — each one remembering
+wherever it was when somebody broke the hive with silk touch. Vanilla gives such a bee a fresh
+position when it comes out, so there is nothing there to relocate.
+
+The distinction that matters is one character of prefix, and it is load-bearing in both
+directions:
+
+| NBT key | What it is | What the merge does |
+| --- | --- | --- |
+| `minecraft:bees` | an item component, on an item that is not anywhere | leaves it alone |
+| `bees` | a placed bee nest's own field, on a block that is somewhere | moves the `hive_pos` inside it |
+
+Widening the exclusion to the bare spelling as well looks tidier and is wrong — it would
+silently undo the thing ticket 17 built. `WorldMergeAuditTest` fails if anyone tries.
+
+The general shape, for the next one of these: when the audit names a coordinate, find out *where
+in the NBT it lives* before deciding anything. `./gradlew chunkProbe --args="<region folder>
+<chunkX> <chunkZ>"` prints the path to it. The refusal names the field but not the route, and
+the same field name means different things on different routes.
 
 ## Run it
 
@@ -289,6 +312,27 @@ Secondary overworld bucket position if they have one, and at the relocated world
 Run without it first, read the list, tell the people on it, then pass it.
 
 ## What it prints
+
+### While it runs
+
+Each phase says what it is doing and how long it took, and the two phases that walk every region
+file count their way through:
+
+```
+[merge] moving the chunks across…
+[merge] moving the chunks across — done in 48m 12s
+[merge] finishing the coordinates the tool left behind…
+  completing overworld chunk: region file 100 of 36387  (31s elapsed)
+```
+
+That is enough to answer "which phase, and how much is left" from the log alone. It was not
+always: the first live merge ran an hour and three quarters in silence, and telling the audit
+from a hang took `/proc/<pid>/io` sampling, an `ls -l /proc/<pid>/fd` to see which region file
+was open, and a `jstack` to read the stack. Nobody should have to do that at 2am (ticket 20).
+
+Plain newlines, never a redrawn line, so the `script` capture stays readable afterwards.
+
+### The report
 
 One section per phase, in the order the phases ran. The numbers below are illustrative; the
 shape is not.
