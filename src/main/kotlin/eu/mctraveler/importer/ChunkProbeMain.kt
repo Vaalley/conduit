@@ -98,7 +98,6 @@ object ChunkProbeMain {
             for (i in 0 until minOf(found.size, 40)) {
                 val it = found.getCompoundOrEmpty(i)
                 val id = it.getStringOr("id", "?")
-                if (!id.contains("bee", ignoreCase = true) && !it.contains("bees")) continue
                 val pos = it.getListOrEmpty("Pos")
                 val at = if (pos.isEmpty) {
                     "x/y/z ${it.getIntOr("x", 0)},${it.getIntOr("y", 0)},${it.getIntOr("z", 0)}"
