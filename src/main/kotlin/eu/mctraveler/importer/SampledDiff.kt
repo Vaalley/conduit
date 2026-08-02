@@ -338,8 +338,13 @@ class SampledDiff(
             )
             ?: difference(
                 "entities",
-                entities(chunk.sourceEntities, offset.shiftX(role).toDouble(), offset.shiftZ(role).toDouble()),
-                entities(chunk.landedEntities, 0.0, 0.0),
+                entities(
+                    chunk.sourceEntities,
+                    source,
+                    offset.shiftX(role).toDouble(),
+                    offset.shiftZ(role).toDouble(),
+                ),
+                entities(chunk.landedEntities, landed, 0.0, 0.0),
             )
     }
 
@@ -349,8 +354,9 @@ class SampledDiff(
      * anything inside the chunk is.
      */
     private fun landedInTheWrongPlace(chunk: SampledChunk, landed: CompoundTag): String? {
-        val x = landed.getIntOr(CHUNK_X, Int.MIN_VALUE)
-        val z = landed.getIntOr(CHUNK_Z, Int.MIN_VALUE)
+        val fields = fieldsOf(landed).of
+        val x = fields.getIntOr(CHUNK_X, Int.MIN_VALUE)
+        val z = fields.getIntOr(CHUNK_Z, Int.MIN_VALUE)
         if (x == chunk.landedAt.x && z == chunk.landedAt.z) return null
         return "the chunk stored at ${describe(chunk.landedAt)} says it is ${describe(ChunkPos(x, z))}"
     }
@@ -361,8 +367,10 @@ class SampledDiff(
      * and exact equality is the honest test.
      */
     private fun blocksDiffer(source: CompoundTag, landed: CompoundTag): String? {
-        val was = source.getListOrEmpty(SECTIONS)
-        val now = landed.getListOrEmpty(SECTIONS)
+        val from = fieldsOf(source)
+        val to = fieldsOf(landed)
+        val was = from.of.getListOrEmpty(from.sections)
+        val now = to.of.getListOrEmpty(to.sections)
         if (was.size != now.size) {
             return "its blocks did not all arrive: the source has ${was.size} section" +
                 "${plural(was.size)} and ${now.size} arrived"
@@ -379,7 +387,7 @@ class SampledDiff(
      * in any order and only which ones are where is being claimed.
      */
     private fun blockEntities(chunk: CompoundTag, shiftX: Int, shiftZ: Int): List<String> =
-        compounds(chunk.getListOrEmpty(BLOCK_ENTITIES)).map {
+        fieldsOf(chunk).let { compounds(it.of.getListOrEmpty(it.blockEntities)) }.map {
             "${it.getStringOr(ID, UNNAMED)} at ${it.getIntOr("x", 0) + shiftX}, " +
                 "${it.getIntOr("y", 0)}, ${it.getIntOr("z", 0) + shiftZ}"
         }.sorted()
@@ -393,8 +401,16 @@ class SampledDiff(
      * come out as an empty list rather than as a difference between the two
      * spellings.
      */
-    private fun entities(chunk: CompoundTag?, shiftX: Double, shiftZ: Double): List<String> =
-        compounds(chunk?.getListOrEmpty(ENTITY_LIST) ?: ListTag()).map {
+    private fun entities(
+        chunk: CompoundTag?,
+        terrain: CompoundTag,
+        shiftX: Double,
+        shiftZ: Double,
+    ): List<String> =
+        // Entity storage moved out of the terrain chunk in 1.17. A chunk older
+        // than that keeps its entities in `Level.Entities` and has no entry in
+        // the entities folder at all, so the terrain chunk is where they are.
+        compounds(chunk?.getListOrEmpty(ENTITY_LIST) ?: fieldsOf(terrain).of.getListOrEmpty(ENTITY_LIST)).map {
             val at = it.getListOrEmpty(ENTITY_POSITION)
             "${it.getStringOr(ID, UNNAMED)} at ${at.getDoubleOr(0, 0.0) + shiftX}, " +
                 "${at.getDoubleOr(1, 0.0)}, ${at.getDoubleOr(2, 0.0) + shiftZ}"
@@ -421,7 +437,34 @@ class SampledDiff(
     private fun compounds(list: ListTag): List<CompoundTag> =
         (0 until list.size).map(list::getCompoundOrEmpty)
 
-    private fun status(chunk: CompoundTag): String = chunk.getStringOr(STATUS, "")
+    private fun status(chunk: CompoundTag): String = fieldsOf(chunk).of.getStringOr(STATUS, "")
+
+    /**
+     * Where a chunk keeps its own fields, and what it calls two of them.
+     *
+     * Secondary's chunks are a mixture of DataVersions — vanilla upgrades one
+     * only when it loads it, so ground nobody has walked since before the Portal
+     * cutover is still in the shape the version that generated it wrote. A chunk
+     * older than 1.18 keeps everything under `Level` and spells its section and
+     * block-entity lists differently.
+     *
+     * Reading only the modern shape does not fail loudly on one of those, which
+     * is what makes this worth a type rather than a special case: an absent
+     * section list compares equal to an absent section list, so the diff would
+     * have passed every old chunk without ever looking inside it. The rehearsal
+     * caught it the other way round — an absent `Status` read as "unfinished",
+     * and the merge refused over a chunk that was fine.
+     */
+    private class Fields(val of: CompoundTag, val sections: String, val blockEntities: String)
+
+    private fun fieldsOf(chunk: CompoundTag): Fields {
+        val level = chunk.getCompoundOrEmpty(LEVEL)
+        return if (level.isEmpty) {
+            Fields(chunk, SECTIONS, BLOCK_ENTITIES)
+        } else {
+            Fields(level, LEGACY_SECTIONS, LEGACY_BLOCK_ENTITIES)
+        }
+    }
 
     /**
      * Whether vanilla finished generating this chunk, which is the same question
@@ -444,6 +487,11 @@ class SampledDiff(
         const val ENTITIES = "entities"
 
         const val SECTIONS = "sections"
+
+        /** Where a chunk older than 1.18 keeps everything, and its own two spellings. */
+        const val LEVEL = "Level"
+        const val LEGACY_SECTIONS = "Sections"
+        const val LEGACY_BLOCK_ENTITIES = "TileEntities"
         const val SECTION_Y = "Y"
         const val BLOCK_ENTITIES = "block_entities"
         const val ENTITY_LIST = "Entities"
