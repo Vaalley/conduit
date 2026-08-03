@@ -48,6 +48,7 @@ data class MergeReport(
     val audit: ChunkAuditReport get() = section()
     val regions: MergeRegionsReport get() = section()
     val players: PlayerSweepReport get() = section()
+    val maps: MapSweepReport get() = section()
 
     fun lines(): List<String> = placement.lines() + sections.flatMap(MergeSection::lines)
 
@@ -178,13 +179,22 @@ class MergeStaging(
             val end = phase("closing the old End") {
                 MergeEnd(plan, this, placement.offset, players.anchoredInSecondaryEnd).close()
             }
+            // Level-wide data rather than chunk data, which is exactly why the
+            // first migration missed it: the frame on the wall was relocated and
+            // the picture inside it was not (ticket 23).
+            val maps = phase("pointing the maps at the moved land") {
+                MapSweep(
+                    plan.targetDir.resolve(plan.levelName).resolve(MAPS_DIRECTORY),
+                    placement.offset,
+                ) { replacing(it) }.sweep()
+            }
             val respawns = phase("checking the respawn beds") {
                 RespawnBeds(plan, this, stagedLevelDir).check()
             }
             stampAsMerged(placement)
             MergeReport(
                 placement,
-                listOf(relocation, sampled, completion, audit, regions, players, end, respawns),
+                listOf(relocation, sampled, completion, audit, regions, players, end, maps, respawns),
             )
         } catch (failure: Throwable) {
             // The merge only ever copies — `--worlds move` is deliberately not
@@ -367,5 +377,8 @@ class MergeStaging(
          * rather than auditing one landmass against another's arithmetic.
          */
         const val RELOCATION_STAMP = "relocated-for.txt"
+
+        /** Where the level keeps its saved maps, which are not any dimension's. */
+        const val MAPS_DIRECTORY = "data/minecraft/maps"
     }
 }
