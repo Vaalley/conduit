@@ -35,7 +35,8 @@
       "eu.mctraveler.gametest.EmbassyPlotGameTest",
       "eu.mctraveler.gametest.EmbassyCommandGameTest",
       "eu.mctraveler.gametest.EmbassyAnchorGameTest",
-      "eu.mctraveler.gametest.CrystalMenuGameTest"
+      "eu.mctraveler.gametest.CrystalMenuGameTest",
+      "eu.mctraveler.gametest.SignEffectsGameTest"
     ],
     "server": [
       {
