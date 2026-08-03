@@ -69,22 +69,40 @@ object PoiCrossCheckMain {
 
         var memories = 0
         var dangling = 0
+        var legacyMemories = 0
+        var legacyDangling = 0
         val examples = mutableListOf<String>()
         val byPlace = HashMap<Triple<Int, Int, Int>, Int>()
+
+        fun count(legacy: Boolean): (Int, Int, String, Triple<Int, Int, Int>?) -> Unit = { m, d, note, at ->
+            if (legacy) { legacyMemories += m; legacyDangling += d } else { memories += m; dangling += d }
+            if (d > 0) {
+                byPlace[at!!] = (byPlace[at] ?: 0) + 1
+                if (examples.size < 8) examples += note
+            }
+        }
+
         walk(root.resolve("entities"), "entities") { chunk, tag ->
             for (entity in tag.getListOrEmpty("Entities")) {
-                if (entity is CompoundTag) villager(entity, chunk, places) { m, d, note, at ->
-                    memories += m
-                    dangling += d
-                    if (d > 0) {
-                        byPlace[at!!] = (byPlace[at] ?: 0) + 1
-                        if (examples.size < 8) examples += note
-                    }
-                }
+                if (entity is CompoundTag) villager(entity, chunk, places, count(false))
+            }
+        }
+        // Anything written before 1.17 keeps its entities inside the terrain chunk,
+        // under `Level`. Those villagers are invisible to a walk of `entities/` and
+        // the audit sees them anyway, so leaving them out here would compare two
+        // different populations and call the difference a finding.
+        walk(root.resolve("region"), "chunk") { chunk, tag ->
+            val level = tag.getCompoundOrEmpty("Level")
+            val list = if (level.isEmpty) tag.getListOrEmpty("Entities") else level.getListOrEmpty("Entities")
+            for (entity in list) {
+                if (entity is CompoundTag) villager(entity, chunk, places, count(true))
             }
         }
         println("villager memories checked       : $memories")
         println("dangling (no record at the end) : $dangling")
+        println("legacy memories in terrain      : $legacyMemories")
+        println("legacy dangling                 : $legacyDangling")
+        println("dangling TOTAL                  : ${dangling + legacyDangling}")
         println("distinct places they point at   : ${byPlace.size}")
         println()
         println("The same memory remembered by many villagers is one dead village, not many faults:")
