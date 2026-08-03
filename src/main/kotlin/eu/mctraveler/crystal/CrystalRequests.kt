@@ -34,7 +34,6 @@ object CrystalRequests {
 
     /** The unregistered command that accepts a request. */
     const val ACCEPT_COMMAND = "teleportation-crystal-accept"
-    const val CANCEL_COMMAND = "teleportation-crystal-cancel"
 
     /** Who a player asked, and when. */
     private class Request(
@@ -63,19 +62,6 @@ object CrystalRequests {
         requester.sendSystemMessage(
             Paint.success("Request sent to ", Paint.green(head.name)),
         )
-    }
-
-    /** Cancels [requester]'s outstanding request, if they have one. */
-    fun cancel(requester: ServerPlayer): MutableComponent {
-        val request = requests.remove(requester.uuid)
-            ?: return Paint.error("No teleport request to cancel")
-        requester.level().server.playerList.getPlayer(request.target)?.sendSystemMessage(
-            Paint.info(
-                Paint.aqua(requester.gameProfile.name),
-                " withdrew their teleport request",
-            ),
-        )
-        return Paint.success("Teleport request cancelled")
     }
 
     /**

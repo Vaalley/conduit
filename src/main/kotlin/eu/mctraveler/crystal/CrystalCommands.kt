@@ -18,7 +18,6 @@ import net.minecraft.server.level.ServerPlayer
  * `/set-teleportation-crystal-energy <energy> [player]` (spec User Story 37).
  * `/recharge-teleportation-crystal [player]` recharges a player's pool fully.
  * `/spawn1` and `/spawn2` teleport the sender to the free crystal spawns.
- * `/teleportation-crystal-cancel` cancels the sender's pending request.
  *
  * Nucleus sent both the bounds error and the success line to the *target*,
  * leaving the sender staring at nothing after setting someone else's energy —
@@ -76,10 +75,6 @@ object CrystalCommands {
                     .executes { ctx -> reply(ctx) { sender -> spawn(sender, definition) } },
             )
         }
-        dispatcher.register(
-            Commands.literal(CrystalRequests.CANCEL_COMMAND)
-                .executes { ctx -> reply(ctx) { sender -> CrystalRequests.cancel(sender) } },
-        )
     }
 
     private fun energyArg(ctx: CommandContext<CommandSourceStack>): Int =

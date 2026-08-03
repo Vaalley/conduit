@@ -838,39 +838,6 @@ class CrystalMenuGameTest {
         }
     }
 
-    @GameTest(maxTicks = 200)
-    fun requesterCanCancelAndTheTargetIsNotified(helper: GameTestHelper) {
-        val requester = MessageCapturingPlayer.join(helper, "TCCancelA")
-        val target = MessageCapturingPlayer.join(helper, "TCCancelB")
-        CrystalRequests.clear()
-        requester.asksToTeleportTo(target)
-        requester.messages.clear()
-        target.messages.clear()
-
-        requester.runCommand(CrystalRequests.CANCEL_COMMAND)
-
-        helper.assertOnlyMessage(
-            requester,
-            Paint.success("Teleport request cancelled"),
-            "the cancellation confirmation",
-        )
-        helper.assertOnlyMessage(
-            target,
-            Paint.info(Paint.aqua("TCCancelA"), " withdrew their teleport request"),
-            "the target's withdrawal notice",
-        )
-        requester.messages.clear()
-        requester.runCommand(CrystalRequests.CANCEL_COMMAND)
-        helper.assertOnlyMessage(
-            requester,
-            Paint.error("No teleport request to cancel"),
-            "cancelling without a request",
-        )
-        requester.leave()
-        target.leave()
-        helper.succeed()
-    }
-
     @GameTest(environment = "mctraveler-test:own_batch_crystal_timeout", maxTicks = 200)
     fun activeTimeoutSweepNotifiesTheRequester(helper: GameTestHelper) {
         val requester = MessageCapturingPlayer.join(helper, "TCTimeoutA")
