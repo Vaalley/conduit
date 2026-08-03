@@ -5,6 +5,7 @@ import eu.mctraveler.worlds.Landing
 import java.util.UUID
 import net.minecraft.network.chat.ClickEvent
 import net.minecraft.network.chat.MutableComponent
+import net.minecraft.server.MinecraftServer
 import net.minecraft.server.level.ServerPlayer
 
 /**
@@ -33,9 +34,14 @@ object CrystalRequests {
 
     /** The unregistered command that accepts a request. */
     const val ACCEPT_COMMAND = "teleportation-crystal-accept"
+    const val CANCEL_COMMAND = "teleportation-crystal-cancel"
 
     /** Who a player asked, and when. */
-    private class Request(val target: UUID, var createdAtTick: Int)
+    private class Request(
+        val target: UUID,
+        val targetName: String,
+        var createdAtTick: Int,
+    )
 
     /** Outstanding requests, keyed by the player who asked. One each, as in Nucleus. */
     private val requests = HashMap<UUID, Request>()
@@ -52,11 +58,24 @@ object CrystalRequests {
             requester.sendSystemMessage(notOnline(head.name))
             return
         }
-        requests[requester.uuid] = Request(target.uuid, server.tickCount)
+        requests[requester.uuid] = Request(target.uuid, target.gameProfile.name, server.tickCount)
         target.sendSystemMessage(Paint.info(invitation(requester.gameProfile.name)))
         requester.sendSystemMessage(
             Paint.success("Request sent to ", Paint.green(head.name)),
         )
+    }
+
+    /** Cancels [requester]'s outstanding request, if they have one. */
+    fun cancel(requester: ServerPlayer): MutableComponent {
+        val request = requests.remove(requester.uuid)
+            ?: return Paint.error("No teleport request to cancel")
+        requester.level().server.playerList.getPlayer(request.target)?.sendSystemMessage(
+            Paint.info(
+                Paint.aqua(requester.gameProfile.name),
+                " withdrew their teleport request",
+            ),
+        )
+        return Paint.success("Teleport request cancelled")
     }
 
     /**
@@ -132,6 +151,25 @@ object CrystalRequests {
             ),
         )
         acceptor.sendSystemMessage(Paint.success("Request accepted"))
+    }
+
+    /**
+     * Removes requests older than [TIMEOUT_TICKS], notifying each requester
+     * while they are online. Acceptance still checks lazily as a backstop.
+     */
+    fun sweep(server: MinecraftServer) {
+        val now = server.tickCount
+        for ((requesterUuid, request) in requests.entries.toList()) {
+            if (!hasTimedOut(request.createdAtTick, now)) continue
+            requests.remove(requesterUuid)
+            server.playerList.getPlayer(requesterUuid)?.sendSystemMessage(
+                Paint.info(
+                    "Your teleport request to ",
+                    Paint.aqua(request.targetName),
+                    " timed out",
+                ),
+            )
+        }
     }
 
     /**

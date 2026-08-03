@@ -1,6 +1,7 @@
 package eu.mctraveler.gametest
 
 import eu.mctraveler.crystal.CrystalEnergy
+import eu.mctraveler.crystal.CrystalFeature
 import eu.mctraveler.crystal.CrystalItem
 import eu.mctraveler.crystal.CrystalMenu
 import eu.mctraveler.crystal.CrystalRequests
@@ -155,16 +156,22 @@ class CrystalMenuGameTest {
     fun theMenuIsLaidOutExactlyAsNucleusLaidItOut(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "TCLayout")
         try {
+            CrystalEnergy.setEnergy(player, 3)
             player.usesCrystal(tier = 3)
             val slots = CrystalMenu.openMenuOf(player)!!.contents()
 
             helper.assertValueEqual(slots.size, 27, "the menu size")
-            for (slot in (0..8) + (18..26)) {
+            for (slot in ((0..8) + (18..26)).filter { it != 4 }) {
                 helper.assertTrue(
                     slots[slot].`is`(Items.STAINED_GLASS_PANE.black()),
                     "slot $slot should be a black pane, found ${slots[slot]}",
                 )
             }
+            helper.assertTrue(slots[4].`is`(Items.AMETHYST_SHARD), "slot 4 should show energy")
+            helper.assertTrue(
+                slots[4].get(DataComponents.CUSTOM_NAME)?.string == "Energy: 3/5",
+                "the energy info item",
+            )
             for (slot in listOf(9, 10, 17)) {
                 helper.assertTrue(
                     slots[slot].`is`(Items.STAINED_GLASS_PANE.blue()),
@@ -827,6 +834,66 @@ class CrystalMenuGameTest {
                 requester.leave()
                 acceptor.leave()
                 throw failure
+            }
+        }
+    }
+
+    @GameTest(maxTicks = 200)
+    fun requesterCanCancelAndTheTargetIsNotified(helper: GameTestHelper) {
+        val requester = MessageCapturingPlayer.join(helper, "TCCancelA")
+        val target = MessageCapturingPlayer.join(helper, "TCCancelB")
+        CrystalRequests.clear()
+        requester.asksToTeleportTo(target)
+        requester.messages.clear()
+        target.messages.clear()
+
+        requester.runCommand(CrystalRequests.CANCEL_COMMAND)
+
+        helper.assertOnlyMessage(
+            requester,
+            Paint.success("Teleport request cancelled"),
+            "the cancellation confirmation",
+        )
+        helper.assertOnlyMessage(
+            target,
+            Paint.info(Paint.aqua("TCCancelA"), " withdrew their teleport request"),
+            "the target's withdrawal notice",
+        )
+        requester.messages.clear()
+        requester.runCommand(CrystalRequests.CANCEL_COMMAND)
+        helper.assertOnlyMessage(
+            requester,
+            Paint.error("No teleport request to cancel"),
+            "cancelling without a request",
+        )
+        requester.leave()
+        target.leave()
+        helper.succeed()
+    }
+
+    @GameTest(environment = "mctraveler-test:own_batch_crystal_timeout", maxTicks = 200)
+    fun activeTimeoutSweepNotifiesTheRequester(helper: GameTestHelper) {
+        val requester = MessageCapturingPlayer.join(helper, "TCTimeoutA")
+        val target = MessageCapturingPlayer.join(helper, "TCTimeoutB")
+        CrystalRequests.clear()
+        requester.asksToTeleportTo(target)
+        requester.messages.clear()
+        target.messages.clear()
+        CrystalRequests.backdate(CrystalRequests.TIMEOUT_TICKS + 1)
+
+        helper.runAfterDelay((CrystalFeature.REGEN_CHECK_INTERVAL_TICKS * 2 + 1).toLong()) {
+            try {
+                CrystalRequests.sweep(helper.level.server)
+                helper.assertOnlyMessage(
+                    requester,
+                    Paint.info("Your teleport request to ", Paint.aqua("TCTimeoutB"), " timed out"),
+                    "the requester's timeout notice",
+                )
+                helper.assertTrue(target.spokenMessages().isEmpty(), "the target received a timeout notice")
+                helper.succeed()
+            } finally {
+                requester.leave()
+                target.leave()
             }
         }
     }

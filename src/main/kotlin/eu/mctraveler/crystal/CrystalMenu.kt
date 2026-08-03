@@ -27,7 +27,7 @@ import net.minecraft.world.level.portal.TeleportTransition
  * `createTeleportationCrystalInventory`, `createPlayersInventory`,
  * `useTeleportationCrystal` and `TeleportationCrystalListener.onInventoryClick`).
  *
- * Right-clicking a crystal opens a chest GUI of six destinations; picking one
+ * Right-clicking a crystal opens a chest GUI of configured destinations; picking one
  * closes the menu, moves the player, and spends a point of [CrystalEnergy]
  * unless it is one of the two free spawns.
  * Picking *Player* opens a second GUI of everyone else online, and clicking a
@@ -54,7 +54,7 @@ object CrystalMenu {
     /** The slot the first destination sits in. */
     const val FIRST_ACTION_SLOT = 11
 
-    /** The slot the sixth and final destination sits in. */
+    /** The last action slot when the default two spawns are configured. */
     const val LAST_ACTION_SLOT = 16
 
     /** Which of the two GUIs a [CrystalChestMenu] is. */
@@ -64,7 +64,7 @@ object CrystalMenu {
     data class Head(val uuid: UUID, val name: String)
 
     /**
-     * One of the six buttons: how it looks, whether it is free, and where it leads. A null landing
+     * One destination button: how it looks, whether it is free, and where it leads. A null landing
      * means the click is over — either the destination refused (and has said so)
      * or it opened the head GUI instead — and in that case no energy is spent.
      */
@@ -77,51 +77,64 @@ object CrystalMenu {
     )
 
     /**
-     * The six destinations in their menu order; the slot each occupies is
+     * The fixed destinations and configured spawns in their menu order; the slot each occupies is
      * [FIRST_ACTION_SLOT] plus its index here.
      */
-    private val DESTINATIONS: List<Destination> = listOf(
-        Destination(
-            name = "Bed",
-            // Dyed variants live in a ColorCollection since 26.2 rather than as
-            // one constant per colour.
-            icon = Items.BED.blue(),
-            lore = listOf("Go back to your place of rest"),
-            resolve = ::bed,
-        ),
-        Destination(
-            name = "Spawn 1",
-            icon = Items.SPAWNER,
-            lore = listOf("Head to spawn town"),
-            free = true,
-            resolve = { CrystalSpawns.spawn1(it) },
-        ),
-        Destination(
-            name = "Spawn 2",
-            icon = Items.SPAWNER,
-            lore = listOf("Head to the remote spawn"),
-            free = true,
-            resolve = { CrystalSpawns.spawn2(it) },
-        ),
-        Destination(
-            name = "Player",
-            icon = Items.PLAYER_HEAD,
-            lore = listOf("Request to teleport to a player", "costs one energy when they accept"),
-            resolve = ::players,
-        ),
-        Destination(
-            name = "Embassy",
-            icon = Items.SPYGLASS,
-            lore = listOf("Teleport to the embassy world"),
-            resolve = ::embassy,
-        ),
-        Destination(
-            name = "Wilderness",
-            icon = Items.GRASS_BLOCK,
-            lore = listOf("Coming soon"),
-            resolve = ::wilderness,
-        ),
-    )
+    private val DESTINATIONS: List<Destination> by lazy {
+        buildList {
+            add(
+                Destination(
+                    name = "Bed",
+                    // Dyed variants live in a ColorCollection since 26.2 rather than as
+                    // one constant per colour.
+                    icon = Items.BED.blue(),
+                    lore = listOf("Go back to your place of rest"),
+                    resolve = ::bed,
+                ),
+            )
+            addAll(
+                CrystalSpawns.definitions().mapIndexed { index, spawn ->
+                    Destination(
+                        name = title(spawn.name),
+                        icon = Items.SPAWNER,
+                        lore = if (index == 0) {
+                            listOf("Head to spawn town")
+                        } else if (index == 1 && spawn.name == "spawn 2") {
+                            listOf("Head to the remote spawn")
+                        } else {
+                            listOf("Head to ${spawn.name}")
+                        },
+                        free = true,
+                        resolve = { player -> CrystalSpawns.landing(player, spawn) },
+                    )
+                },
+            )
+            add(
+                Destination(
+                    name = "Player",
+                    icon = Items.PLAYER_HEAD,
+                    lore = listOf("Request to teleport to a player", "costs one energy when they accept"),
+                    resolve = ::players,
+                ),
+            )
+            add(
+                Destination(
+                    name = "Embassy",
+                    icon = Items.SPYGLASS,
+                    lore = listOf("Teleport to the embassy world"),
+                    resolve = ::embassy,
+                ),
+            )
+            add(
+                Destination(
+                    name = "Wilderness",
+                    icon = Items.GRASS_BLOCK,
+                    lore = listOf("Coming soon"),
+                    resolve = ::wilderness,
+                ),
+            )
+        }
+    }
 
     // ---- opening ----
 
@@ -145,16 +158,19 @@ object CrystalMenu {
 
     /** Opens the destination GUI (spec story 26). */
     fun openDestinations(player: ServerPlayer) {
-        val contents = SimpleContainer(27)
+        val rows = destinationRows(DESTINATIONS.size)
+        val contents = SimpleContainer(rows * 9)
         val black = Items.STAINED_GLASS_PANE.black()
         val blue = Items.STAINED_GLASS_PANE.blue()
-        for (column in 0 until 9) {
-            contents.setItem(column, pane(black))
-            contents.setItem(column + 18, pane(black))
-            val destination = DESTINATIONS.getOrNull(column - 2).takeIf { column in 2..7 }
-            contents.setItem(column + 9, destination?.let(::button) ?: pane(blue))
+        for (slot in 0 until contents.containerSize) {
+            val row = slot / 9
+            contents.setItem(slot, pane(if (row == 0 || row == rows - 1) black else blue))
         }
-        open(player, Kind.DESTINATIONS, contents, rows = 3, title = TITLE, heads = emptyList())
+        contents.setItem(4, energyInfo(player))
+        for ((slot, destination) in actionSlots(DESTINATIONS.size).zip(DESTINATIONS)) {
+            contents.setItem(slot, button(destination))
+        }
+        open(player, Kind.DESTINATIONS, contents, rows, TITLE, emptyList())
     }
 
     /** The tallest chest screen the protocol has: six rows of nine. */
@@ -248,7 +264,7 @@ object CrystalMenu {
         CrystalRequests.send(player, head)
     }
 
-    // ---- the six destinations ----
+    // ---- the destinations ----
 
     /**
      * The player's own respawn point (spec story 29), as vanilla resolves it —
@@ -336,6 +352,28 @@ object CrystalMenu {
             hideAdditionalTooltip(this)
         }
 
+    private fun energyInfo(player: ServerPlayer): ItemStack =
+        ItemStack(Items.AMETHYST_SHARD).apply {
+            set(
+                DataComponents.CUSTOM_NAME,
+                Component.literal("Energy: ${CrystalEnergy.energyOf(player)}/${CrystalEnergy.MAX_ENERGY}"),
+            )
+            hideAdditionalTooltip(this)
+        }
+
+    private fun title(name: String): String =
+        name.replaceFirstChar { it.uppercase() }
+
+    private fun destinationRows(count: Int): Int =
+        2 + ((count + ACTIONS_PER_ROW - 1) / ACTIONS_PER_ROW).coerceAtLeast(1)
+
+    private fun actionSlots(count: Int): List<Int> =
+        (0 until count).map { index ->
+            (index / ACTIONS_PER_ROW + 1) * 9 + index % ACTIONS_PER_ROW + 2
+        }
+
+    private const val ACTIONS_PER_ROW = 6
+
     /** One online player's head, wearing their own skin (spec story 33). */
     private fun head(other: ServerPlayer): ItemStack =
         ItemStack(Items.PLAYER_HEAD).apply {
@@ -419,11 +457,13 @@ object CrystalMenu {
 
         private fun actionFor(slot: Int): ((ServerPlayer) -> Unit)? = when (kind) {
             Kind.DESTINATIONS ->
-                if (slot !in FIRST_ACTION_SLOT..LAST_ACTION_SLOT) {
+                if (slot !in actionSlots(DESTINATIONS.size)) {
                     null
                 } else {
-                    DESTINATIONS.getOrNull(slot - FIRST_ACTION_SLOT)
-                        ?.let { destination -> { player -> choose(player, destination) } }
+                    actionSlots(DESTINATIONS.size)
+                        .indexOf(slot)
+                        .takeIf { it >= 0 }
+                        ?.let { index -> { player -> choose(player, DESTINATIONS[index]) } }
                 }
 
             Kind.PLAYERS ->

@@ -33,6 +33,9 @@ object CrystalFeature {
     const val REGEN_CHECK_INTERVAL_TICKS = 20
 
     fun register() {
+        ServerLifecycleEvents.SERVER_STARTING.register { server ->
+            CrystalSpawns.start(server.serverDirectory)
+        }
         ServerTickEvents.END_SERVER_TICK.register(::onEndServerTick)
         CommandRegistrationCallback.EVENT.register { dispatcher, _, _ ->
             CrystalCommands.register(dispatcher)
@@ -104,6 +107,7 @@ object CrystalFeature {
      * not getting any closer.
      */
     private fun onEndServerTick(server: MinecraftServer) {
+        CrystalRequests.sweep(server)
         if (server.tickCount % REGEN_CHECK_INTERVAL_TICKS != 0) return
         for (player in server.playerList.players) {
             if (!CrystalEnergy.regen(player)) continue
