@@ -16,6 +16,7 @@ import net.minecraft.server.level.ServerPlayer
 
 /**
  * `/set-teleportation-crystal-energy <energy> [player]` (spec User Story 37).
+ * `/recharge-teleportation-crystal [player]` recharges a player's pool fully.
  *
  * Nucleus sent both the bounds error and the success line to the *target*,
  * leaving the sender staring at nothing after setting someone else's energy —
@@ -26,6 +27,7 @@ import net.minecraft.server.level.ServerPlayer
 object CrystalCommands {
 
     private const val NAME = "set-teleportation-crystal-energy"
+    private const val RECHARGE_NAME = "recharge-teleportation-crystal"
 
     private val onlinePlayerNames = SuggestionProvider<CommandSourceStack> { context, builder ->
         SharedSuggestionProvider.suggest(context.source.onlinePlayerNames, builder)
@@ -53,6 +55,19 @@ object CrystalCommands {
                         ),
                 ),
         )
+        dispatcher.register(
+            Commands.literal(RECHARGE_NAME)
+                .executes { ctx -> reply(ctx) { sender -> recharge(sender, sender.gameProfile.name) } }
+                .then(
+                    Commands.argument("player", StringArgumentType.word())
+                        .suggests(onlinePlayerNames)
+                        .executes { ctx ->
+                            reply(ctx) { sender ->
+                                recharge(sender, StringArgumentType.getString(ctx, "player"))
+                            }
+                        },
+                ),
+        )
     }
 
     private fun energyArg(ctx: CommandContext<CommandSourceStack>): Int =
@@ -76,6 +91,19 @@ object CrystalCommands {
             Paint.green(target.gameProfile.name),
             " now has ",
             Paint.green(energy),
+            " energy",
+        )
+    }
+
+    private fun recharge(sender: ServerPlayer, targetName: String): Component {
+        RegionsFeature.adminGate(sender)?.let { return it }
+        val target = exactPlayer(sender.level().server, targetName)
+            ?: return notOnline(targetName)
+        CrystalEnergy.setEnergy(target, CrystalEnergy.MAX_ENERGY)
+        return Paint.success(
+            Paint.green(target.gameProfile.name),
+            " now has ",
+            Paint.green(CrystalEnergy.MAX_ENERGY),
             " energy",
         )
     }

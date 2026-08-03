@@ -14,6 +14,7 @@ import net.minecraft.gametest.framework.GameTestHelper
 class CrystalCommandGameTest {
 
     private val command = "set-teleportation-crystal-energy"
+    private val rechargeCommand = "recharge-teleportation-crystal"
 
     @GameTest
     fun noArgumentsRepliesUsageEvenToANonAdmin(helper: GameTestHelper) {
@@ -42,7 +43,7 @@ class CrystalCommandGameTest {
                 listOf("ERROR You must be an admin to use this command"),
                 "the reply to a non-admin",
             )
-            helper.assertValueEqual(CrystalEnergy.energyOf(visitor), 3, "a refused command changes nothing")
+            helper.assertValueEqual(CrystalEnergy.energyOf(visitor), 5, "a refused command changes nothing")
             helper.succeed()
         } finally {
             visitor.leave()
@@ -54,12 +55,12 @@ class CrystalCommandGameTest {
         val admin = MessageCapturingPlayer.join(helper, "CrystalBoss1")
         try {
             admin.makeAdmin()
-            for (energy in listOf(4, -1)) {
+            for (energy in listOf(6, -1)) {
                 admin.messages.clear()
                 admin.runCommand("$command $energy")
                 helper.assertValueEqual(
                     admin.messages.map { it.string },
-                    listOf("ERROR Energy must be between 0 and 3"),
+                    listOf("ERROR Energy must be between 0 and 5"),
                     "the reply to energy $energy",
                 )
             }
@@ -138,7 +139,66 @@ class CrystalCommandGameTest {
                 "the target should be told nothing",
             )
             helper.assertValueEqual(CrystalEnergy.energyOf(target), 0, "the target's energy")
-            helper.assertValueEqual(CrystalEnergy.energyOf(admin), 3, "the sender's own energy is untouched")
+            helper.assertValueEqual(CrystalEnergy.energyOf(admin), 5, "the sender's own energy is untouched")
+            helper.succeed()
+        } finally {
+            admin.leave()
+            target.leave()
+        }
+    }
+
+    @GameTest
+    fun rechargeWithoutPlayerArgumentRefillsTheAdmin(helper: GameTestHelper) {
+        val admin = MessageCapturingPlayer.join(helper, "CrystalRechargeSelf")
+        try {
+            admin.makeAdmin()
+            CrystalEnergy.setEnergy(admin, 1)
+            admin.messages.clear()
+            admin.runCommand(rechargeCommand)
+            helper.assertValueEqual(
+                admin.messages.map { it.string },
+                listOf("SUCCESS CrystalRechargeSelf now has 5 energy"),
+                "the self-recharge reply",
+            )
+            helper.assertValueEqual(CrystalEnergy.energyOf(admin), 5, "the recharged energy")
+            helper.succeed()
+        } finally {
+            admin.leave()
+        }
+    }
+
+    @GameTest
+    fun rechargeIsRefusedForANonAdmin(helper: GameTestHelper) {
+        val visitor = MessageCapturingPlayer.join(helper, "CrystalRechargePretender")
+        try {
+            CrystalEnergy.setEnergy(visitor, 1)
+            visitor.runCommand(rechargeCommand)
+            helper.assertValueEqual(
+                visitor.messages.map { it.string },
+                listOf("ERROR You must be an admin to use this command"),
+                "the non-admin recharge reply",
+            )
+            helper.assertValueEqual(CrystalEnergy.energyOf(visitor), 1, "the refused recharge changes nothing")
+            helper.succeed()
+        } finally {
+            visitor.leave()
+        }
+    }
+
+    @GameTest
+    fun rechargeCanTargetAnotherOnlinePlayer(helper: GameTestHelper) {
+        val admin = MessageCapturingPlayer.join(helper, "CrystalRechargeBoss")
+        val target = MessageCapturingPlayer.join(helper, "CrystalRechargeTarget")
+        try {
+            admin.makeAdmin()
+            CrystalEnergy.setEnergy(target, 0)
+            admin.runCommand("$rechargeCommand CrystalRechargeTarget")
+            helper.assertValueEqual(
+                admin.messages.map { it.string },
+                listOf("SUCCESS CrystalRechargeTarget now has 5 energy"),
+                "the other-player recharge reply",
+            )
+            helper.assertValueEqual(CrystalEnergy.energyOf(target), 5, "the target's recharged energy")
             helper.succeed()
         } finally {
             admin.leave()

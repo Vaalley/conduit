@@ -13,7 +13,7 @@ import net.minecraft.server.level.ServerPlayer
  * `getPlayerByName` compare with `equalsIgnoreCase`, and the rest of this mod
  * uses them (`/msg`, the region commands) precisely because being forgiving
  * about case is friendlier. The crystal's two name arguments do not get that
- * licence: `/set-teleportation-crystal-energy` and
+ * licence: `/set-teleportation-crystal-energy` and `/recharge-teleportation-crystal` and
  * `/teleportation-crystal-accept` both took an exact name in Nucleus, and the
  * second is not typed by hand at all — it arrives from the click event of a
  * message this server wrote, carrying a name this server spelled.

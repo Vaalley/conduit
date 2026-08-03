@@ -127,15 +127,15 @@ object CrystalMenu {
     /**
      * Right-click with a crystal of [tier] (spec story 27). Refuses when a
      * crystal menu is already open, or when the player has too little energy
-     * for this tier — a tier-1 crystal needs a full pool, a tier-3 works down
-     * to one point. Neither refusal costs anything.
+     * for this tier's charges — a tier-1 crystal needs a full pool, a tier-3
+     * works down to one point. Neither refusal costs anything.
      */
     fun use(player: ServerPlayer, tier: Int) {
         if (openMenuOf(player) != null) {
             player.sendSystemMessage(Paint.error("You are already in a teleportation crystal."))
             return
         }
-        if (CrystalEnergy.energyOf(player) <= CrystalEnergy.MAX_ENERGY - tier) {
+        if (CrystalEnergy.energyOf(player) <= CrystalEnergy.MAX_ENERGY - CrystalItem.chargesOf(tier)) {
             player.sendSystemMessage(Paint.error("You have no energy, please wait for a recharge"))
             return
         }

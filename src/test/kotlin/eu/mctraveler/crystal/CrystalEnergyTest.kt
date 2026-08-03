@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 
 /**
- * Crystal energy (spec User Stories 24-25): 0-3 points shared by all a player's
+ * Crystal energy (spec User Stories 24-25): 0-5 points shared by all a player's
  * crystals, one point back per 15 minutes of *play time*, the clock starting
  * when they first drop below full. Nucleus's `modifyEnergy` and its regen task
  * are the behaviour of record.
@@ -32,7 +32,7 @@ class CrystalEnergyTest {
     @Test
     fun `a player never seen before is at full energy with no recharge pending`() {
         val store = store()
-        assertEquals(3, CrystalEnergy.energyOf(store, uuid))
+        assertEquals(5, CrystalEnergy.energyOf(store, uuid))
         assertNull(CrystalEnergy.nextRegenAt(store, uuid))
     }
 
@@ -40,7 +40,7 @@ class CrystalEnergyTest {
     fun `spending the first energy starts the recharge clock 15 play-time minutes out`() {
         val store = store()
         CrystalEnergy.modify(store, uuid, -1, playTimeTicks = 1000)
-        assertEquals(2, CrystalEnergy.energyOf(store, uuid))
+        assertEquals(4, CrystalEnergy.energyOf(store, uuid))
         assertEquals(1000 + 18000, CrystalEnergy.nextRegenAt(store, uuid))
     }
 
@@ -49,23 +49,23 @@ class CrystalEnergyTest {
         val store = store()
         CrystalEnergy.modify(store, uuid, -1, playTimeTicks = 1000)
         CrystalEnergy.modify(store, uuid, -1, playTimeTicks = 5000)
-        assertEquals(1, CrystalEnergy.energyOf(store, uuid))
+        assertEquals(3, CrystalEnergy.energyOf(store, uuid))
         assertEquals(1000 + 18000, CrystalEnergy.nextRegenAt(store, uuid))
     }
 
     @Test
-    fun `energy is clamped to 0 and 3`() {
+    fun `energy is clamped to 0 and 5`() {
         val store = store()
         CrystalEnergy.modify(store, uuid, -9, playTimeTicks = 0)
         assertEquals(0, CrystalEnergy.energyOf(store, uuid))
         CrystalEnergy.modify(store, uuid, +9, playTimeTicks = 0)
-        assertEquals(3, CrystalEnergy.energyOf(store, uuid))
+        assertEquals(5, CrystalEnergy.energyOf(store, uuid))
     }
 
     @Test
     fun `energy survives a fresh store over the same directory`() {
         CrystalEnergy.modify(store(), uuid, -2, playTimeTicks = 400)
-        assertEquals(1, CrystalEnergy.energyOf(store(), uuid))
+        assertEquals(3, CrystalEnergy.energyOf(store(), uuid))
         assertEquals(400 + 18000, CrystalEnergy.nextRegenAt(store(), uuid))
     }
 
@@ -73,7 +73,7 @@ class CrystalEnergyTest {
     fun `a full player never regenerates`() {
         val store = store()
         assertFalse(CrystalEnergy.regen(store, uuid, playTimeTicks = 1_000_000))
-        assertEquals(3, CrystalEnergy.energyOf(store, uuid))
+        assertEquals(5, CrystalEnergy.energyOf(store, uuid))
     }
 
     @Test
@@ -81,9 +81,9 @@ class CrystalEnergyTest {
         val store = store()
         CrystalEnergy.modify(store, uuid, -2, playTimeTicks = 0)
         assertFalse(CrystalEnergy.regen(store, uuid, playTimeTicks = 17999), "not due yet")
-        assertEquals(1, CrystalEnergy.energyOf(store, uuid))
+        assertEquals(3, CrystalEnergy.energyOf(store, uuid))
         assertTrue(CrystalEnergy.regen(store, uuid, playTimeTicks = 18000), "due at the threshold")
-        assertEquals(2, CrystalEnergy.energyOf(store, uuid))
+        assertEquals(4, CrystalEnergy.energyOf(store, uuid))
     }
 
     @Test
@@ -91,11 +91,11 @@ class CrystalEnergyTest {
         val store = store()
         CrystalEnergy.modify(store, uuid, -2, playTimeTicks = 0)
         CrystalEnergy.regen(store, uuid, playTimeTicks = 18000)
-        assertEquals(2, CrystalEnergy.energyOf(store, uuid))
+        assertEquals(4, CrystalEnergy.energyOf(store, uuid))
         assertEquals(36000, CrystalEnergy.nextRegenAt(store, uuid))
         assertFalse(CrystalEnergy.regen(store, uuid, playTimeTicks = 35999))
         assertTrue(CrystalEnergy.regen(store, uuid, playTimeTicks = 36000))
-        assertEquals(3, CrystalEnergy.energyOf(store, uuid))
+        assertEquals(5, CrystalEnergy.energyOf(store, uuid))
     }
 
     @Test
@@ -103,7 +103,7 @@ class CrystalEnergyTest {
         val store = store()
         CrystalEnergy.modify(store, uuid, -1, playTimeTicks = 0)
         assertTrue(CrystalEnergy.regen(store, uuid, playTimeTicks = 18000))
-        assertEquals(3, CrystalEnergy.energyOf(store, uuid))
+        assertEquals(5, CrystalEnergy.energyOf(store, uuid))
         assertNull(CrystalEnergy.nextRegenAt(store, uuid), "a full player has no recharge pending")
     }
 

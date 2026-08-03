@@ -106,7 +106,7 @@ class CrystalMenuGameTest {
                 .let { it as net.minecraft.world.level.block.entity.ChestBlockEntity }
                 .setItem(0, ItemStack(Items.DIAMOND))
             player.standAt(helper, 1.0, 1.0, 2.0)
-            CrystalEnergy.setEnergy(player, 3)
+            CrystalEnergy.setEnergy(player, 5)
             player.usesCrystalOn(helper, chest)
 
             val menu = CrystalMenu.openMenuOf(player)
@@ -118,7 +118,7 @@ class CrystalMenuGameTest {
                 menu.contents().none { it.`is`(Items.DIAMOND) },
                 "the chest opened as well as the menu",
             )
-            helper.assertValueEqual(CrystalEnergy.energyOf(player), 3, "energy for merely opening the menu")
+            helper.assertValueEqual(CrystalEnergy.energyOf(player), 5, "energy for merely opening the menu")
             helper.succeed()
         } finally {
             player.leave()
@@ -429,7 +429,7 @@ class CrystalMenuGameTest {
 
             helper.assertTrue(CrystalMenu.openMenuOf(player) != null, "slot 16 closed the menu")
             helper.assertTrue(player.messages.isEmpty(), "slot 16 said ${player.messages.map { it.string }}")
-            helper.assertValueEqual(CrystalEnergy.energyOf(player), 3, "energy after clicking slot 16")
+            helper.assertValueEqual(CrystalEnergy.energyOf(player), 5, "energy after clicking slot 16")
             helper.succeed()
         } finally {
             player.leave()
@@ -445,7 +445,7 @@ class CrystalMenuGameTest {
         // the menu. Nucleus's synchronous close made this impossible; here the
         // menu identity is what makes the second click stale.
         val player = MessageCapturingPlayer.join(helper, "TCDouble")
-        CrystalEnergy.setEnergy(player, 3)
+        CrystalEnergy.setEnergy(player, 5)
         player.usesCrystal(tier = 3)
         val menu = CrystalMenu.openMenuOf(player)!!
         player.messages.clear()
@@ -456,7 +456,7 @@ class CrystalMenuGameTest {
             try {
                 helper.assertValueEqual(
                     CrystalEnergy.energyOf(player),
-                    2,
+                    4,
                     "energy after double-clicking one destination",
                 )
                 helper.assertOnlyMessage(
@@ -474,7 +474,7 @@ class CrystalMenuGameTest {
     @GameTest
     fun spawnSendsThePlayerToSpawnTownAndCostsOneEnergy(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "TCSpawn")
-        CrystalEnergy.setEnergy(player, 3)
+        CrystalEnergy.setEnergy(player, 5)
         player.usesCrystal(tier = 3)
         player.messages.clear()
 
@@ -490,7 +490,7 @@ class CrystalMenuGameTest {
             helper.assertValueEqual(player.z, -15.5, "spawn z")
             helper.assertValueEqual(player.yRot, 180.0f, "spawn yaw")
             helper.assertValueEqual(player.xRot, 0.0f, "spawn pitch")
-            helper.assertValueEqual(CrystalEnergy.energyOf(player), 2, "energy after a destination")
+            helper.assertValueEqual(CrystalEnergy.energyOf(player), 4, "energy after a destination")
             helper.assertOnlyMessage(
                 player,
                 Paint.info("You used one energy going to ", Paint.aqua("spawn")),
@@ -503,7 +503,7 @@ class CrystalMenuGameTest {
     @GameTest
     fun bedRefusesAPlayerWithNowhereToWakeUpAndCostsNothing(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "TCNoBed")
-        CrystalEnergy.setEnergy(player, 3)
+        CrystalEnergy.setEnergy(player, 5)
         player.usesCrystal(tier = 3)
         player.messages.clear()
 
@@ -513,7 +513,7 @@ class CrystalMenuGameTest {
                 Paint.error("You have no bed to go to"),
                 "the no-bed refusal",
             )
-            helper.assertValueEqual(CrystalEnergy.energyOf(player), 3, "energy after a refused destination")
+            helper.assertValueEqual(CrystalEnergy.energyOf(player), 5, "energy after a refused destination")
         }
     }
 
@@ -530,7 +530,7 @@ class CrystalMenuGameTest {
             ),
             false,
         )
-        CrystalEnergy.setEnergy(player, 3)
+        CrystalEnergy.setEnergy(player, 5)
         player.usesCrystal(tier = 3)
         player.messages.clear()
 
@@ -539,7 +539,7 @@ class CrystalMenuGameTest {
                 player.blockPosition().distSqr(bed) <= 4.0,
                 "the bed destination landed at ${player.blockPosition()}, not near $bed",
             )
-            helper.assertValueEqual(CrystalEnergy.energyOf(player), 2, "energy after the bed destination")
+            helper.assertValueEqual(CrystalEnergy.energyOf(player), 4, "energy after the bed destination")
             helper.assertOnlyMessage(
                 player,
                 Paint.info("You used one energy going to ", Paint.aqua("bed")),
@@ -551,7 +551,7 @@ class CrystalMenuGameTest {
     @GameTest
     fun embassyLandsInTheEmbassiesDimensionAndRecordsAnOrigin(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "TCEmbassy")
-        CrystalEnergy.setEnergy(player, 3)
+        CrystalEnergy.setEnergy(player, 5)
         player.standAt(helper, 1.0, 1.0, 1.0)
         player.usesCrystal(tier = 3)
         player.messages.clear()
@@ -565,7 +565,7 @@ class CrystalMenuGameTest {
             helper.assertValueEqual(player.x, 0.5, "embassy x")
             helper.assertValueEqual(player.y, 1.0, "embassy y")
             helper.assertValueEqual(player.z, 0.5, "embassy z")
-            helper.assertValueEqual(CrystalEnergy.energyOf(player), 2, "energy after the embassy destination")
+            helper.assertValueEqual(CrystalEnergy.energyOf(player), 4, "energy after the embassy destination")
             helper.assertOnlyMessage(
                 player,
                 Paint.info("You used one energy going to ", Paint.aqua("embassy")),
@@ -582,7 +582,7 @@ class CrystalMenuGameTest {
     @GameTest
     fun wildernessRefusesAndCostsNothing(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "TCWild")
-        CrystalEnergy.setEnergy(player, 3)
+        CrystalEnergy.setEnergy(player, 5)
         player.usesCrystal(tier = 3)
         player.messages.clear()
 
@@ -592,7 +592,7 @@ class CrystalMenuGameTest {
                 Paint.error("Sorry, this feature is not available yet"),
                 "the Wilderness refusal",
             )
-            helper.assertValueEqual(CrystalEnergy.energyOf(player), 3, "energy after Wilderness")
+            helper.assertValueEqual(CrystalEnergy.energyOf(player), 5, "energy after Wilderness")
             helper.assertTrue(CrystalMenu.openMenuOf(player) == null, "Wilderness left the menu open")
         }
     }
@@ -610,7 +610,7 @@ class CrystalMenuGameTest {
         for (other in helper.level.server.playerList.players.toList()) {
             if (other !== player) helper.level.server.playerList.remove(other)
         }
-        CrystalEnergy.setEnergy(player, 3)
+        CrystalEnergy.setEnergy(player, 5)
         player.usesCrystal(tier = 3)
         player.messages.clear()
 
@@ -620,7 +620,7 @@ class CrystalMenuGameTest {
                 Paint.error("No-one else is online"),
                 "the alone refusal",
             )
-            helper.assertValueEqual(CrystalEnergy.energyOf(player), 3, "energy after being alone")
+            helper.assertValueEqual(CrystalEnergy.energyOf(player), 5, "energy after being alone")
         }
     }
 
@@ -628,7 +628,7 @@ class CrystalMenuGameTest {
     fun playerOpensAHeadForEveryoneElseOnline(helper: GameTestHelper) {
         val chooser = MessageCapturingPlayer.join(helper, "TCChooser")
         val other = MessageCapturingPlayer.join(helper, "TCChosen")
-        CrystalEnergy.setEnergy(chooser, 3)
+        CrystalEnergy.setEnergy(chooser, 5)
         chooser.usesCrystal(tier = 3)
         PacketCapture.drain(chooser)
 
@@ -656,7 +656,7 @@ class CrystalMenuGameTest {
                 "no head for TCChosen, found ${heads.map { it.get(DataComponents.CUSTOM_NAME)?.string }}",
             )
             // Opening the head GUI is not itself a destination.
-            helper.assertValueEqual(CrystalEnergy.energyOf(chooser), 3, "energy after opening the head menu")
+            helper.assertValueEqual(CrystalEnergy.energyOf(chooser), 5, "energy after opening the head menu")
         }
     }
 
@@ -667,7 +667,7 @@ class CrystalMenuGameTest {
         val requester = MessageCapturingPlayer.join(helper, "TCAsker")
         val target = MessageCapturingPlayer.join(helper, "TCAsked")
         CrystalRequests.clear()
-        CrystalEnergy.setEnergy(requester, 3)
+        CrystalEnergy.setEnergy(requester, 5)
         requester.usesCrystal(tier = 3)
 
         helper.afterClick(requester, PLAYER_SLOT) {
@@ -685,7 +685,7 @@ class CrystalMenuGameTest {
                     Paint.success("One energy used to send request to ", Paint.green("TCAsked")),
                     "the requester's confirmation",
                 )
-                helper.assertValueEqual(CrystalEnergy.energyOf(requester), 2, "energy after asking")
+                helper.assertValueEqual(CrystalEnergy.energyOf(requester), 4, "energy after asking")
 
                 val invitation = target.spokenMessages().singleOrNull()
                 helper.assertTrue(
@@ -724,7 +724,7 @@ class CrystalMenuGameTest {
         val requester = MessageCapturingPlayer.join(helper, "TCComeA")
         val acceptor = MessageCapturingPlayer.join(helper, "TCComeB")
         CrystalRequests.clear()
-        CrystalEnergy.setEnergy(requester, 3)
+        CrystalEnergy.setEnergy(requester, 5)
         acceptor.standAt(helper, 3.0, 1.0, 3.0)
         requester.standAt(helper, 0.0, 1.0, 0.0)
         requester.asksToTeleportTo(acceptor)
@@ -761,7 +761,7 @@ class CrystalMenuGameTest {
         val requester = MessageCapturingPlayer.join(helper, "TCLateA")
         val acceptor = MessageCapturingPlayer.join(helper, "TCLateB")
         CrystalRequests.clear()
-        CrystalEnergy.setEnergy(requester, 3)
+        CrystalEnergy.setEnergy(requester, 5)
         requester.asksToTeleportTo(acceptor)
         CrystalRequests.backdate(CrystalRequests.TIMEOUT_TICKS + 1)
         acceptor.messages.clear()
@@ -868,7 +868,7 @@ class CrystalMenuGameTest {
         val requester = MessageCapturingPlayer.join(helper, "TCGoneA")
         val leaver = MessageCapturingPlayer.join(helper, "TCGoneB")
         CrystalRequests.clear()
-        CrystalEnergy.setEnergy(requester, 3)
+        CrystalEnergy.setEnergy(requester, 5)
         requester.usesCrystal(tier = 3)
 
         helper.afterClick(requester, PLAYER_SLOT) {
@@ -885,7 +885,7 @@ class CrystalMenuGameTest {
                     Paint.error(Paint.red("TCGoneB"), " is not online"),
                     "the departed-target refusal",
                 )
-                helper.assertValueEqual(CrystalEnergy.energyOf(requester), 3, "energy after a vanished target")
+                helper.assertValueEqual(CrystalEnergy.energyOf(requester), 5, "energy after a vanished target")
             }
         }
     }
@@ -967,10 +967,10 @@ class CrystalMenuGameTest {
 
         /** tier, energy, whether the menu opens (story 27). */
         val TIER_ENERGY_CASES = listOf(
-            Triple(1, 3, true),
-            Triple(1, 2, false),
-            Triple(2, 2, true),
-            Triple(2, 1, false),
+            Triple(1, 5, true),
+            Triple(1, 4, false),
+            Triple(2, 3, true),
+            Triple(2, 2, false),
             Triple(3, 1, true),
             Triple(3, 0, false),
         )
