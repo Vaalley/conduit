@@ -68,7 +68,7 @@ object EmbassiesFeature {
      * putting something somewhere. The museum does no populating of its own
      * (deviation 1), whatever the chunk it happens over thinks it is.
      */
-    private fun isTheWorldsOwnDoing(reason: EntitySpawnReason): Boolean = when (reason) {
+    private fun isTheWorldsOwnDoing(reason: EntitySpawnReason?): Boolean = when (reason) {
         EntitySpawnReason.NATURAL,
         EntitySpawnReason.CHUNK_GENERATION,
         EntitySpawnReason.SPAWNER,
@@ -97,8 +97,11 @@ object EmbassiesFeature {
      *
      * Everything a person put there stays: item frames, paintings, armour
      * stands, and the animals somebody penned on a plot as part of the exhibit.
+     *
+     * A null [reason] is an arrival that named none — nothing the world can be
+     * held to have done, so only the hostile half of the rule can judge it.
      */
-    fun accepts(entity: Entity, reason: EntitySpawnReason): Boolean =
+    fun accepts(entity: Entity, reason: EntitySpawnReason?): Boolean =
         entity !is Enemy && !isTheWorldsOwnDoing(reason)
 
     /**
