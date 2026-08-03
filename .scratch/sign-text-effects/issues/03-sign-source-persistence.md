@@ -50,12 +50,19 @@ stored below `mctraveler:sign_sources` by the `saveAdditional` and
 
 The seam investigation used the 26.2 bytecode for
 `updateSignText(Player, boolean, List<FilteredText>)`. Vanilla calls
-`setMessages` and then invokes `setAllowedPlayerEditor(null)` before sending
-the block update. Reconciliation is injected at that successful
-`setAllowedPlayerEditor(UUID)` invocation, before the clear, so it receives
-the edited face directly and does not retain temporary face state between
-players or edits. Refusal paths for waxed signs and foreign editors do not
-reach this invocation.
+`updateText(UnaryOperator<SignText>, boolean)` once, at ordinal 0; the
+operator then calls `setMessages`, followed by one
+`setAllowedPlayerEditor(null)` invocation before the block update. The mixin
+wraps that ordinal-0 `updateText` argument, so the vanilla result is
+reconciled and returned to the same update path without a second `setText`
+call or block update. The player, face, and submitted lines are captured
+directly from the method arguments, and refusal paths do not reach the call.
+
+This consolidates the ticket-02 rendering and ticket-03 reconciliation into
+one path. It keeps the ticket-02 RETURN seam's externally visible behavior,
+but no longer uses that redundant injection: both variants are always
+rendered, diagnostics are deduplicated, and the returned `SignText` is the
+one vanilla applies.
 
 For each raw line, a submitted string equal to
 `render(storedSource).component.getString()` keeps the stored source;

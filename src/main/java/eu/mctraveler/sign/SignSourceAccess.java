@@ -5,7 +5,7 @@ package eu.mctraveler.sign;
  */
 public interface SignSourceAccess {
 
-    String mctraveler$getSource(boolean front, int line);
+    String signSource(boolean front, int line);
 
-    void mctraveler$setSource(boolean front, int line, String source);
+    void setSignSource(boolean front, int line, String source);
 }

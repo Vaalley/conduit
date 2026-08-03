@@ -1,8 +1,11 @@
 package eu.mctraveler.mixin;
 
+import com.llamalad7.mixinextras.sugar.Local;
 import eu.mctraveler.sign.SignFeature;
 import eu.mctraveler.sign.SignSourceAccess;
+import java.util.Arrays;
 import java.util.List;
+import java.util.function.UnaryOperator;
 import net.minecraft.server.network.FilteredText;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
@@ -13,8 +16,8 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * Re-renders submitted sign lines and stores their authored markup.
@@ -31,31 +34,27 @@ public abstract class SignBlockEntityMixin implements SignSourceAccess {
     @Unique
     private final String[] mctraveler$backSources = new String[4];
 
-    @Inject(method = "setMessages", at = @At("RETURN"), cancellable = true)
-    private void mctraveler$renderSubmittedLines(
-            Player player,
-            List<FilteredText> lines,
-            SignText text,
-            CallbackInfoReturnable<SignText> cir) {
-        cir.setReturnValue(SignFeature.renderSubmittedLines(player, lines, cir.getReturnValue()));
-    }
-
-    @Inject(
+    @ModifyArg(
             method = "updateSignText",
             at = @At(
                     value = "INVOKE",
-                    target = "Lnet/minecraft/world/level/block/entity/SignBlockEntity;setAllowedPlayerEditor(Ljava/util/UUID;)V"
-            )
+                    target = "Lnet/minecraft/world/level/block/entity/SignBlockEntity;updateText(Ljava/util/function/UnaryOperator;Z)Z",
+                    ordinal = 0
+            ),
+            index = 0
     )
-    private void mctraveler$reconcileSource(
-            Player player,
-            boolean front,
-            List<FilteredText> lines,
-            CallbackInfo ci) {
-        SignFeature.reconcileSubmittedLines(
-                (SignBlockEntity) (Object) this,
+    private UnaryOperator<SignText> mctraveler$reconcileSource(
+            UnaryOperator<SignText> vanillaUpdate,
+            @Local(argsOnly = true) Player player,
+            @Local(argsOnly = true) boolean front,
+            @Local(argsOnly = true) List<FilteredText> lines) {
+        SignBlockEntity sign = (SignBlockEntity) (Object) this;
+        return text -> SignFeature.reconcileSubmittedLines(
+                sign,
+                player,
                 front,
-                lines);
+                lines,
+                vanillaUpdate.apply(text));
     }
 
     @Inject(method = "saveAdditional", at = @At("TAIL"))
@@ -71,8 +70,8 @@ public abstract class SignBlockEntityMixin implements SignSourceAccess {
 
     @Inject(method = "loadAdditional", at = @At("TAIL"))
     private void mctraveler$loadSources(ValueInput input, CallbackInfo ci) {
-        java.util.Arrays.fill(mctraveler$frontSources, null);
-        java.util.Arrays.fill(mctraveler$backSources, null);
+        Arrays.fill(mctraveler$frontSources, null);
+        Arrays.fill(mctraveler$backSources, null);
         input.child(MCTRAVELER$SOURCE_KEY).ifPresent(sources -> {
             mctraveler$loadFace(sources, "front", mctraveler$frontSources);
             mctraveler$loadFace(sources, "back", mctraveler$backSources);
@@ -118,12 +117,12 @@ public abstract class SignBlockEntityMixin implements SignSourceAccess {
     }
 
     @Override
-    public String mctraveler$getSource(boolean front, int line) {
+    public String signSource(boolean front, int line) {
         return (front ? mctraveler$frontSources : mctraveler$backSources)[line];
     }
 
     @Override
-    public void mctraveler$setSource(boolean front, int line, String source) {
+    public void setSignSource(boolean front, int line, String source) {
         (front ? mctraveler$frontSources : mctraveler$backSources)[line] = source;
     }
 }
