@@ -191,3 +191,15 @@ tasks.register<JavaExec>("chunkProbe") {
     classpath = sourceSets["main"].runtimeClasspath
     mainClass = "eu.mctraveler.importer.ChunkProbeMain"
 }
+
+// Runs the audit's villager cross-check against a dimension nothing has moved, so
+// that "the merge lost these records" can be told from "these memories were
+// already dangling". The third live merge refused over 1222 of them.
+//
+//   ./gradlew poiCrossCheck --args="<dimension folder>"
+tasks.register<JavaExec>("poiCrossCheck") {
+    group = "migration"
+    description = "Counts villager memories with no point-of-interest record, on unrelocated source data."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass = "eu.mctraveler.importer.PoiCrossCheckMain"
+}
