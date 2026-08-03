@@ -444,6 +444,30 @@ class WorldMergeAuditTest {
     }
 
     @Test
+    fun `a bee put away in a hive is not standing anywhere, and is not refused over`() {
+        // The 221 coordinates that refused the live merge, all of one kind. A placed
+        // hive's stored bee carries the `Pos` it had when it went in, nothing ever
+        // reads it back — vanilla positions the bee at the hive on release — and the
+        // relocation tool leaves it alone. Refusing over it is refusing over a
+        // fossil, and it cost two full runs of an hour and three quarters each
+        // before the refusal said how many kinds there were rather than showing
+        // eight examples of one.
+        beeNest()
+
+        val report = merge()
+
+        // The fossil stayed a fossil: unmoved, unrefused-over.
+        val nest = blockEntityIn(relocated("region", "chunk"), "minecraft:bee_nest")
+        val bee = storedBeeIn(nest)
+        val pos = bee.getListOrEmpty(CoordinateBearingChunks.POS)
+        assertEquals(CoordinateBearingChunks.BEE_NEST_FLOWER.x + 0.5, pos.getDoubleOr(0, 0.0))
+        assertEquals(CoordinateBearingChunks.BEE_NEST_FLOWER.z + 0.5, pos.getDoubleOr(2, 0.0))
+        // And the places it *remembers* are still places, so they still moved.
+        assertEquals(merged(CoordinateBearingChunks.LEASH_KNOT).toList(), intArrayIn(bee, "hive_pos"))
+        assertEquals(CHUNKS_RELOCATED, report.audit.chunksAudited)
+    }
+
+    @Test
     fun `the report names every coordinate the completion pass had to finish`() {
         // Ticket 03 refused to let the audit repair structural leftovers, because an
         // audit that patches over the relocation's gaps stops being able to tell

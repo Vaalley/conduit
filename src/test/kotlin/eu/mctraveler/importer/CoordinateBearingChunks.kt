@@ -69,6 +69,8 @@ object CoordinateBearingChunks {
     val BEE = Triple(87.0, 64.0, 55.0)
 
     /** The nest block itself, and the flower its bees were working. */
+    const val POS = "Pos"
+
     val BEE_NEST = Block(93, 64, 61)
     val BEE_NEST_FLOWER = Block(94, 64, 62)
 
@@ -265,6 +267,19 @@ object CoordinateBearingChunks {
                                         CompoundTag().apply {
                                             putString("id", "minecraft:bee")
                                             putIntArray("hive_pos", hive.toIntArray())
+                                            // Where it was when it went in, which is
+                                            // nowhere now. The live merge refused over
+                                            // 221 of these; vanilla overwrites the
+                                            // position when the hive lets the bee out,
+                                            // so it is a fossil and not a place.
+                                            put(
+                                                POS,
+                                                ListTag().apply {
+                                                    add(DoubleTag.valueOf(BEE_NEST_FLOWER.x + 0.5))
+                                                    add(DoubleTag.valueOf(BEE_NEST_FLOWER.y.toDouble()))
+                                                    add(DoubleTag.valueOf(BEE_NEST_FLOWER.z + 0.5))
+                                                },
+                                            )
                                         },
                                     )
                                     putInt("ticks_in_hive", 0)

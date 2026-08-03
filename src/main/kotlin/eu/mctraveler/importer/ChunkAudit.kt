@@ -288,7 +288,7 @@ class ChunkAudit(
 
         // ---- the generic walk -----------------------------------------------
 
-        private fun audit(tag: CompoundTag, what: String) {
+        private fun audit(tag: CompoundTag, what: String, stored: Boolean = false) {
             // The name of the nearest thing that has one, so a finding reads
             // "minecraft:item_frame.block_pos" rather than a path from the root.
             val here = tag.getStringOr(ID, "").ifEmpty { what }
@@ -310,14 +310,21 @@ class ChunkAudit(
                     // either decision on its own.
                     key in OPAQUE -> Unit
                     // A place; every other list of three doubles is a velocity.
-                    key == POS && value is ListTag && value.size == VEC3_LENGTH -> coordinate(
-                        "$here.$key",
-                        value.getDoubleOr(0, 0.0).toInt(),
-                        value.getDoubleOr(1, 0.0).toInt(),
-                        value.getDoubleOr(2, 0.0).toInt(),
-                    )
-                    value is CompoundTag -> audit(value, "$here.$key")
-                    value is ListTag -> value.forEach { if (it is CompoundTag) audit(it, "$here.$key") }
+                    // Unless it belongs to an entity that is put away somewhere —
+                    // see [stored].
+                    key == POS && value is ListTag && value.size == VEC3_LENGTH ->
+                        if (!stored) {
+                            coordinate(
+                                "$here.$key",
+                                value.getDoubleOr(0, 0.0).toInt(),
+                                value.getDoubleOr(1, 0.0).toInt(),
+                                value.getDoubleOr(2, 0.0).toInt(),
+                            )
+                        }
+                    value is CompoundTag -> audit(value, "$here.$key", stored || key in STORED_ENTITY)
+                    value is ListTag -> value.forEach {
+                        if (it is CompoundTag) audit(it, "$here.$key", stored || key in STORED_ENTITY)
+                    }
                     value is IntArrayTag -> tag.getIntArray(key).orElse(null)?.let {
                         if (it.size == BLOCK_POS_LENGTH) coordinate("$here.$key", it[0], it[1], it[2])
                     }
@@ -652,6 +659,28 @@ class ChunkAudit(
 
         /** The three memories a villager claims a point of interest with. */
         private val CLAIMED_PLACES = listOf("minecraft:home", "minecraft:job_site", "minecraft:meeting_point")
+
+        /**
+         * The keys under which an entity is *put away* rather than standing in
+         * the world.
+         *
+         * Inside one of these, `Pos` is not a place. A bee in a hive is the case
+         * that proved it: the live merge refused over 221 of them, all in placed
+         * `minecraft:beehive` block entities at `bees[].entity_data`, each one
+         * remembering the flower it was at when it went in. Nothing reads that
+         * back — when a hive releases an occupant, vanilla positions the bee at
+         * the hive and overwrites it — so it is a fossil, and refusing a merge
+         * over a fossil is refusing over nothing.
+         *
+         * **Only `Pos`, and this is the whole subtlety.** The walk keeps
+         * descending, because the *other* coordinates in there are real: a
+         * stored bee's `hive_pos` and `flower_pos` are int arrays naming world
+         * blocks, those blocks moved, and ticket 17 built the completion pass to
+         * finish exactly them. So the rule is not "stored entities are opaque"
+         * — it is "a stored entity is not standing anywhere, but the places it
+         * remembers are still places".
+         */
+        private val STORED_ENTITY = setOf("entity_data", "EntityData")
 
         /**
          * The arbitrary-NBT escape hatches, whose contents are somebody's stored
