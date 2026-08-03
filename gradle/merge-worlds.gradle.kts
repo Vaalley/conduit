@@ -203,3 +203,15 @@ tasks.register<JavaExec>("poiCrossCheck") {
     classpath = sourceSets["main"].runtimeClasspath
     mainClass = "eu.mctraveler.importer.PoiCrossCheckMain"
 }
+
+// Reads every saved map the way the server does, before anything rewrites them.
+// A byte-scan of these files gave answers that could not all be true, and a sweep
+// built on that would have been guesswork over 7,372 files.
+//
+//   ./gradlew mapProbe --args="<world>/data/minecraft/maps"
+tasks.register<JavaExec>("mapProbe") {
+    group = "migration"
+    description = "Reports the dimension and centre of every saved map, by kind."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass = "eu.mctraveler.importer.MapProbeMain"
+}
