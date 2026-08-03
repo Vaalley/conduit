@@ -13,9 +13,13 @@ import net.minecraft.core.BlockPos
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.attribute.EnvironmentAttributes
+import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.EntitySpawnReason
+import net.minecraft.world.entity.EntityTypes
 import net.minecraft.world.entity.MobCategory
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.Blocks
+import net.minecraft.world.phys.AABB
 import net.minecraft.world.phys.Vec3
 
 /**
@@ -81,6 +85,108 @@ class EmbassiesGameTest {
         }
         helper.succeed()
     }
+
+    // ---- nothing spawns, nothing hostile stays ----
+
+    /**
+     * The case the biome above cannot make. An imported plot is Nucleus's own
+     * chunk, and it carries `minecraft:plains` in its sections — spawn list and
+     * all — so the empty biome only ever covered the air the server generated
+     * for itself. This asserts the dimension, not the biome: whatever the chunk
+     * under it says, the museum stands still.
+     */
+    @GameTest
+    fun theWorldSpawnsNothingOfItsOwnHereWhateverTheChunkSaysItIs(helper: GameTestHelper) {
+        val level = embassies(helper)
+
+        for (reason in listOf(
+            EntitySpawnReason.NATURAL,
+            EntitySpawnReason.CHUNK_GENERATION,
+            EntitySpawnReason.SPAWNER,
+            EntitySpawnReason.TRIAL_SPAWNER,
+        )) {
+            val at = BlockPos(2000, 1, 2000)
+            EntityTypes.COW.spawn(level, at, reason)
+            helper.assertValueEqual(
+                level.getEntitiesOfClass(Entity::class.java, boxAround(at)).size,
+                0,
+                "what the embassies dimension held after a $reason spawn",
+            )
+        }
+        helper.succeed()
+    }
+
+    /**
+     * Hostile mobs are turned away however they arrive — including out of the
+     * save, which is what clears the creepers and slimes the plots were
+     * imported carrying.
+     */
+    @GameTest
+    fun nothingHostileIsHeldHereNoMatterWhatBroughtIt(helper: GameTestHelper) {
+        val level = embassies(helper)
+
+        for (reason in listOf(
+            EntitySpawnReason.LOAD,
+            EntitySpawnReason.COMMAND,
+            EntitySpawnReason.SPAWN_ITEM_USE,
+        )) {
+            val at = BlockPos(2100, 1, 2100)
+            EntityTypes.CREEPER.spawn(level, at, reason)
+            helper.assertValueEqual(
+                level.getEntitiesOfClass(Entity::class.java, boxAround(at)).size,
+                0,
+                "the creepers the embassies dimension held after a $reason spawn",
+            )
+        }
+        helper.succeed()
+    }
+
+    /**
+     * The other half of the same rule: what a person put on a plot is the
+     * exhibit, and it is left exactly where it is. A sweep that took the item
+     * frames and the penned animals with it would be the worse bug.
+     */
+    @GameTest
+    fun whatSomebodyPutOnAPlotStays(helper: GameTestHelper) {
+        val level = embassies(helper)
+
+        for (type in listOf(EntityTypes.ARMOR_STAND, EntityTypes.COW)) {
+            val at = BlockPos(2200, 1, 2200)
+            val placed = type.spawn(level, at, EntitySpawnReason.COMMAND)
+            helper.assertTrue(
+                placed != null && !placed.isRemoved,
+                "the embassies dimension turned away a ${type.description.string} somebody placed",
+            )
+            placed?.discard()
+        }
+        // And the save hands the same things back on the next chunk load.
+        for (type in listOf(EntityTypes.ARMOR_STAND, EntityTypes.COW)) {
+            val at = BlockPos(2300, 1, 2300)
+            val loaded = type.spawn(level, at, EntitySpawnReason.LOAD)
+            helper.assertTrue(
+                loaded != null && !loaded.isRemoved,
+                "the embassies dimension dropped a ${type.description.string} its save was holding",
+            )
+            loaded?.discard()
+        }
+        helper.succeed()
+    }
+
+    /** The rule applies to this dimension alone: the map still spawns its own. */
+    @GameTest
+    fun theRestOfTheMapSpawnsAsItAlwaysDid(helper: GameTestHelper) {
+        val at = helper.absolutePos(BlockPos(1, 2, 1))
+        val cow = EntityTypes.COW.spawn(helper.level, at, EntitySpawnReason.NATURAL)
+        val creeper = EntityTypes.CREEPER.spawn(helper.level, at, EntitySpawnReason.NATURAL)
+
+        helper.assertTrue(cow != null && !cow.isRemoved, "a natural cow was turned away outside embassies")
+        helper.assertTrue(creeper != null && !creeper.isRemoved, "a natural creeper was turned away outside embassies")
+        cow?.discard()
+        creeper?.discard()
+        helper.succeed()
+    }
+
+    private fun boxAround(pos: BlockPos): AABB = AABB(pos).inflate(8.0)
 
     // ---- the synthetic world region ----
 
