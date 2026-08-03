@@ -187,11 +187,11 @@ Nothing about Secondary's own chunk data is modified by any of this: the merge o
 `--worlds move` is deliberately not offered, because a moved source would compromise the backup
 that is your rollback — so Secondary's folders come out of a merge byte-for-byte identical.
 
-### Five things a real save taught us that a test save cannot
+### Six things a real save taught us that a test save cannot
 
 Every fixture in the test suite is a handful of chunks written by a 26.2 server. A live
 Secondary is six million chunks written by a decade of Minecraft versions, and the difference is
-not one of degree. All five of these were found by rehearsing against real data, and every one
+not one of degree. All six of these were found by rehearsing against real data, and every one
 of them would otherwise have been found in the downtime window.
 
 **Run it under `script`, not through a pipe.** Gradle's output is block-buffered when its stdout
@@ -247,6 +247,32 @@ The general shape, for the next one of these: when the audit names a coordinate,
 in the NBT it lives* before deciding anything. `./gradlew chunkProbe --args="<region folder>
 <chunkX> <chunkZ>"` prints the path to it. The refusal names the field but not the route, and
 the same field name means different things on different routes.
+
+**A villager remembering a place is not evidence that the place was ever there.** The audit
+cross-checks every villager memory against the point-of-interest records, and on the live save
+that refused the merge over 1222 of them. It was the wrong question asked of the wrong world:
+whether a missing record is the *merge's* doing is a question about Secondary, not about the
+staging area.
+
+Running the same check against unrelocated Secondary answered it — 252 of its 12,335 memories
+already pointed at nothing, including one meeting point eight villagers share, which is a bell
+somebody broke years ago and not eight faults. The check now un-shifts each memory and asks the
+source:
+
+| What the source says | What it means | What the merge does |
+| --- | --- | --- |
+| the position is outside the border | the operator clipped it | counts it |
+| no record there either | already dangling, for years | counts it |
+| a record was there | the relocation dropped it | names it |
+
+That cut 1222 to 25. Those 25 are a real MCA Selector defect — records that existed and did not
+arrive — and they are reported rather than refused over, because the bed and the bell themselves
+moved (the sampled diff and a clean coordinate audit both attest) and a villager whose home does
+not resolve re-claims a free one on load. Vanilla repairs it without being asked.
+
+The general lesson is the one the bees taught in a different shape: **before treating a finding
+as damage, find out whether it was already true.** A decade-old world is full of things that look
+broken to a checker seeing it for the first time.
 
 ## Run it
 
@@ -331,6 +357,28 @@ from a hang took `/proc/<pid>/io` sampling, an `ls -l /proc/<pid>/fd` to see whi
 was open, and a `jstack` to read the stack. Nobody should have to do that at 2am (ticket 20).
 
 Plain newlines, never a redrawn line, so the `script` capture stays readable afterwards.
+
+### How long it takes
+
+Measured on the live save — Secondary at ~85 GB and about six million chunks, single-threaded
+relocation, spinning disks:
+
+| Phase | Time |
+| --- | --- |
+| Moving the chunks across (selection + import) | 50–52 min |
+| Spot-checking the moved terrain | under a second |
+| Finishing the coordinates the tool left behind | 26 min |
+| Checking every coordinate arrived | 26 min |
+| Everything after the audit | minutes |
+| **Start to audit verdict** | **1h 43m – 1h 45m** |
+
+Four runs landed within two minutes of each other on every phase, so these are numbers to plan a
+downtime window with rather than an order of magnitude. Budget two hours and tell people two and
+a half.
+
+The one that surprises people is the spot-check: it compares whole chunks block-for-block against
+their sources and finishes before you can read the line, because it samples rather than sweeps.
+The two 26-minute phases are the ones that touch every region file twice over.
 
 ### The report
 

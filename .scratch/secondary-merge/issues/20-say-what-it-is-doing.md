@@ -21,7 +21,7 @@ reported.
 
 **Blocked by:** None.
 
-**Status:** in-progress — everything but the runbook timings, which want real numbers from the run in flight
+**Status:** done
 
 - [x] Each phase announces itself when it starts, so the sequence is visible as it happens
       rather than only in the final report
@@ -35,7 +35,7 @@ reported.
       `jstack`, no `/proc`, and no knowledge of the source
 - [x] The final report is unchanged — it is what the operator keeps, and this ticket adds to
       what they see on the way, rather than replacing it
-- [ ] The timings each phase reports are recorded in the runbook, so the next migration starts
+- [x] The timings each phase reports are recorded in the runbook, so the next migration starts
       with real numbers instead of an estimate
 
 ## Comments
@@ -67,3 +67,12 @@ the walk covered both at once — and the walk was already the only thing that k
 One line per hundred region files: about four hundred lines a walk on the live save. Often
 enough that a stall shows inside a minute or two, rarely enough that the captured log stays
 readable.
+
+### The numbers, once there were numbers
+
+Four live runs landed within two minutes of each other on every phase, which is the point of the
+ticket: relocation 50–52 min, spot-check under a second, completion pass 26 min, audit 26 min,
+audit verdict at 1h 43m–1h 45m. Recorded in `docs/merge.md` under "How long it takes".
+
+The estimate this ticket was written against guessed the audit at 33 minutes from a read rate. It
+was 26. Nobody could have known either number without the phase saying so.
