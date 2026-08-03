@@ -12,6 +12,7 @@ private data class SignMarkupSpan(
     val text: String,
     val style: Style,
     val effect: SignMarkupEffect?,
+    val effectRegion: Int?,
 )
 
 private sealed interface SignMarkupEffect {
@@ -24,6 +25,7 @@ private data class OpenSignMarkupTag(
     val name: String,
     val previousStyle: Style,
     val effect: SignMarkupEffect?,
+    val effectRegion: Int?,
 )
 
 private data class ParsedSignMarkup(
@@ -72,7 +74,7 @@ object SignMarkup {
         limits: SignMarkupLimits = SignMarkupLimits.DEFAULT,
     ): SignMarkupResult {
         val parsed = parse(source)
-        val expanded = parsed.spans.flatMap(::expand)
+        val expanded = expand(parsed.spans)
         if (expanded.size > limits.maxComponentsPerLine) {
             return SignMarkupResult(
                 component = Component.literal(parsed.plain),
@@ -102,14 +104,18 @@ object SignMarkup {
         val tags = ArrayDeque<OpenSignMarkupTag>()
         var style = Style.EMPTY
         var hadMarkup = false
+        var nextEffectRegion = 0
 
-        fun activeEffect(): SignMarkupEffect? =
-            tags.lastOrNull { it.effect != null }?.effect
+        fun activeEffect(): Pair<SignMarkupEffect, Int>? =
+            tags.lastOrNull { it.effect != null }?.let {
+                it.effect!! to it.effectRegion!!
+            }
 
         fun flush() {
             if (text.isEmpty()) return
             val value = text.toString()
-            spans += SignMarkupSpan(value, style, activeEffect())
+            val effect = activeEffect()
+            spans += SignMarkupSpan(value, style, effect?.first, effect?.second)
             plain.append(value)
             text.clear()
         }
@@ -171,6 +177,7 @@ object SignMarkup {
                         flush()
                         val name = contents.substring(1).lowercase()
                         if (tags.isEmpty()) {
+                            literal(rawTag)
                             problem("closing tag with nothing open", index)
                         } else if (name.isNotEmpty() && name !in tags.map { it.name }) {
                             literal(rawTag)
@@ -182,6 +189,7 @@ object SignMarkup {
                             val tag = tags.removeLast()
                             style = tag.previousStyle
                         } else {
+                            literal(rawTag)
                             problem("closing tag does not match the open tag", index)
                         }
                     } else {
@@ -195,7 +203,17 @@ object SignMarkup {
                             style = Style.EMPTY
                         } else {
                             flush()
-                            tags.addLast(OpenSignMarkupTag(tag.name, style, tag.effect))
+                            val effectRegion = tag.effect?.let {
+                                nextEffectRegion++
+                            }
+                            tags.addLast(
+                                OpenSignMarkupTag(
+                                    tag.name,
+                                    style,
+                                    tag.effect,
+                                    effectRegion,
+                                ),
+                            )
                             style = tag.style(style)
                         }
                     }
@@ -293,25 +311,42 @@ object SignMarkup {
         style: (Style) -> Style,
     ): ParsedTag = ParsedTag(name, style = style)
 
-    private fun expand(span: SignMarkupSpan): List<SignMarkupSpan> {
-        val effect = span.effect ?: return listOf(span)
-        val characters = span.text.codePoints()
-            .toArray()
-            .map { String(Character.toChars(it)) }
-        if (characters.isEmpty()) return emptyList()
+    private fun expand(spans: List<SignMarkupSpan>): List<SignMarkupSpan> {
+        val regionSizes = spans
+            .filter { it.effect != null }
+            .groupingBy { it.effectRegion!! }
+            .fold(0) { count, span -> count + span.text.codePointCount(0, span.text.length) }
+        val regionOffsets = mutableMapOf<Int, Int>()
 
-        return characters.mapIndexed { index, character ->
-            val color = when (effect) {
-                is SignMarkupEffect.Gradient -> gradientColor(effect.stops, index, characters.size)
-                is SignMarkupEffect.Rainbow -> hsvColor(
-                    hue = (effect.degrees + index * 360.0 / characters.size) / 360.0,
+        return spans.flatMap { span ->
+            val effect = span.effect ?: return@flatMap listOf(span)
+            val region = span.effectRegion!!
+            val characters = span.text.codePoints()
+                .toArray()
+                .map { String(Character.toChars(it)) }
+            if (characters.isEmpty()) {
+                return@flatMap emptyList()
+            }
+
+            val offset = regionOffsets[region] ?: 0
+            val size = regionSizes.getValue(region)
+            regionOffsets[region] = offset + characters.size
+            characters.mapIndexed { index, character ->
+                val position = offset + index
+                val color = when (effect) {
+                    is SignMarkupEffect.Gradient ->
+                        gradientColor(effect.stops, position, size)
+                    is SignMarkupEffect.Rainbow -> hsvColor(
+                        hue = (effect.degrees + position * 360.0 / size) / 360.0,
+                    )
+                }
+                SignMarkupSpan(
+                    text = character,
+                    style = span.style.withColor(color),
+                    effect = null,
+                    effectRegion = null,
                 )
             }
-            SignMarkupSpan(
-                text = character,
-                style = span.style.withColor(color),
-                effect = null,
-            )
         }
     }
 

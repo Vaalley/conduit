@@ -146,6 +146,23 @@ class SignMarkupTest {
     }
 
     @Test
+    fun `gradient continues across nested decoration spans`() {
+        val result = SignMarkup.render("<gradient:#ff0000:#0000ff>AB<bold>CD</bold></gradient>")
+
+        assertEquals(
+            listOf(
+                "A" to 0xff0000 to false,
+                "B" to 0xaa0055 to false,
+                "C" to 0x5500aa to true,
+                "D" to 0x0000ff to true,
+            ),
+            result.component.toFlatList().map {
+                it.string to it.style.color?.value to it.style.isBold
+            },
+        )
+    }
+
+    @Test
     fun `rainbow uses a full HSV cycle with an optional hue offset`() {
         val result = SignMarkup.render("<rainbow:90>ABCD</rainbow>")
 
@@ -157,6 +174,23 @@ class SignMarkupTest {
                 0xff0000,
             ),
             result.component.toFlatList().map { it.style.color?.value },
+        )
+    }
+
+    @Test
+    fun `rainbow continues across nested decoration spans`() {
+        val result = SignMarkup.render("<rainbow>AB<bold>CD</bold></rainbow>")
+
+        assertEquals(
+            listOf(
+                "A" to 0xff0000 to false,
+                "B" to 0x80ff00 to false,
+                "C" to 0x00ffff to true,
+                "D" to 0x8000ff to true,
+            ),
+            result.component.toFlatList().map {
+                it.string to it.style.color?.value to it.style.isBold
+            },
         )
     }
 
@@ -237,8 +271,16 @@ class SignMarkupTest {
     fun `closing with nothing open is ignored and reported`() {
         val result = SignMarkup.render("x</missing>y")
 
-        assertEquals("xy", result.component.string)
+        assertEquals("x</missing>y", result.component.string)
         assertEquals("closing tag with nothing open", result.problems.single().message)
+    }
+
+    @Test
+    fun `mismatched closing tags remain visible and are reported`() {
+        val result = SignMarkup.render("<red><bold>x</red>y")
+
+        assertEquals("x</red>y", result.component.string)
+        assertEquals("closing tag does not match the open tag", result.problems.single().message)
     }
 
     @Test
