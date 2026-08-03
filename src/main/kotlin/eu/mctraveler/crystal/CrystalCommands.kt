@@ -8,6 +8,7 @@ import com.mojang.brigadier.context.CommandContext
 import com.mojang.brigadier.suggestion.SuggestionProvider
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.text.Paint
+import eu.mctraveler.worlds.Landing
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
 import net.minecraft.commands.SharedSuggestionProvider
@@ -17,6 +18,7 @@ import net.minecraft.server.level.ServerPlayer
 /**
  * `/set-teleportation-crystal-energy <energy> [player]` (spec User Story 37).
  * `/recharge-teleportation-crystal [player]` recharges a player's pool fully.
+ * `/spawn1` and `/spawn2` teleport the sender to the free crystal spawns.
  *
  * Nucleus sent both the bounds error and the success line to the *target*,
  * leaving the sender staring at nothing after setting someone else's energy —
@@ -68,6 +70,14 @@ object CrystalCommands {
                         },
                 ),
         )
+        dispatcher.register(
+            Commands.literal("spawn1")
+                .executes { ctx -> reply(ctx) { sender -> spawn(sender, CrystalSpawns::spawn1, "spawn 1") } },
+        )
+        dispatcher.register(
+            Commands.literal("spawn2")
+                .executes { ctx -> reply(ctx) { sender -> spawn(sender, CrystalSpawns::spawn2, "spawn 2") } },
+        )
     }
 
     private fun energyArg(ctx: CommandContext<CommandSourceStack>): Int =
@@ -106,6 +116,15 @@ object CrystalCommands {
             Paint.green(CrystalEnergy.MAX_ENERGY),
             " energy",
         )
+    }
+
+    private fun spawn(
+        sender: ServerPlayer,
+        landing: (ServerPlayer) -> Landing,
+        name: String,
+    ): Component {
+        landing(sender).send(sender)
+        return Paint.success("Arrived at ", Paint.green(name))
     }
 
     private inline fun reply(

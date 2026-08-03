@@ -2,9 +2,7 @@ package eu.mctraveler.crystal
 
 import eu.mctraveler.embassy.EmbassiesFeature
 import eu.mctraveler.text.Paint
-import eu.mctraveler.worlds.DimensionRole
 import eu.mctraveler.worlds.Landing
-import eu.mctraveler.worlds.WorldsFeature
 import java.util.UUID
 import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
@@ -22,7 +20,6 @@ import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 import net.minecraft.world.item.component.ResolvableProfile
 import net.minecraft.world.item.component.TooltipDisplay
-import net.minecraft.world.level.Level
 import net.minecraft.world.level.portal.TeleportTransition
 
 /**
@@ -30,8 +27,9 @@ import net.minecraft.world.level.portal.TeleportTransition
  * `createTeleportationCrystalInventory`, `createPlayersInventory`,
  * `useTeleportationCrystal` and `TeleportationCrystalListener.onInventoryClick`).
  *
- * Right-clicking a crystal opens a chest GUI of five destinations; picking one
- * closes the menu, moves the player, and spends a point of [CrystalEnergy].
+ * Right-clicking a crystal opens a chest GUI of six destinations; picking one
+ * closes the menu, moves the player, and spends a point of [CrystalEnergy]
+ * unless it is one of the two free spawns.
  * Picking *Player* opens a second GUI of everyone else online, and clicking a
  * head sends them a teleport request ([CrystalRequests]).
  *
@@ -53,16 +51,10 @@ object CrystalMenu {
     /** The head GUI's title. */
     const val PLAYERS_TITLE = "Select a player"
 
-    /** The slot Nucleus's first destination sits in. */
+    /** The slot the first destination sits in. */
     const val FIRST_ACTION_SLOT = 11
 
-    /**
-     * The last slot a click is *accepted* in. There are only five destinations,
-     * so slot 16 — a blue pane — is accepted and then maps to nothing. Nucleus's
-     * window was one wider than its action list and this reproduces that
-     * exactly; the visible behaviour is that clicking that pane does nothing,
-     * which is also what the panes either side of it do.
-     */
+    /** The slot the sixth and final destination sits in. */
     const val LAST_ACTION_SLOT = 16
 
     /** Which of the two GUIs a [CrystalChestMenu] is. */
@@ -72,7 +64,7 @@ object CrystalMenu {
     data class Head(val uuid: UUID, val name: String)
 
     /**
-     * One of the five buttons: how it looks, and where it leads. A null landing
+     * One of the six buttons: how it looks, whether it is free, and where it leads. A null landing
      * means the click is over — either the destination refused (and has said so)
      * or it opened the head GUI instead — and in that case no energy is spent.
      */
@@ -80,11 +72,12 @@ object CrystalMenu {
         val name: String,
         val icon: Item,
         val lore: List<String>,
+        val free: Boolean = false,
         val resolve: (ServerPlayer) -> Landing?,
     )
 
     /**
-     * Nucleus's five destinations in its own order; the slot each occupies is
+     * The six destinations in their menu order; the slot each occupies is
      * [FIRST_ACTION_SLOT] plus its index here.
      */
     private val DESTINATIONS: List<Destination> = listOf(
@@ -97,15 +90,23 @@ object CrystalMenu {
             resolve = ::bed,
         ),
         Destination(
-            name = "Spawn",
+            name = "Spawn 1",
             icon = Items.SPAWNER,
             lore = listOf("Head to spawn town"),
-            resolve = ::spawn,
+            free = true,
+            resolve = { CrystalSpawns.spawn1(it) },
+        ),
+        Destination(
+            name = "Spawn 2",
+            icon = Items.SPAWNER,
+            lore = listOf("Head to the remote spawn"),
+            free = true,
+            resolve = { CrystalSpawns.spawn2(it) },
         ),
         Destination(
             name = "Player",
             icon = Items.PLAYER_HEAD,
-            lore = listOf("Request to teleport to a player", "costs even if they don't accept"),
+            lore = listOf("Request to teleport to a player", "costs one energy when they accept"),
             resolve = ::players,
         ),
         Destination(
@@ -150,7 +151,7 @@ object CrystalMenu {
         for (column in 0 until 9) {
             contents.setItem(column, pane(black))
             contents.setItem(column + 18, pane(black))
-            val destination = DESTINATIONS.getOrNull(column - 2).takeIf { column in 2..6 }
+            val destination = DESTINATIONS.getOrNull(column - 2).takeIf { column in 2..7 }
             contents.setItem(column + 9, destination?.let(::button) ?: pane(blue))
         }
         open(player, Kind.DESTINATIONS, contents, rows = 3, title = TITLE, heads = emptyList())
@@ -231,10 +232,14 @@ object CrystalMenu {
         player.closeContainer()
         val landing = destination.resolve(player) ?: return
         landing.send(player)
-        CrystalEnergy.modify(player, -1)
-        player.sendSystemMessage(
-            Paint.info("You used one energy going to ", Paint.aqua(destination.name.lowercase())),
-        )
+        if (destination.free) {
+            player.sendSystemMessage(Paint.info("You arrived at ", Paint.aqua(destination.name.lowercase())))
+        } else {
+            CrystalEnergy.modify(player, -1)
+            player.sendSystemMessage(
+                Paint.info("You used one energy going to ", Paint.aqua(destination.name.lowercase())),
+            )
+        }
     }
 
     /** A head was clicked (spec story 34). */
@@ -243,7 +248,7 @@ object CrystalMenu {
         CrystalRequests.send(player, head)
     }
 
-    // ---- the five destinations ----
+    // ---- the six destinations ----
 
     /**
      * The player's own respawn point (spec story 29), as vanilla resolves it —
@@ -272,15 +277,6 @@ object CrystalMenu {
             transition.yRot(),
             transition.xRot(),
         )
-    }
-
-    /** Spawn town, in Primary's overworld (spec story 30) — Nucleus's `kSpawnLocation`. */
-    private fun spawn(player: ServerPlayer): Landing? {
-        val server = player.level().server
-        val primary = WorldsFeature.worlds?.byId("primary")?.dimension(DimensionRole.OVERWORLD)
-            ?: Level.OVERWORLD
-        val level = server.getLevel(primary) ?: server.overworld()
-        return Landing(level, 16.5, 71.0, -15.5, 180.0f, 0.0f)
     }
 
     /**
