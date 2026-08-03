@@ -3,11 +3,14 @@ package eu.mctraveler.gametest
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.core.BlockPos
 import net.minecraft.gametest.framework.GameTestHelper
+import net.minecraft.network.chat.Component
 import net.minecraft.network.protocol.game.ServerboundSignUpdatePacket
+import net.minecraft.util.ProblemReporter
 import net.minecraft.world.item.DyeColor
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.entity.SignBlockEntity
+import net.minecraft.world.level.storage.TagValueInput
 
 private val SIGN_EFFECTS_AT = BlockPos(1, 2, 1)
 
@@ -47,6 +50,8 @@ class SignEffectsGameTest {
         val sign = helper.placeEditableSign(player, Blocks.OAK_HANGING_SIGN)
 
         player.writesOnSign(helper, true, "<green>Hanging")
+        sign.setAllowedPlayerEditor(player.uuid)
+        player.writesOnSign(helper, true, "Hanging")
 
         val message = sign.frontText.getMessage(0, false)
         helper.assertValueEqual(message.string, "Hanging", "the rendered hanging-sign text")
@@ -88,6 +93,164 @@ class SignEffectsGameTest {
         val message = sign.frontText.getMessage(0, false)
         helper.assertValueEqual(message.string, "Plain", "the replacement sign text")
         helper.assertTrue(message.style.color == null, "the previous sign color was cleared")
+        player.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun reopeningAStyledSignKeepsItsMarkup(helper: GameTestHelper) {
+        val player = MessageCapturingPlayer.join(helper, "T15RoundTrip")
+        val sign = helper.placeEditableSign(player)
+
+        player.writesOnSign(helper, true, "<red>One", "<blue>Two")
+        sign.setAllowedPlayerEditor(player.uuid)
+        player.writesOnSign(helper, true, "One", "Two")
+
+        helper.assertValueEqual(
+            sign.frontText.getMessage(0, false).style.color?.value ?: -1,
+            0xff5555,
+            "the first untouched line color",
+        )
+        helper.assertValueEqual(
+            sign.frontText.getMessage(1, false).style.color?.value ?: -1,
+            0x5555ff,
+            "the second untouched line color",
+        )
+        helper.assertValueEqual(
+            sign.frontText.getMessage(0, true).style.color?.value ?: -1,
+            0xff5555,
+            "the first filtered line color",
+        )
+        player.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun retypingOneLineLeavesTheOtherMarkupIntact(helper: GameTestHelper) {
+        val player = MessageCapturingPlayer.join(helper, "T15Retype")
+        val sign = helper.placeEditableSign(player)
+
+        player.writesOnSign(helper, true, "<red>One", "<blue>Two")
+        sign.setAllowedPlayerEditor(player.uuid)
+        player.writesOnSign(helper, true, "New", "Two")
+
+        helper.assertTrue(
+            sign.frontText.getMessage(0, false).style.color == null,
+            "the retyped line is plain",
+        )
+        helper.assertValueEqual(
+            sign.frontText.getMessage(1, false).style.color?.value ?: -1,
+            0x5555ff,
+            "the untouched line keeps its color",
+        )
+        player.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun clearingAStoredLineMakesItPlain(helper: GameTestHelper) {
+        val player = MessageCapturingPlayer.join(helper, "T15ClearSource")
+        val sign = helper.placeEditableSign(player)
+
+        player.writesOnSign(helper, true, "<red>Stored")
+        sign.setAllowedPlayerEditor(player.uuid)
+        player.writesOnSign(helper, true, "")
+
+        helper.assertValueEqual(sign.frontText.getMessage(0, false).string, "", "the cleared line")
+        helper.assertTrue(
+            sign.frontText.getMessage(0, false).style.color == null,
+            "the cleared line is plain",
+        )
+        player.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun frontAndBackSourcesRoundTripIndependently(helper: GameTestHelper) {
+        val player = MessageCapturingPlayer.join(helper, "T15Faces")
+        val sign = helper.placeEditableSign(player)
+
+        player.writesOnSign(helper, true, "<red>Front")
+        sign.setAllowedPlayerEditor(player.uuid)
+        player.writesOnSign(helper, false, "<blue>Back")
+        sign.setAllowedPlayerEditor(player.uuid)
+        player.writesOnSign(helper, true, "Front")
+        sign.setAllowedPlayerEditor(player.uuid)
+        player.writesOnSign(helper, false, "Back")
+
+        helper.assertValueEqual(
+            sign.frontText.getMessage(0, false).style.color?.value ?: -1,
+            0xff5555,
+            "the front source color",
+        )
+        helper.assertValueEqual(
+            sign.backText.getMessage(0, false).style.color?.value ?: -1,
+            0x5555ff,
+            "the back source color",
+        )
+        player.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun sourceSurvivesBlockEntitySerialization(helper: GameTestHelper) {
+        val player = MessageCapturingPlayer.join(helper, "T15Save")
+        val sign = helper.placeEditableSign(player)
+        player.writesOnSign(helper, true, "<red>Saved")
+
+        val saved = sign.saveWithoutMetadata(helper.level.registryAccess())
+        val update = sign.getUpdateTag(helper.level.registryAccess())
+        helper.assertTrue(saved.contains("mctraveler:sign_sources"), "the saved source field")
+        helper.assertTrue(update.contains("mctraveler:sign_sources"), "the update source field")
+
+        val restored = helper.placeEditableSign(player, at = BlockPos(2, 2, 1))
+        restored.loadCustomOnly(
+            TagValueInput.create(
+                ProblemReporter.DISCARDING,
+                helper.level.registryAccess(),
+                saved,
+            ),
+        )
+        helper.assertValueEqual(
+            restored.frontText.getMessage(0, false).style.color?.value ?: -1,
+            0xff5555,
+            "the restored source color",
+        )
+        player.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aPlainSignStoresNoSourceField(helper: GameTestHelper) {
+        val player = MessageCapturingPlayer.join(helper, "T15PlainSave")
+        val sign = helper.placeEditableSign(player)
+
+        val saved = sign.saveWithoutMetadata(helper.level.registryAccess())
+        helper.assertFalse(saved.contains("mctraveler:sign_sources"), "the plain sign source field")
+        player.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun loadingWithoutSourceDataLeavesVanillaText(helper: GameTestHelper) {
+        val player = MessageCapturingPlayer.join(helper, "T15MissingSource")
+        val sign = helper.placeEditableSign(player)
+        sign.setText(sign.frontText.setMessage(0, Component.literal("Legacy")), true)
+        val saved = sign.saveWithoutMetadata(helper.level.registryAccess())
+
+        val restored = helper.placeEditableSign(player, at = BlockPos(2, 2, 1))
+        restored.loadCustomOnly(
+            TagValueInput.create(
+                ProblemReporter.DISCARDING,
+                helper.level.registryAccess(),
+                saved,
+            ),
+        )
+        helper.assertValueEqual(
+            restored.frontText.getMessage(0, false).string,
+            "Legacy",
+            "the vanilla text without source data",
+        )
         player.leave()
         helper.succeed()
     }
@@ -192,9 +355,10 @@ class SignEffectsGameTest {
 private fun GameTestHelper.placeEditableSign(
     player: MessageCapturingPlayer,
     block: Block = Blocks.OAK_SIGN,
+    at: BlockPos = SIGN_EFFECTS_AT,
 ): SignBlockEntity {
-    setBlock(SIGN_EFFECTS_AT, block)
-    return (level.getBlockEntity(absolutePos(SIGN_EFFECTS_AT)) as SignBlockEntity).also {
+    setBlock(at, block)
+    return (level.getBlockEntity(absolutePos(at)) as SignBlockEntity).also {
         it.setAllowedPlayerEditor(player.uuid)
     }
 }
@@ -202,14 +366,16 @@ private fun GameTestHelper.placeEditableSign(
 private fun MessageCapturingPlayer.writesOnSign(
     helper: GameTestHelper,
     front: Boolean,
-    line: String,
+    first: String,
+    second: String = "",
+    at: BlockPos = SIGN_EFFECTS_AT,
 ) {
     connection.handleSignUpdate(
         ServerboundSignUpdatePacket(
-            helper.absolutePos(SIGN_EFFECTS_AT),
+            helper.absolutePos(at),
             front,
-            line,
-            "",
+            first,
+            second,
             "",
             "",
         ),
