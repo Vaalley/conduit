@@ -215,3 +215,17 @@ tasks.register<JavaExec>("mapProbe") {
     classpath = sourceSets["main"].runtimeClasspath
     mainClass = "eu.mctraveler.importer.MapProbeMain"
 }
+
+// Moves the saved maps that show Secondary onto the relocated landmass, on a save
+// the merge has already committed. The maps are level-wide data rather than chunk
+// data, so the merge did not see them; MapSweep is a phase of it now, and this is
+// how it reaches the migration that already ran.
+//
+//   ./gradlew mapSweep --args="/srv/mctraveler-server"           # says what it would do
+//   ./gradlew mapSweep --args="/srv/mctraveler-server --apply"   # does it, server stopped
+tasks.register<JavaExec>("mapSweep") {
+    group = "migration"
+    description = "Points maps of Secondary at where Secondary now is. Reports unless --apply."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass = "eu.mctraveler.importer.MapSweepMain"
+}
