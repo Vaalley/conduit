@@ -155,16 +155,34 @@ class SignEffectsGameTest {
         val player = MessageCapturingPlayer.join(helper, "T15Bad")
         val sign = helper.placeEditableSign(player)
 
-        player.writesOnSign(helper, true, "<gradient:#ff0000>Bad")
+        player.connection.handleSignUpdate(
+            ServerboundSignUpdatePacket(
+                helper.absolutePos(SIGN_EFFECTS_AT),
+                true,
+                "<gradient:#ff0000>Bad",
+                "<gradient:#00ff00>Also bad",
+                "",
+                "",
+            ),
+        )
 
         helper.assertValueEqual(
             sign.frontText.getMessage(0, false).string,
             "<gradient:#ff0000>Bad",
             "the malformed sign text",
         )
+        helper.assertValueEqual(
+            sign.frontText.getMessage(1, false).string,
+            "<gradient:#00ff00>Also bad",
+            "the second malformed sign text",
+        )
+        val problem = "unknown or malformed tag"
+        val warning = player.messages.lastOrNull()?.string.orEmpty()
         helper.assertTrue(
-            player.messages.lastOrNull()?.string?.contains("unknown or malformed tag") == true,
-            "the malformed markup warning",
+            warning.split(problem).size - 1 == 2 &&
+                warning.contains("line 1: $problem") &&
+                warning.contains("line 2: $problem"),
+            "the malformed markup warning reports each line once",
         )
         player.leave()
         helper.succeed()

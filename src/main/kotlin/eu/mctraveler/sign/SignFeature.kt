@@ -2,7 +2,6 @@ package eu.mctraveler.sign
 
 import eu.mctraveler.text.Paint
 import eu.mctraveler.text.SignMarkup
-import net.minecraft.network.chat.Component
 import net.minecraft.server.network.FilteredText
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.level.block.entity.SignText
@@ -27,8 +26,13 @@ object SignFeature {
             val raw = SignMarkup.render(line.raw())
             val filtered = SignMarkup.render(line.filteredOrEmpty())
             rendered = rendered.setMessage(index, raw.component, filtered.component)
-            problems += raw.problems.map { "line ${index + 1}: ${it.message}" }
-            problems += filtered.problems.map { "line ${index + 1} filtered: ${it.message}" }
+            problems += raw.problems
+                .distinct()
+                .map { "line ${index + 1}: ${it.message}" }
+            problems += filtered.problems
+                .distinct()
+                .filterNot { it in raw.problems }
+                .map { "line ${index + 1} filtered: ${it.message}" }
         }
 
         if (problems.isNotEmpty()) {
