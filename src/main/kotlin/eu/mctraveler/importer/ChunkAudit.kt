@@ -615,7 +615,19 @@ class ChunkAudit(
                     "\n  (and ${orphanedMemories.size - LEFTOVERS_NAMED} more)"
                 } else {
                     ""
-                },
+                } +
+                // What the rest of the population did, so the number above can be
+                // read as a proportion rather than as a bare count. Without it the
+                // first live refusal said "1222" and left it ambiguous whether that
+                // was every villager in Secondary or a rounding error.
+                "\n  of the memories checked: $memoriesConfirmed found their record, " +
+                "$memoriesAlreadyDangling were already pointing at nothing before the merge, " +
+                "$memoriesOutsideTheBorder had a record the border left behind" +
+                // One dead village is one fault, not forty. Grouping says which.
+                "\n  the places they name, most-shared first:\n" +
+                orphanedMemories.groupingBy { it.substringAfter(" at ").substringBefore(", and no") }
+                    .eachCount().entries.sortedByDescending { it.value }.take(LEFTOVERS_NAMED)
+                    .joinToString("\n") { "    ${it.value} × ${it.key}" },
         )
     }
 
