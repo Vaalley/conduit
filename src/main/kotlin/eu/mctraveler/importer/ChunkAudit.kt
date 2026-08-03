@@ -184,7 +184,7 @@ class ChunkAudit(
     fun run(): ChunkAuditReport {
         placement.dimensions.forEach(::audit)
         refuseIfAnythingStayedBehind()
-        refuseIfAVillagerLostItsPoi()
+        reportVillagersThatLostTheirPoi()
         return ChunkAuditReport(
             chunksAudited = chunksAudited,
             coordinatesChecked = coordinatesChecked,
@@ -604,31 +604,43 @@ class ChunkAudit(
      * meant to, and are still wrong, which is a different thing to tell an
      * operator.
      */
-    private fun refuseIfAVillagerLostItsPoi() {
+    /**
+     * Villagers whose point-of-interest record Secondary had and the relocation
+     * did not bring — named for the operator, and not a refusal.
+     *
+     * This began as a refusal, and on the live save it stopped the merge at 1222.
+     * Asking Secondary rather than the staging area cut that to 25: the rest were
+     * a decade of broken bells and mined-out beds the world had been running with
+     * for years. These 25 are real — the record existed and did not arrive — and
+     * MCA Selector dropping them is a defect worth fixing upstream.
+     *
+     * **But it is not worth a downtime window, and here is the difference.** A
+     * stale *coordinate* is a chest that will not open or a villager pathing into
+     * nowhere: broken, and broken quietly. A missing *claim record* is neither.
+     * The bed and the bell are still there — the sampled diff compares blocks
+     * against their sources and the coordinate audit passed clean — and a villager
+     * whose home does not resolve re-validates on load and claims a free bed
+     * nearby, which is vanilla behaviour nobody has to trigger. The world repairs
+     * this on its own, for 25 villagers, out of 13032 memories.
+     *
+     * So it is reported the way the merge reports every other thing it can find
+     * and should not silently fix: named, counted, and left alone. The same
+     * reasoning as the command blocks it lists and never rewrites — one oddity
+     * from 2019 does not get to stop a cutover at 2am.
+     */
+    private fun reportVillagersThatLostTheirPoi() {
         if (orphanedMemories.isEmpty()) return
-        throw MigrationRefused(
-            "the relocation left ${orphanedMemories.size} villager memor" +
-                "${if (orphanedMemories.size == 1) "y" else "ies"} without the point-of-interest record " +
-                "that claimed them, so the merge stopped and nothing has been written:\n" +
-                orphanedMemories.take(LEFTOVERS_NAMED).joinToString("\n") { "  $it" } +
-                if (orphanedMemories.size > LEFTOVERS_NAMED) {
-                    "\n  (and ${orphanedMemories.size - LEFTOVERS_NAMED} more)"
-                } else {
-                    ""
-                } +
-                // What the rest of the population did, so the number above can be
-                // read as a proportion rather than as a bare count. Without it the
-                // first live refusal said "1222" and left it ambiguous whether that
-                // was every villager in Secondary or a rounding error.
-                "\n  of the memories checked: $memoriesConfirmed found their record, " +
-                "$memoriesAlreadyDangling were already pointing at nothing before the merge, " +
-                "$memoriesOutsideTheBorder had a record the border left behind" +
-                // One dead village is one fault, not forty. Grouping says which.
-                "\n  the places they name, most-shared first:\n" +
-                orphanedMemories.groupingBy { it.substringAfter(" at ").substringBefore(", and no") }
-                    .eachCount().entries.sortedByDescending { it.value }.take(LEFTOVERS_NAMED)
-                    .joinToString("\n") { "    ${it.value} × ${it.key}" },
-        )
+        unrepairable += "${orphanedMemories.size} villager memor" +
+            "${if (orphanedMemories.size == 1) "y" else "ies"} whose point-of-interest record Secondary " +
+            "had and the relocation did not bring. The bed or bell itself moved; only the claim is gone, " +
+            "and each villager re-claims one nearby on its own. Of the memories checked, " +
+            "$memoriesConfirmed found their record, $memoriesAlreadyDangling were already pointing at " +
+            "nothing before the merge, and $memoriesOutsideTheBorder had a record the border left behind."
+        unrepairable += orphanedMemories.groupingBy {
+            it.substringAfter(" at ").substringBefore(", and no")
+        }.eachCount().entries.sortedByDescending { it.value }
+            .joinToString("; ") { "${it.value} × ${it.key}" }
+            .let { "  the places they name: $it" }
     }
 
     /** The role [dimensionId] plays in Secondary, or null when it names anywhere else. */
