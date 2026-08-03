@@ -4,8 +4,8 @@
 previewing, inspecting, clearing, and repairing sign markup. `/signfx help`
 must show rendered examples, `/signfx preview <markup>` must render a chat
 preview, `/signfx source` must print the source of the sign being looked at,
-and `/signfx clear` must strip it back to plain text. Add `/signfx reload` if
-ticket 05 lands its configuration file. Admin-only subcommands use in-body
+and `/signfx clear` must strip it back to plain text. Add `/signfx reload` for
+the configuration file from ticket 05. Admin-only subcommands use in-body
 gating, and all player-facing output uses the existing `Paint` vocabulary.
 
 **Blocked by:** 02.
@@ -24,8 +24,8 @@ what", "Configuration", and "Paint stays what it is").
       looking at, for the selected face
 - [ ] `/signfx clear` replaces the selected face with plain text and removes
       its stored markup
-- [ ] `/signfx reload` exists only when ticket 05's configuration file lands,
-      and reloads the documented policy without restarting the server
+- [ ] `/signfx reload` reloads the documented policy without restarting the
+      server
 - [ ] Admin-only subcommands gate inside their command bodies using the house
       vanilla-op rule rather than hiding the command tree with `.requires(...)`
 - [ ] Success, usage, error, preview, and permission output uses `Paint`

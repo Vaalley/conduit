@@ -14,8 +14,7 @@ prove behavior with GameTests driven through `handleSignUpdate`.
 **Status:** needs-triage
 
 See ../spec.md (User Stories 1–7 and 12–14; Implementation Decisions "Where the
-hook goes", "Raw and filtered", "Who may use what", and "Paint stays what it
-is").
+hook goes", "Raw and filtered", "Who may use what", and "Paint stays what it is").
 
 - [ ] A plain Kotlin `SignFeature` has `register()` and is wired from
       `MCTraveler.onInitialize()`
@@ -26,6 +25,9 @@ is").
       replaces each vanilla-written line with the parser result
 - [ ] Raw and filtered variants are parsed independently, so text filtering is
       not bypassed by styling or markup
+- [ ] Every non-click effect is available to every player by default; balance
+      policy is read from ticket 05 rather than enforced as a fixed admin-only
+      split here
 - [ ] Both front and back faces render, including hanging signs through the
       shared `SignBlockEntity` type
 - [ ] Vanilla editability, waxed-sign, and foreign-editor checks remain in

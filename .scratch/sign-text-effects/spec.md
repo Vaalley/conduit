@@ -76,9 +76,9 @@ tier that pushes block-entity updates to nearby players without persisting frame
 
 ### Rules
 
-13. As an admin, I want to decide which effects everyone may use and which are mine
-    alone, because a wall of obfuscated text is a moderation problem and a click
-    command on a sign is a security one.
+13. As an admin, I want to tune the balance of sign effects through configuration,
+    because a wall of obfuscated text is a moderation problem and a click command
+    on a sign is a security one.
 14. As an admin, I want effect signs to respect region protection exactly as plain
     signs do — no new way to write into someone else's claim.
 15. As an admin, I want a bound on what one sign can cost: a cap on how many styled
@@ -144,16 +144,17 @@ marked as such in the tickets.
   a parser with a different job and gets its own file; it may reuse `Paint`'s color
   table, not its API shape.
 - **Who may use what**: no permission library exists here and none is being added —
-  vanilla `/op` is the mechanism, checked in-body with `RegionsFeature.isAdmin`, house
-  rule. The split is per effect class, not per player: colors, decorations and
-  gradients for everyone; fonts, obfuscated, click actions and animation admin-gated
-  by default.
-- **Configuration**: the mod has no config system today (only `CONDUIT_HTTP_TOKEN` as
-  an env var). Ticket 05 adds the first one, deliberately small: a
-  `mctraveler/signs.json` read through `PersistenceService`'s directory, holding the
-  effect-class policy, the per-line component cap, and the animation budget, with a
-  `/signfx reload`. **Open question for triage**: accept a config file, or hard-code
-  the policy and revisit when a second feature wants one.
+  vanilla `/op` remains the mechanism, checked in-body with
+  `RegionsFeature.isAdmin` where a security gate is needed. Every effect is open to
+  everyone by default; the config tunes balance rather than assigning a fixed
+  admin-only set. Click actions are the security exception: their tags are admin-only
+  and off by default, because they can cause server-side actions on waxed signs.
+- **Configuration**: ticket 05 adds the first config file now:
+  `mctraveler/signs.json`, read through `PersistenceService`'s directory. It holds
+  the effect policy, per-line component cap, and animation budget, with a
+  `/signfx reload`. Effects start open to everyone; admins tune their balance in this
+  file. The click-action policy remains admin-only and off by default as a security
+  boundary, not a balance setting.
 - **Cost cap**: a line refuses to render (and says so) past a configured number of
   styled pieces — 96 by default against vanilla's 384-character line limit. Signs are
   90 pixels wide; nothing legible comes close to the cap.
@@ -196,10 +197,10 @@ Behavior lives in GameTests (`src/gametest/kotlin/eu/mctraveler/gametest/`) driv
 `RegionProtectionGameTest` already does, and reading back
 `sign.frontText.getMessage(i, false)`: an effect renders; the raw/filtered pair both
 render; a re-edit of one line preserves the other three; region protection still
-refuses a foreign sign; a waxed sign still refuses; a non-op is refused a gated
-effect; the cap refuses a hostile line. Every new GameTest class registers in
-`src/gametest/resources/fabric.mod.json`, and `GameTestJanitor` learns about
-`signs.json` if ticket 05 lands it.
+refuses a foreign sign; a waxed sign still refuses; ordinary effects work for a
+non-op while click actions remain gated; the cap refuses a hostile line. Every
+new GameTest class registers in `src/gametest/resources/fabric.mod.json`, and
+`GameTestJanitor` learns about `signs.json`.
 
 ## Out of Scope
 
@@ -213,8 +214,6 @@ effect; the cap refuses a hostile line. Every new GameTest class registers in
 
 ## Open Questions for Triage
 
-- Config file or hard-coded policy for the effect classes and the caps (see
-  "Configuration"). Everything else in ticket 05 follows from that answer.
 - Whether the cap is a parameter of the pure parse call or a policy check applied
   around it — ticket 01 is pure and ticket 05 owns the number.
 - `/signfx source` and `/signfx clear`: how a face is selected (looked-at block plus
@@ -232,9 +231,9 @@ effect; the cap refuses a hostile line. Every new GameTest class registers in
 
 ## Further Notes
 
-- The repository description says 1.21.x; the checked-in build targets Minecraft
-  **26.2** (`gradle.properties`), Java 25, Kotlin 2.4.10. All API facts above were read
-  from the 26.2 jars, not from 1.21 memory.
+- The checked-in build targets Minecraft **26.2** (`gradle.properties`), Java 25,
+  Kotlin 2.4.10. All API facts above were read from the 26.2 jars, not from legacy
+  1.21 memory.
 - `HangingSignBlockEntity` extends `SignBlockEntity`, so hanging signs come free.
 - Custom NBT written in `saveAdditional` also rides `getUpdateTag` to clients. The
   source strings are small and harmless there, but ticket 03 should confirm the
