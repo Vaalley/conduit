@@ -58,6 +58,12 @@ data class ChunkAuditReport(
     val coordinatesChecked: Int,
     /** Lodestone compass targets the merge re-pointed at the relocated landmass. */
     val retargeted: Int,
+    /** Villager memories whose point-of-interest record arrived with them. */
+    val memoriesConfirmed: Int,
+    /** Memories that pointed at nothing in Secondary before the merge started. */
+    val memoriesAlreadyDangling: Int,
+    /** Memories whose record the border clip deliberately left behind. */
+    val memoriesOutsideTheBorder: Int,
     val commandBlocks: List<LiteralCoordinates>,
     /** Cosmetic leftovers the merge knows how to find but not how to fix. */
     val unrepairable: List<String>,
@@ -75,6 +81,16 @@ data class ChunkAuditReport(
             } else {
                 "$retargeted lodestone compass target${if (retargeted == 1) "" else "s"}"
             },
+        ),
+        reportLine(
+            "villager memories checked",
+            "$memoriesConfirmed found their point-of-interest record" +
+                if (memoriesAlreadyDangling == 0 && memoriesOutsideTheBorder == 0) {
+                    ""
+                } else {
+                    ", $memoriesAlreadyDangling were already pointing at nothing in Secondary " +
+                        "before the merge, $memoriesOutsideTheBorder had a record the border left behind"
+                },
         ),
         reportLine(
             "needs an operator",
@@ -148,6 +164,9 @@ class ChunkAudit(
     /** Primary's dimensions as they are being rebuilt inside the staging area. */
     private val stagedLevelDir: Path,
     private val placement: MergePlacement,
+    /** The live save, where Secondary still stands unmoved — see [crossCheckMemories]. */
+    private val levelDir: Path,
+    private val border: SecondaryBorder,
 ) {
 
     private val chunks = StagedChunks(stagedLevelDir)
@@ -158,6 +177,9 @@ class ChunkAudit(
     private val unrepairable = mutableListOf<String>()
     private val stale = mutableListOf<StaleCoordinate>()
     private val orphanedMemories = mutableListOf<String>()
+    private var memoriesConfirmed = 0
+    private var memoriesAlreadyDangling = 0
+    private var memoriesOutsideTheBorder = 0
 
     fun run(): ChunkAuditReport {
         placement.dimensions.forEach(::audit)
@@ -167,6 +189,9 @@ class ChunkAudit(
             chunksAudited = chunksAudited,
             coordinatesChecked = coordinatesChecked,
             retargeted = retargeted,
+            memoriesConfirmed = memoriesConfirmed,
+            memoriesAlreadyDangling = memoriesAlreadyDangling,
+            memoriesOutsideTheBorder = memoriesOutsideTheBorder,
             commandBlocks = commandBlocks.toList(),
             unrepairable = unrepairable.toList(),
         )
@@ -188,11 +213,19 @@ class ChunkAudit(
             collectPointsOfInterest(tag, pointsOfInterest)
             ChunkWalk(where, chunk).run(tag, POI_TYPE)
         }
+        // The same records as Secondary still holds them, so that a memory which
+        // never had a record can be told from one whose record the merge dropped.
+        val sourcePoints = mutableSetOf<BlockPosition>()
+        val secondary = Footprint.storageFolder(levelDir, WorldLayout.SECONDARY.dimension(where.role))
+        chunks.walk(secondary.resolve(POI), dimension, POI_TYPE, said = null) { _, tag ->
+            collectPointsOfInterest(tag, sourcePoints)
+            false
+        }
         walk(storage.resolve(TERRAIN), dimension, TERRAIN_TYPE) { chunk, tag ->
             ChunkWalk(where, chunk).terrain(tag)
         }
         walk(storage.resolve(ENTITIES), dimension, ENTITIES_TYPE) { chunk, tag ->
-            ChunkWalk(where, chunk).entities(tag, pointsOfInterest)
+            ChunkWalk(where, chunk).entities(tag, pointsOfInterest, sourcePoints)
         }
     }
 
@@ -270,13 +303,17 @@ class ChunkAudit(
         }
 
         /** An entities chunk: its own frame, and every entity in it. */
-        fun entities(tag: CompoundTag, pointsOfInterest: Set<BlockPosition>): Boolean {
+        fun entities(
+            tag: CompoundTag,
+            pointsOfInterest: Set<BlockPosition>,
+            sourcePoints: Set<BlockPosition>,
+        ): Boolean {
             val at = tag.getIntArray(ENTITIES_POSITION).orElse(null)
             if (at != null && at.size == CHUNK_POS_LENGTH) {
                 chunkPosition("the chunk's own position", at[0], at[1])
             }
             for (entity in tag.getListOrEmpty(ENTITIES_LIST)) {
-                if (entity is CompoundTag) crossCheckMemories(entity, pointsOfInterest)
+                if (entity is CompoundTag) crossCheckMemories(entity, pointsOfInterest, sourcePoints)
             }
             return run(tag, ENTITIES_TYPE)
         }
@@ -469,7 +506,11 @@ class ChunkAudit(
          * never work again, which is a trading hall that is dead without looking
          * broken.
          */
-        private fun crossCheckMemories(entity: CompoundTag, pointsOfInterest: Set<BlockPosition>) {
+        private fun crossCheckMemories(
+            entity: CompoundTag,
+            pointsOfInterest: Set<BlockPosition>,
+            sourcePoints: Set<BlockPosition>,
+        ) {
             val id = entity.getStringOr(ID, "an entity")
             val memories = entity.getCompoundOrEmpty(BRAIN).getCompoundOrEmpty(BRAIN_MEMORIES)
             for (memory in CLAIMED_PLACES) {
@@ -480,12 +521,32 @@ class ChunkAudit(
                 val place = held.getCompound(MEMORY_VALUE).orElse(held)
                 val at = place.getIntArray(GLOBAL_POS).orElse(null) ?: continue
                 if (at.size != BLOCK_POS_LENGTH) continue
-                if (BlockPosition(at[0], at[1], at[2]) in pointsOfInterest) continue
+                if (BlockPosition(at[0], at[1], at[2]) in pointsOfInterest) {
+                    memoriesConfirmed++
+                    continue
+                }
+                // Nothing is there. Whether that is the merge's doing is a
+                // question about Secondary, not about the staging area, so ask
+                // Secondary: un-shift the memory and look for the record that
+                // claimed it.
+                val wasAt = BlockPosition(
+                    at[0] - placement.offset.shiftX(where.role),
+                    at[1],
+                    at[2] - placement.offset.shiftZ(where.role),
+                )
+                if (!border.contains(wasAt.x, wasAt.z)) {
+                    memoriesOutsideTheBorder++
+                    continue
+                }
+                if (wasAt !in sourcePoints) {
+                    memoriesAlreadyDangling++
+                    continue
+                }
                 orphanedMemories += "the $id in ${where.role.id} chunk ${chunk.x}, ${chunk.z} remembers " +
                     "its $memory at ${at[0]}, ${at[1]}, ${at[2]}, and no point-of-interest record arrived there"
             }
             for (passenger in entity.getListOrEmpty(PASSENGERS)) {
-                if (passenger is CompoundTag) crossCheckMemories(passenger, pointsOfInterest)
+                if (passenger is CompoundTag) crossCheckMemories(passenger, pointsOfInterest, sourcePoints)
             }
         }
 

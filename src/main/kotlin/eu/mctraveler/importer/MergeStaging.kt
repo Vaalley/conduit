@@ -139,7 +139,7 @@ class MergeStaging(
                 ChunkCompletion(stagedLevelDir, placement).run()
             }
             val audit = phase("checking every coordinate arrived") {
-                ChunkAudit(stagedLevelDir, placement).run()
+                ChunkAudit(stagedLevelDir, placement, levelDir, plan.border).run()
             }
             val regions = phase("moving the Regions") {
                 MergeRegions(plan.targetDir, this, placement.offset, plan.border).sweep()

@@ -369,33 +369,36 @@ class WorldMergeAuditTest {
     // ---- the cross-check across two files -----------------------------------
 
     @Test
-    fun `a villager remembering a place no point of interest claims fails the merge`() {
-        // Everything about this villager moved exactly as it should have, and the
-        // trading hall is dead anyway: nothing claims the workstation it walks to.
-        // That is the invariant no single chunk can establish, which is why it is
-        // asked once the whole dimension has been read. The job site is given in
-        // Secondary's coordinates like everything else, and lands at 9000, 64,
-        // -4000 — inside no chunk that travelled, so no record claims it.
+    fun `a villager remembering a place Secondary never claimed is reported, not refused`() {
+        // The trading hall was already dead: nothing claimed this workstation before
+        // the merge started, and nothing does after. The check exists to catch a
+        // relocation that *drops* records, and a bell somebody broke in 2019 is not
+        // that — the live merge refused over 1222 of these, of which the source
+        // proved 252 had never pointed at anything.
+        //
+        // So the question "did the merge do this?" is asked of Secondary rather than
+        // of the staging area: un-shift the memory and look for the record that
+        // claimed it. Home and the meeting point have records and moved with them;
+        // the job site never had one.
         villagerRemembering(
             home = CoordinateBearingChunks.BED,
             jobSite = Block(808, 64, 96),
             meetingPoint = CoordinateBearingChunks.MEETING_POINT,
         )
 
-        val refusal = assertThrows(MigrationRefused::class.java) { merge() }
+        val report = merge()
 
+        assertEquals(2, report.audit.memoriesConfirmed)
+        assertEquals(1, report.audit.memoriesAlreadyDangling)
+        assertEquals(0, report.audit.memoriesOutsideTheBorder)
         assertTrue(
-            refusal.message!!.startsWith("the relocation left 1 villager memory without the point-of-interest"),
-            refusal.message,
+            report.audit.lines().any {
+                it.startsWith("villager memories checked") &&
+                    it.contains("2 found their point-of-interest record") &&
+                    it.contains("1 were already pointing at nothing in Secondary")
+            },
+            report.audit.lines().toString(),
         )
-        assertTrue(
-            refusal.message!!.contains(
-                "the minecraft:villager in overworld chunk 517, -253 remembers its minecraft:job_site at " +
-                    "9000, 64, -4000, and no point-of-interest record arrived there",
-            ),
-            refusal.message,
-        )
-        assertEquals("{\n  \"regions\": {}\n}\n", save.regionsJson())
     }
 
     // ---- what the tool is still behind on, and what finishes it --------------
@@ -524,6 +527,7 @@ class WorldMergeAuditTest {
                 "chunks audited           : $CHUNKS_RELOCATED",
                 "coordinates checked      : $COORDINATES_IN_THE_FIXTURE",
                 "repaired automatically   : 3 lodestone compass targets",
+                "villager memories checked : 3 found their point-of-interest record",
                 "needs an operator        : 1, listed below and never rewritten",
                 "  command block          : overworld 8275, 64, -4045 — ${CoordinateBearingChunks.COMMAND}",
             ),
@@ -544,6 +548,7 @@ class WorldMergeAuditTest {
                 "chunks audited           : $CHUNKS_RELOCATED",
                 "coordinates checked      : 20",
                 "repaired automatically   : nothing needed it",
+                "villager memories checked : 0 found their point-of-interest record",
                 "needs an operator        : nothing",
             ),
             report.lines(),
