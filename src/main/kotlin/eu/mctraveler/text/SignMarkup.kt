@@ -11,8 +11,7 @@ import kotlin.math.roundToInt
 private data class SignMarkupSpan(
     val text: String,
     val style: Style,
-    val effect: SignMarkupEffect?,
-    val effectRegion: Int?,
+    val effectRegion: SignMarkupEffectRegion?,
 )
 
 private sealed interface SignMarkupEffect {
@@ -21,11 +20,15 @@ private sealed interface SignMarkupEffect {
     data class Rainbow(val degrees: Double) : SignMarkupEffect
 }
 
+private data class SignMarkupEffectRegion(
+    val effect: SignMarkupEffect,
+    val id: Int,
+)
+
 private data class OpenSignMarkupTag(
     val name: String,
     val previousStyle: Style,
-    val effect: SignMarkupEffect?,
-    val effectRegion: Int?,
+    val effectRegion: SignMarkupEffectRegion?,
 )
 
 private data class ParsedSignMarkup(
@@ -106,16 +109,13 @@ object SignMarkup {
         var hadMarkup = false
         var nextEffectRegion = 0
 
-        fun activeEffect(): Pair<SignMarkupEffect, Int>? =
-            tags.lastOrNull { it.effect != null }?.let {
-                it.effect!! to it.effectRegion!!
-            }
+        fun activeEffect(): SignMarkupEffectRegion? =
+            tags.lastOrNull { it.effectRegion != null }?.effectRegion
 
         fun flush() {
             if (text.isEmpty()) return
             val value = text.toString()
-            val effect = activeEffect()
-            spans += SignMarkupSpan(value, style, effect?.first, effect?.second)
+            spans += SignMarkupSpan(value, style, activeEffect())
             plain.append(value)
             text.clear()
         }
@@ -204,13 +204,12 @@ object SignMarkup {
                         } else {
                             flush()
                             val effectRegion = tag.effect?.let {
-                                nextEffectRegion++
+                                SignMarkupEffectRegion(it, nextEffectRegion++)
                             }
                             tags.addLast(
                                 OpenSignMarkupTag(
                                     tag.name,
                                     style,
-                                    tag.effect,
                                     effectRegion,
                                 ),
                             )
@@ -313,14 +312,17 @@ object SignMarkup {
 
     private fun expand(spans: List<SignMarkupSpan>): List<SignMarkupSpan> {
         val regionSizes = spans
-            .filter { it.effect != null }
-            .groupingBy { it.effectRegion!! }
-            .fold(0) { count, span -> count + span.text.codePointCount(0, span.text.length) }
+            .mapNotNull { span -> span.effectRegion?.id?.let { it to span } }
+            .groupingBy { it.first }
+            .fold(0) { count, (_, span) ->
+                count + span.text.codePointCount(0, span.text.length)
+            }
         val regionOffsets = mutableMapOf<Int, Int>()
 
         return spans.flatMap { span ->
-            val effect = span.effect ?: return@flatMap listOf(span)
-            val region = span.effectRegion!!
+            val effectRegion = span.effectRegion ?: return@flatMap listOf(span)
+            val effect = effectRegion.effect
+            val region = effectRegion.id
             val characters = span.text.codePoints()
                 .toArray()
                 .map { String(Character.toChars(it)) }
@@ -343,7 +345,6 @@ object SignMarkup {
                 SignMarkupSpan(
                     text = character,
                     style = span.style.withColor(color),
-                    effect = null,
                     effectRegion = null,
                 )
             }
