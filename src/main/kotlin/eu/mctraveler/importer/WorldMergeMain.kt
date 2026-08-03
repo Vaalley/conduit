@@ -30,6 +30,11 @@ object WorldMergeMain {
 
           --target <dir>        the live server run directory (regions.json, mctraveler/, world/)
           --plan-only           choose the offset, print it and write NOTHING AT ALL
+          --reuse-relocation    keep the staging area when a run fails, and reuse the chunks
+                                it already moved when the next one starts. The relocation is
+                                about half the merge's running time and the sampled diff has
+                                already proved its output, so a refusal from a later phase
+                                does not have to cost it twice. Off by default.
           --level-name <name>   the level directory to work in         [default: world]
           --clearance <blocks>  empty ground to leave around the landmass, in NETHER blocks;
                                 the overworld is given eight times as much
@@ -125,6 +130,7 @@ object WorldMergeMain {
             halfExtent = options["border"]?.let { number("border", it) } ?: WorldMerge.DEFAULT_BORDER,
             bleed = options["bleed"]?.let { number("bleed", it) } ?: WorldMerge.DEFAULT_BLEED,
         ),
+        reuseRelocation = options.containsKey(WorldMerge.OPT_REUSE.removePrefix("--")),
     )
 
     /**

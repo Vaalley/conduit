@@ -44,27 +44,52 @@ data class SampledDiffReport(
 
     fun dimension(role: DimensionRole): DimensionSample = dimensions.first { it.role == role }
 
-    override fun lines(): List<String> = listOf(
-        reportLine("sample size", "$sampleSize chunks from each relocated dimension"),
-        reportLine(
-            "chunks compared",
-            if (compared == 0) {
-                "none"
-            } else {
-                "$compared — " + dimensions.joinToString(", ") {
-                    "${it.role.id} ${it.compared} of ${it.available}"
-                }
-            },
-        ),
-        reportLine(
-            "sampled diff",
-            if (compared == 0) {
-                "nothing was compared, so nothing here says the terrain arrived"
-            } else {
-                "every sampled chunk matched its source, block for block"
-            },
-        ),
-    )
+    companion object {
+        /**
+         * The section a run contributes when it reused an already-relocated
+         * staging area (see [MergePlan.reuseRelocation]).
+         *
+         * The diff is deliberately *not* re-run there. It compares staged chunks
+         * against their sources, and both the completion pass and the audit
+         * rewrite staged chunks — so over reused staging it would be reading the
+         * previous run's own repairs and reporting them as the tool's mistakes.
+         * It passed on the run that built the staging area, and that is the run
+         * whose output it was judging.
+         */
+        fun reused() = SampledDiffReport(sampleSize = 0, dimensions = emptyList())
+    }
+
+    override fun lines(): List<String> = if (sampleSize == 0 && dimensions.isEmpty()) {
+        listOf(
+            reportLine(
+                "sampled diff",
+                "not re-run — this run reused a staging area whose terrain the diff had already " +
+                    "compared block-for-block against its sources",
+            ),
+        )
+    } else {
+        listOf(
+            reportLine("sample size", "$sampleSize chunks from each relocated dimension"),
+            reportLine(
+                "chunks compared",
+                if (compared == 0) {
+                    "none"
+                } else {
+                    "$compared — " + dimensions.joinToString(", ") {
+                        "${it.role.id} ${it.compared} of ${it.available}"
+                    }
+                },
+            ),
+            reportLine(
+                "sampled diff",
+                if (compared == 0) {
+                    "nothing was compared, so nothing here says the terrain arrived"
+                } else {
+                    "every sampled chunk matched its source, block for block"
+                },
+            ),
+        )
+    }
 }
 
 /**

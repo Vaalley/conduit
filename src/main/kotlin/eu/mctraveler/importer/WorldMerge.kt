@@ -54,6 +54,23 @@ data class MergePlan(
      * real run can be compared. See [SecondaryBorder].
      */
     val border: SecondaryBorder = SecondaryBorder(),
+    /**
+     * Keep the staging area when a run fails, and reuse the relocated chunks in
+     * it when the next run starts (merge spec, "Staging"; ticket 22).
+     *
+     * The relocation is fifty minutes of the merge's hundred and five, it is
+     * deterministic, and [SampledDiff] proves block-for-block that its output is
+     * right. When a *later* phase refuses, throwing that away and doing it again
+     * buys nothing — and the live migration paid for it four times over, once per
+     * finding, at an hour and three quarters each.
+     *
+     * Off by default, because the all-or-nothing discipline is what makes the
+     * merge safe to abandon and a leftover staging directory is otherwise the
+     * only evidence of what a dead run built. This says, in as many words, that
+     * the operator is iterating on the checks and knows the chunks are already
+     * there.
+     */
+    val reuseRelocation: Boolean = false,
 ) {
     init {
         require(clearance >= 0) { "the clearance cannot be negative, got $clearance" }
@@ -463,10 +480,12 @@ class WorldMerge(private val plan: MergePlan) {
                 "${plan.targetDir} has already been merged: ${Files.readString(marker)}",
             )
         }
-        if (Files.exists(staging)) {
+        if (Files.exists(staging) && !plan.reuseRelocation) {
             throw MigrationRefused(
                 "$staging is left over from an interrupted merge; " +
-                    "look at what it holds, then remove it and run again",
+                    "look at what it holds, then remove it and run again — or pass " +
+                    "$OPT_REUSE to keep the chunks it already relocated and re-run the checks " +
+                    "over them",
             )
         }
     }
@@ -568,6 +587,9 @@ class WorldMerge(private val plan: MergePlan) {
 
         /** The stamp a finished merge leaves on the save, and the thing a second run refuses over. */
         const val MARKER_FILE = "$MOD_DIRECTORY/merge.json"
+
+        /** How an operator says they are iterating on the checks; see [MergePlan.reuseRelocation]. */
+        const val OPT_REUSE = "--reuse-relocation"
         const val REGIONS_FILE = "regions.json"
     }
 }

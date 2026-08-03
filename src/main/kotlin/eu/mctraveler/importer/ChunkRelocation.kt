@@ -61,11 +61,34 @@ data class RelocationReport(
 
     fun dimension(role: DimensionRole): DimensionRelocation = dimensions.first { it.role == role }
 
-    override fun lines(): List<String> = dimensions.flatMap { it.lines() } +
-        reportLine("relocated in total", "$relocated chunks, $dropped dropped, $bytes bytes") +
-        discarded.map {
-            reportLine("discarded", "${it.what} — ${it.files} file${if (it.files == 1) "" else "s"}")
-        }
+    companion object {
+        /**
+         * The section a run contributes when it reused chunks a previous run had
+         * already relocated (see [MergePlan.reuseRelocation]).
+         *
+         * It reports nothing rather than the previous run's counts, because those
+         * counts belong to that run and repeating them here would let a resumed
+         * merge look like it had done work it did not do. What this run did is
+         * exactly one thing — decline to do it again — and the report says so.
+         */
+        fun reused() = RelocationReport(dimensions = emptyList(), discarded = emptyList())
+    }
+
+    override fun lines(): List<String> = if (dimensions.isEmpty()) {
+        listOf(
+            reportLine(
+                "chunks moved across",
+                "none by this run — it reused the staging area a previous run relocated, which " +
+                    "the sampled diff had already compared against its sources",
+            ),
+        )
+    } else {
+        dimensions.flatMap { it.lines() } +
+            reportLine("relocated in total", "$relocated chunks, $dropped dropped, $bytes bytes") +
+            discarded.map {
+                reportLine("discarded", "${it.what} — ${it.files} file${if (it.files == 1) "" else "s"}")
+            }
+    }
 }
 
 /**

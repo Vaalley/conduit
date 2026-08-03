@@ -370,10 +370,32 @@ class WorldMergeTest {
 
         assertEquals(
             "${save.staging} is left over from an interrupted merge; " +
-                "look at what it holds, then remove it and run again",
+                "look at what it holds, then remove it and run again — or pass " +
+                "--reuse-relocation to keep the chunks it already relocated and re-run the checks " +
+                "over them",
             refusal.message,
         )
         assertTrue(Files.isDirectory(save.staging))
+    }
+
+    @Test
+    fun `a staging area relocated for a different offset is refused rather than resumed onto`() {
+        // The whole value of reusing a staging area is not repeating fifty minutes
+        // of relocation, and the whole risk is reusing one that was built for a
+        // different landmass — the audit would then check one offset's chunks
+        // against another offset's arithmetic and find nothing wrong.
+        Files.createDirectories(save.staging)
+        Files.writeString(save.staging.resolve("relocated-for.txt"), "9999,9999 border=50000+512 level=world")
+
+        val refusal = assertThrows(MigrationRefused::class.java) {
+            WorldMerge(save.plan().copy(reuseRelocation = true, planOnly = false)).run()
+        }
+
+        assertTrue(
+            refusal.message!!.contains("was relocated for 9999,9999") &&
+                refusal.message!!.contains("auditing one landmass against another's arithmetic"),
+            refusal.message,
+        )
     }
 
     @Test

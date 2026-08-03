@@ -108,12 +108,30 @@ class MergeStaging(
 
     fun write(placement: MergePlacement): MergeReport {
         Files.createDirectories(staging)
+        // What the chunks in here were relocated for. A staging area is only
+        // reusable by a run that would have produced the same one, so the offset
+        // and the border are written down and checked rather than assumed —
+        // resuming onto a different offset would audit one landmass against
+        // another's arithmetic and pass.
+        val stamp = staging.resolve(RELOCATION_STAMP)
+        val want = "${placement.offset.x},${placement.offset.z} " +
+            "border=${plan.border.halfExtent}+${plan.border.bleed} level=${plan.levelName}"
+        val relocated = plan.reuseRelocation && Files.exists(stamp) && Files.readString(stamp) == want
+        if (plan.reuseRelocation && Files.exists(stamp) && !relocated) {
+            throw MigrationRefused(
+                "$staging was relocated for ${Files.readString(stamp)}, and this run wants $want — " +
+                    "remove it and run again rather than auditing one landmass against another's " +
+                    "arithmetic",
+            )
+        }
         val report = try {
             // The merge in the order it happens. Each phase stages its own output
             // and returns the section it answers for; nothing reaches the save
             // until commit() below, so a phase failing here costs only the work.
-            val relocation = phase("moving the chunks across") {
-                ChunkRelocation(
+            val relocation = phase(
+                if (relocated) "reusing the chunks already moved across" else "moving the chunks across",
+            ) {
+                if (relocated) RelocationReport.reused() else ChunkRelocation(
                     levelDir = levelDir,
                     stagedLevelDir = stagedLevelDir,
                     workDir = staging.resolve(WORK_DIRECTORY),
@@ -126,9 +144,19 @@ class MergeStaging(
             // chunks against their sources, and the audit repairs lodestone
             // targets in place — so an audit that ran first would leave changes
             // the diff could only read as the relocation having gone wrong.
+            // Only when this run did the moving. The diff compares staged chunks
+            // against their sources, and the completion pass and the audit both
+            // rewrite staged chunks — so run against a reused staging area it
+            // would be reading a previous run's repairs and calling them the
+            // tool's mistakes. It already passed on the run that built this.
             val sampled = phase("spot-checking the moved terrain") {
-                SampledDiff(levelDir, stagedLevelDir, placement.offset, plan.sample, plan.border).verify()
+                if (relocated) {
+                    SampledDiffReport.reused()
+                } else {
+                    SampledDiff(levelDir, stagedLevelDir, placement.offset, plan.sample, plan.border).verify()
+                }
             }
+            if (!relocated) Files.writeString(stamp, want)
             // After the diff has compared the tool's own output against the source,
             // and before the audit judges it: this finishes coordinates the
             // relocation tool does not know about, so that a merge does not refuse
@@ -162,7 +190,11 @@ class MergeStaging(
             // The merge only ever copies — `--worlds move` is deliberately not
             // offered — so nothing here is the last copy of anything, and the
             // staging directory can go without taking evidence with it.
-            deleteRecursively(staging)
+            //
+            // Unless the operator is iterating on the checks, in which case the
+            // fifty minutes of relocated chunks in here are exactly what they
+            // asked to keep, and the stamp above is what makes them safe to reuse.
+            if (!plan.reuseRelocation) deleteRecursively(staging)
             throw failure
         }
         commit()
@@ -325,5 +357,15 @@ class MergeStaging(
     private companion object {
         /** The tool's own scratch files, inside staging so they are never committed. */
         const val WORK_DIRECTORY = "mcaselector"
+
+        /**
+         * What the chunks in a staging area were relocated for.
+         *
+         * Written once the relocation and the diff have both passed, so its
+         * presence means "these chunks are moved and proven" and not merely
+         * "something ran here". A resumed run reads it and refuses on a mismatch
+         * rather than auditing one landmass against another's arithmetic.
+         */
+        const val RELOCATION_STAMP = "relocated-for.txt"
     }
 }
