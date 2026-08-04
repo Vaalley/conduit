@@ -13,6 +13,7 @@
     "PlayerDataStorageMixin",
     "CommandsMixin",
     "ServerGamePacketListenerImplMixin",
+    "SpectatorVisibilityMixin",
     "RegionSignEditMixin",
     "RegionContainerSessionMixin",
     "RegionContainerClickMixin",

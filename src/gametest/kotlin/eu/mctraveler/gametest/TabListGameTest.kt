@@ -10,6 +10,7 @@ import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket
 import net.minecraft.network.protocol.game.ClientboundTabListPacket
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.server.network.ServerCommonPacketListenerImpl
+import net.minecraft.world.level.GameType
 import net.minecraft.world.level.Level
 
 /**
@@ -114,6 +115,53 @@ class TabListGameTest {
             helper.succeed()
         }
     }
+
+    /**
+     * Issue #20: a Spectator's tab-list name is italicised/greyed for every viewer by
+     * vanilla client code that reacts purely to the `GameType` on the tab entry — letting
+     * a cheater notice exactly when an admin is spectating them. Only admins may reach
+     * Spectator at all (`/gamemode` needs operator permission), so masking it is purely
+     * about who else is allowed to see that an admin is doing it — never the spectating
+     * admin's own client, which needs the real value to keep noclip and the free camera.
+     */
+    @GameTest(maxTicks = 100)
+    fun spectatorIsHiddenFromNonAdminsButNotFromAdminsOrThemselves(helper: GameTestHelper) {
+        val subject = MessageCapturingPlayer.join(helper, "T20Subject")
+        subject.makeAdmin()
+        val bystander = MessageCapturingPlayer.join(helper, "T20Bystander")
+        val staff = MessageCapturingPlayer.join(helper, "T20Staff")
+        staff.makeAdmin()
+        listOf(subject, bystander, staff).forEach(PacketCapture::drain) // discard join bursts
+
+        subject.setGameMode(GameType.SPECTATOR)
+
+        helper.assertValueEqual(
+            lastGameModeSentFor(bystander, subject),
+            GameType.SURVIVAL,
+            "the gamemode a non-admin bystander is shown for a spectating admin",
+        )
+        helper.assertValueEqual(
+            lastGameModeSentFor(staff, subject),
+            GameType.SPECTATOR,
+            "the gamemode a fellow admin is shown for a spectating admin",
+        )
+        helper.assertValueEqual(
+            lastGameModeSentFor(subject, subject),
+            GameType.SPECTATOR,
+            "the gamemode the spectating admin's own client is shown",
+        )
+
+        removePlayers(helper, subject, bystander, staff)
+        helper.succeed()
+    }
+
+    /** The `GameType` most recently sent to [viewer] for [subject]'s tab entry. */
+    private fun lastGameModeSentFor(viewer: ServerPlayer, subject: ServerPlayer): GameType =
+        PacketCapture.drainOf<ClientboundPlayerInfoUpdatePacket>(viewer)
+            .flatMap { it.entries() }
+            .lastOrNull { it.profileId() == subject.uuid }
+            ?.gameMode()
+            ?: throw AssertionError("no gamemode was sent to the viewer for ${subject.uuid}")
 
     // --- Shared assertions -----------------------------------------------------------------
 
