@@ -20,6 +20,10 @@ import net.minecraft.world.level.Level
  *
  * Expected texts are the inventory's literals (portal-feature-inventory.md §2.6/§2.18).
  */
+/** The glyph [TabListFeature.hearts] draws with — kept independent so this file never
+ *  reaches into that `private` constant. */
+private const val HEART = "❤"
+
 class TabListGameTest {
 
     @GameTest
@@ -133,6 +137,8 @@ class TabListGameTest {
         staff.makeAdmin()
         listOf(subject, bystander, staff).forEach(PacketCapture::drain) // discard join bursts
 
+        // 5/10 hearts, so a masked (full) and a real (damaged) bar are distinguishable.
+        subject.health = 10.0f
         subject.setGameMode(GameType.SPECTATOR)
 
         helper.assertValueEqual(
@@ -140,19 +146,64 @@ class TabListGameTest {
             GameType.SURVIVAL,
             "the gamemode a non-admin bystander is shown for a spectating admin",
         )
+        assertHearts(displayNameSentFor(bystander, subject), redCount = 10, grayCount = 0, goldCount = 0)
+
         helper.assertValueEqual(
             lastGameModeSentFor(staff, subject),
             GameType.SPECTATOR,
             "the gamemode a fellow admin is shown for a spectating admin",
         )
+        assertHearts(displayNameSentFor(staff, subject), redCount = 5, grayCount = 5, goldCount = 0)
+
         helper.assertValueEqual(
             lastGameModeSentFor(subject, subject),
             GameType.SPECTATOR,
             "the gamemode the spectating admin's own client is shown",
         )
+        assertHearts(displayNameSentFor(subject, subject), redCount = 5, grayCount = 5, goldCount = 0)
 
         removePlayers(helper, subject, bystander, staff)
         helper.succeed()
+    }
+
+    /**
+     * Creative has no gamemode tell to hide (only Spectator's tab-list italics do), but a
+     * bystander must still not see a Creative admin's real (possibly mid-combat) health.
+     */
+    @GameTest(maxTicks = 100)
+    fun creativeHidesRealHeartsFromNonAdminsButNotTheGameMode(helper: GameTestHelper) {
+        val subject = MessageCapturingPlayer.join(helper, "T20Creative")
+        subject.makeAdmin()
+        val bystander = MessageCapturingPlayer.join(helper, "T20CreBystander")
+        listOf(subject, bystander).forEach(PacketCapture::drain)
+
+        subject.health = 10.0f
+        subject.setGameMode(GameType.CREATIVE)
+
+        helper.assertValueEqual(
+            lastGameModeSentFor(bystander, subject),
+            GameType.CREATIVE,
+            "the gamemode a non-admin bystander is shown for a Creative admin",
+        )
+        assertHearts(displayNameSentFor(bystander, subject), redCount = 10, grayCount = 0, goldCount = 0)
+
+        removePlayers(helper, subject, bystander)
+        helper.succeed()
+    }
+
+    /** The "fun" case the hearts exist for: an ordinary player's real health, for everybody. */
+    @GameTest(maxTicks = 100)
+    fun heartsReflectRealHealthForOrdinaryPlayers(helper: GameTestHelper) {
+        val viewer = MessageCapturingPlayer.join(helper, "T25Viewer")
+        val subject = MessageCapturingPlayer.join(helper, "T25Hurt")
+        PacketCapture.drain(viewer)
+
+        subject.health = 7.0f // 3.5 hearts, rounds up to 4
+        helper.runAfterDelay(30) {
+            assertHearts(displayNameSentFor(viewer, subject), redCount = 4, grayCount = 6, goldCount = 0)
+            removePlayers(helper, viewer, subject)
+            helper.succeed()
+        }
     }
 
     /** The `GameType` most recently sent to [viewer] for [subject]'s tab entry. */
@@ -226,8 +277,26 @@ class TabListGameTest {
                 player.gameProfile.name to ChatFormatting.GREEN,
                 " " to null,
                 "[${latencyMs}ms]" to ChatFormatting.DARK_GRAY,
+                " " to null,
+                HEART.repeat(10) to ChatFormatting.RED,
             ),
         )
+    }
+
+    /**
+     * Asserts the hearts segment at the tail of [displayName]: [redCount] filled (red),
+     * [grayCount] hollow (dark gray), then [goldCount] Absorption (gold) — a zero-count
+     * color's run is absent, since Paint drops empty segments.
+     */
+    private fun assertHearts(displayName: Component, redCount: Int, grayCount: Int, goldCount: Int) {
+        val expected = listOf(
+            HEART.repeat(redCount) to ChatFormatting.RED,
+            HEART.repeat(grayCount) to ChatFormatting.DARK_GRAY,
+            HEART.repeat(goldCount) to ChatFormatting.GOLD,
+        ).filter { (text, _) -> text.isNotEmpty() }
+        val actual = flatten(displayName).takeLast(expected.size).map { (text, color) -> text to color }
+        val want = expected.map { (text, formatting) -> text to TextColor.fromLegacyFormat(formatting) }
+        check(actual == want) { "hearts rendered as $actual, expected $want" }
     }
 
     /** The display name most recently sent to [viewer] for [subject]'s tab entry. */

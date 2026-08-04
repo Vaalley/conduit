@@ -6,6 +6,7 @@ import java.lang.reflect.Constructor
 import java.lang.reflect.ParameterizedType
 import java.lang.reflect.RecordComponent
 import java.util.UUID
+import net.minecraft.network.chat.Component
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.level.GameType
@@ -21,20 +22,29 @@ import net.minecraft.world.level.GameType
  * .SpectatorVisibilityMixin] does that per outgoing packet; this object decides *what* to
  * send.
  *
- * Only Spectator is masked, to `SURVIVAL`: vanilla's `/gamemode` requires operator
- * permission, so anyone actually reaching Spectator is already an admin
- * ([RegionsFeature.isAdmin]), and Creative carries no equivalent tab-list tell to hide.
- * A viewer who is themselves an admin, or the spectating admin's own client (which would
- * otherwise lose noclip and the free camera along with the italics — vanilla's tab-list
- * entry doubles as the client's only signal for its *own* current mode), is left alone.
+ * Two independent things get masked, since Creative and Spectator each have their own tell:
+ * - **`GameType`**, to `SURVIVAL` — only for Spectator, the one vanilla's own tab list draws
+ *   differently. `/gamemode` requires operator permission, so anyone actually reaching
+ *   Spectator is already an admin ([RegionsFeature.isAdmin]).
+ * - **The tab entry's hearts** (part of its display name — see [TabListFeature.hearts]), to
+ *   full with no Absorption — for Spectator *or* Creative, since a bystander seeing an
+ *   admin's real (possibly damaged, mid-combat) health while they investigate is exactly
+ *   the kind of tell this exists to remove, and it carries no real gameplay meaning to that
+ *   bystander regardless.
+ *
+ * Neither ever applies to a viewer who is themselves an admin, or to the affected player's
+ * own client: real Spectator noclip/free-camera is itself driven off the tab entry's
+ * `GameType` when its UUID matches the client's own, so lying to the spectating admin's own
+ * client would break the very thing they are trying to do.
  *
  * The entry type and the packet's `(actions, entries)` constructor are narrower than
  * public, and this build ships no ProGuard mappings to hand-verify a descriptor against
  * (26.1+ is remap-free — see `docs/dev-loop.md`), so both are found by runtime shape —
- * a record component typed `UUID`, one typed `GameType`, a constructor whose second
- * parameter is generically a `Collection` of the entry type — rather than a guessed name.
- * Every lookup fails open: if the shape it finds ever stops matching, [maskFor] returns
- * null and the real, unmasked packet goes out — today's behaviour, not a crash.
+ * a record component typed `UUID`, one typed `GameType`, one typed `Component`, a
+ * constructor whose second parameter is generically a `Collection` of the entry type —
+ * rather than a guessed name. Every lookup fails open: if the shape it finds ever stops
+ * matching, [maskFor] returns null and the real, unmasked packet goes out — today's
+ * behaviour, not a crash.
  */
 object SpectatorVisibility {
 
@@ -46,13 +56,16 @@ object SpectatorVisibility {
     private var entryConstructor: Constructor<*>? = null
     private var gameModeIndex = -1
     private var profileIdIndex = -1
+
+    /** -1 when not found: hearts-masking degrades gracefully, gameMode-masking still works. */
+    private var displayNameIndex = -1
     private var packetConstructor: Constructor<*>? = null
 
     /**
-     * A copy of [packet] with every entry that is both someone other than [viewer] and
-     * really in `GameType.SPECTATOR` replaced by a `SURVIVAL` copy, or null when nothing
-     * needs masking — [viewer] is an admin, no entry is a non-self Spectator, or the
-     * reflective lookups above could not find what they need.
+     * A copy of [packet] with every entry belonging to someone other than [viewer] masked
+     * as described on the class, or null when nothing needs masking — [viewer] is an admin,
+     * no entry is a non-self Spectator/Creative, or the reflective lookups above could not
+     * find what they need.
      */
     @JvmStatic
     fun maskFor(viewer: ServerPlayer, packet: ClientboundPlayerInfoUpdatePacket): ClientboundPlayerInfoUpdatePacket? {
@@ -64,20 +77,38 @@ object SpectatorVisibility {
         val ctor = entryConstructor ?: return null
         val gmIndex = gameModeIndex
         val pidIndex = profileIdIndex
+        val dnIndex = displayNameIndex
 
         var changed = false
         val maskedEntries = entries.map { entry ->
             val profileId = components[pidIndex].accessor.invoke(entry) as UUID
             val gameMode = components[gmIndex].accessor.invoke(entry) as GameType
-            if (profileId == viewer.uuid || gameMode != GameType.SPECTATOR) {
+            val maskGameMode = gameMode == GameType.SPECTATOR
+            val maskHearts = dnIndex >= 0 && (gameMode == GameType.SPECTATOR || gameMode == GameType.CREATIVE)
+
+            if (profileId == viewer.uuid || !(maskGameMode || maskHearts)) {
                 entry
             } else {
-                changed = true
-                val args = components.mapIndexed { index, component ->
-                    if (index == gmIndex) GameType.SURVIVAL else component.accessor.invoke(entry)
-                }.toTypedArray()
-                runCatching { ctor.newInstance(*args) }
-                    .getOrElse { return fail("could not build a masked tab-list entry: ${it.message}") }
+                val fullHeartsName = if (maskHearts) {
+                    viewer.level().server.playerList.getPlayer(profileId)
+                        ?.let(TabListFeature::displayNameWithFullHearts)
+                } else {
+                    null
+                }
+                if (!maskGameMode && fullHeartsName == null) {
+                    entry
+                } else {
+                    changed = true
+                    val args = components.mapIndexed { index, component ->
+                        when {
+                            index == gmIndex && maskGameMode -> GameType.SURVIVAL
+                            index == dnIndex && fullHeartsName != null -> fullHeartsName
+                            else -> component.accessor.invoke(entry)
+                        }
+                    }.toTypedArray()
+                    runCatching { ctor.newInstance(*args) }
+                        .getOrElse { return fail("could not build a masked tab-list entry: ${it.message}") }
+                }
             }
         }
         if (!changed) return null
@@ -92,7 +123,8 @@ object SpectatorVisibility {
         if (!loggedFailure) {
             loggedFailure = true
             MCTraveler.LOGGER.warn(
-                "SpectatorVisibility: $reason — Spectator will show to every viewer until the next restart.",
+                "SpectatorVisibility: $reason — Spectator/Creative will show real state to every viewer " +
+                    "until the next restart.",
             )
         }
         return null
@@ -124,6 +156,7 @@ object SpectatorVisibility {
             fail("the tab-list entry has no GameType/UUID record component")
             return false
         }
+        val dnIndex = components.indexOfFirst { it.type == Component::class.java }
 
         val ctor = runCatching {
             entryClass.getDeclaredConstructor(*components.map { it.type }.toTypedArray())
@@ -154,6 +187,7 @@ object SpectatorVisibility {
         entryConstructor = ctor
         gameModeIndex = gmIndex
         profileIdIndex = pidIndex
+        displayNameIndex = dnIndex
         packetConstructor = packetCtor
         return true
     }
