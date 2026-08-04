@@ -95,6 +95,13 @@ class CrystalItemTest {
         }
     }
 
+    @Test
+    fun `charge capacity clamps unknown tiers`() {
+        assertEquals(1, CrystalItem.chargesOf(0))
+        assertEquals(1, CrystalItem.chargesOf(-1))
+        assertEquals(5, CrystalItem.chargesOf(4))
+    }
+
     // ---- Nucleus-era crystals (spec deviation 18) ----
     //
     // Bukkit's PersistentDataContainer writes into a `PublicBukkitValues`

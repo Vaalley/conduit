@@ -33,9 +33,6 @@ object CrystalFeature {
     const val REGEN_CHECK_INTERVAL_TICKS = 20
 
     fun register() {
-        ServerLifecycleEvents.SERVER_STARTING.register { server ->
-            CrystalSpawns.start(server.serverDirectory)
-        }
         ServerTickEvents.END_SERVER_TICK.register(::onEndServerTick)
         CommandRegistrationCallback.EVENT.register { dispatcher, _, _ ->
             CrystalCommands.register(dispatcher)

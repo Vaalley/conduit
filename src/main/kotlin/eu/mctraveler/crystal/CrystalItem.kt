@@ -125,12 +125,10 @@ object CrystalItem {
     /** The number of charges available from a crystal of [tier]. */
     @JvmStatic
     fun chargesOf(tier: Int): Int {
-        require(tier in MIN_TIER..MAX_TIER) { "crystal tier must be $MIN_TIER..$MAX_TIER, was $tier" }
-        return when (tier) {
+        return when (tier.coerceIn(MIN_TIER, MAX_TIER)) {
             1 -> 1
             2 -> 3
-            3 -> 5
-            else -> error("unreachable")
+            else -> 5
         }
     }
 

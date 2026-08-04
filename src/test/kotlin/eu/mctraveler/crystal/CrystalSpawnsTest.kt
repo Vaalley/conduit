@@ -48,4 +48,12 @@ class CrystalSpawnsTest {
         assertEquals(90.0f, loaded[2].yaw)
         assertEquals("spawn3", CrystalSpawns.commandName(2))
     }
+
+    @Test
+    fun `malformed config falls back to the two default spawns`() {
+        val file = tempDir.resolve(CrystalSpawns.CONFIG_FILE)
+        Files.writeString(file, """{"spawns": [ {"name": "broken"} ]}""")
+
+        assertEquals(CrystalSpawns.DEFAULTS, CrystalSpawns.load(file))
+    }
 }

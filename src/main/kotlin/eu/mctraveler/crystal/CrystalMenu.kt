@@ -54,7 +54,7 @@ object CrystalMenu {
     /** The slot the first destination sits in. */
     const val FIRST_ACTION_SLOT = 11
 
-    /** The last action slot when the default two spawns are configured. */
+    /** The last action slot on the default three-row destination screen. */
     const val LAST_ACTION_SLOT = 16
 
     /** Which of the two GUIs a [CrystalChestMenu] is. */
@@ -80,8 +80,8 @@ object CrystalMenu {
      * The fixed destinations and configured spawns in their menu order; the slot each occupies is
      * [FIRST_ACTION_SLOT] plus its index here.
      */
-    private val DESTINATIONS: List<Destination> by lazy {
-        buildList {
+    private fun destinations(): List<Destination> {
+        return buildList {
             add(
                 Destination(
                     name = "Bed",
@@ -136,6 +136,9 @@ object CrystalMenu {
         }
     }
 
+    private fun visibleDestinations(): List<Destination> =
+        destinations().take((MAX_ROWS - 2) * ACTIONS_PER_ROW)
+
     // ---- opening ----
 
     /**
@@ -158,7 +161,8 @@ object CrystalMenu {
 
     /** Opens the destination GUI (spec story 26). */
     fun openDestinations(player: ServerPlayer) {
-        val rows = destinationRows(DESTINATIONS.size)
+        val destinations = visibleDestinations()
+        val rows = destinationRows(destinations.size)
         val contents = SimpleContainer(rows * 9)
         val black = Items.STAINED_GLASS_PANE.black()
         val blue = Items.STAINED_GLASS_PANE.blue()
@@ -167,7 +171,7 @@ object CrystalMenu {
             contents.setItem(slot, pane(if (row == 0 || row == rows - 1) black else blue))
         }
         contents.setItem(4, energyInfo(player))
-        for ((slot, destination) in actionSlots(DESTINATIONS.size).zip(DESTINATIONS)) {
+        for ((slot, destination) in actionSlots(destinations.size).zip(destinations)) {
             contents.setItem(slot, button(destination))
         }
         open(player, Kind.DESTINATIONS, contents, rows, TITLE, emptyList())
@@ -364,8 +368,12 @@ object CrystalMenu {
     private fun title(name: String): String =
         name.replaceFirstChar { it.uppercase() }
 
+    /**
+     * Destination screens are capped at [MAX_ROWS], just like player screens.
+     * Destinations beyond the available slots do not fit and are not shown.
+     */
     private fun destinationRows(count: Int): Int =
-        2 + ((count + ACTIONS_PER_ROW - 1) / ACTIONS_PER_ROW).coerceAtLeast(1)
+        (2 + ((count + ACTIONS_PER_ROW - 1) / ACTIONS_PER_ROW).coerceAtLeast(1)).coerceAtMost(MAX_ROWS)
 
     private fun actionSlots(count: Int): List<Int> =
         (0 until count).map { index ->
@@ -457,13 +465,13 @@ object CrystalMenu {
 
         private fun actionFor(slot: Int): ((ServerPlayer) -> Unit)? = when (kind) {
             Kind.DESTINATIONS ->
-                if (slot !in actionSlots(DESTINATIONS.size)) {
+                if (slot !in actionSlots(visibleDestinations().size)) {
                     null
                 } else {
-                    actionSlots(DESTINATIONS.size)
+                    actionSlots(visibleDestinations().size)
                         .indexOf(slot)
                         .takeIf { it >= 0 }
-                        ?.let { index -> { player -> choose(player, DESTINATIONS[index]) } }
+                        ?.let { index -> { player -> choose(player, visibleDestinations()[index]) } }
                 }
 
             Kind.PLAYERS ->

@@ -4,11 +4,13 @@ import com.google.gson.GsonBuilder
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import eu.mctraveler.MCTraveler
 import eu.mctraveler.worlds.DimensionRole
 import eu.mctraveler.worlds.Landing
 import eu.mctraveler.worlds.WorldsFeature
 import java.nio.file.Files
 import java.nio.file.Path
+import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.level.Level
 
@@ -36,16 +38,17 @@ object CrystalSpawns {
         Definition("spawn 2", 0.5, 67.5, 802816.5, 0.0f),
     )
 
-    private var definitions: List<Definition> = DEFAULTS
+    /**
+     * The active spawn definitions, in menu and command order.
+     *
+     * The file is read on every access because command registration can happen
+     * before server startup, and game-test servers may reuse this JVM with
+     * different config contents.
+     */
+    fun definitions(): List<Definition> = load(configFile())
 
-    /** Loads the configured list and creates the default file when absent. */
-    fun start(serverDirectory: Path) {
-        val file = serverDirectory.resolve("mctraveler").resolve(CONFIG_FILE)
-        definitions = load(file)
-    }
-
-    /** The active spawn definitions, in menu and command order. */
-    fun definitions(): List<Definition> = definitions
+    private fun configFile(): Path =
+        FabricLoader.getInstance().getGameDir().resolve("mctraveler").resolve(CONFIG_FILE)
 
     /** The public command name assigned to the zero-based [index]. */
     fun commandName(index: Int): String = "spawn${index + 1}"
@@ -64,24 +67,30 @@ object CrystalSpawns {
      * public so the persistence format has a small, direct unit-test seam.
      */
     fun load(file: Path): List<Definition> {
-        if (Files.notExists(file)) {
-            Files.createDirectories(file.parent)
-            Files.writeString(file, encode(DEFAULTS))
-            return DEFAULTS
-        }
-        val root = JsonParser.parseString(Files.readString(file)).asJsonObject
-        val entries = root.get("spawns")?.asJsonArray
-            ?: throw IllegalArgumentException("spawn config is missing \"spawns\"")
-        require(entries.size() > 0) { "spawn config must contain at least one spawn" }
-        return entries.mapIndexed { index, value ->
-            val spawn = value.asJsonObject
-            Definition(
-                name = string(spawn, "name", index),
-                x = number(spawn, "x", index),
-                y = number(spawn, "y", index),
-                z = number(spawn, "z", index),
-                yaw = number(spawn, "yaw", index).toFloat(),
-            )
+        return try {
+            if (Files.notExists(file)) {
+                Files.createDirectories(file.parent)
+                Files.writeString(file, encode(DEFAULTS))
+                DEFAULTS
+            } else {
+                val root = JsonParser.parseString(Files.readString(file)).asJsonObject
+                val entries = root.get("spawns")?.asJsonArray
+                    ?: throw IllegalArgumentException("spawn config is missing \"spawns\"")
+                require(entries.size() > 0) { "spawn config must contain at least one spawn" }
+                entries.mapIndexed { index, value ->
+                    val spawn = value.asJsonObject
+                    Definition(
+                        name = string(spawn, "name", index),
+                        x = number(spawn, "x", index),
+                        y = number(spawn, "y", index),
+                        z = number(spawn, "z", index),
+                        yaw = number(spawn, "yaw", index).toFloat(),
+                    )
+                }
+            }
+        } catch (error: Exception) {
+            MCTraveler.LOGGER.error("Failed to load crystal spawn config {}: {}", file, error.message, error)
+            DEFAULTS
         }
     }
 
