@@ -23,12 +23,12 @@
         "Recharges one use every 15 minutes",
         "",
         {
-          "text": "Charge capacity 2",
+          "text": "Charge capacity 3",
           "color": "gold"
         }
       ],
       "minecraft:max_stack_size": 1,
-      "minecraft:max_damage": 2,
+      "minecraft:max_damage": 3,
       "minecraft:enchantment_glint_override": true
     }
   }

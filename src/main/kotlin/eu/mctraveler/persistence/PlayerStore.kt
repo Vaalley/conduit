@@ -39,7 +39,7 @@ interface PlayerStore {
     fun setNotepadPages(uuid: UUID, pages: List<String>)
 
     /**
-     * The player's Teleportation Crystal energy (0-3), or null if they have
+     * The player's Teleportation Crystal energy (0-5), or null if they have
      * never spent any — read as full energy by
      * [eu.mctraveler.crystal.CrystalEnergy], which owns the range.
      */

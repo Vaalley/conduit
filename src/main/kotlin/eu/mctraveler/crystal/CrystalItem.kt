@@ -29,11 +29,7 @@ object CrystalItem {
     /** The lowest tier, craftable from an Eye of Ender. */
     const val MIN_TIER = 1
 
-    /**
-     * The highest tier. Equal to [CrystalEnergy.MAX_ENERGY] on purpose: a tier
-     * is a charge capacity, so a top-tier crystal's bar spans the whole pool
-     * while a tier-1's fills after a single point is spent.
-     */
+    /** The highest tier. */
     const val MAX_TIER = 3
 
     /** The crystal's item name, exactly as Nucleus named it. */
@@ -112,9 +108,9 @@ object CrystalItem {
         stack.set(DataComponents.ITEM_NAME, Component.literal(ITEM_NAME))
         stack.set(DataComponents.LORE, ItemLore(loreOf(tier)))
         stack.set(DataComponents.MAX_STACK_SIZE, 1)
-        // The damage bar is a fuel gauge, not wear: capacity is the tier, and how
+        // The damage bar is a fuel gauge, not wear: capacity is the charges, and how
         // full it looks is the viewer's own energy (see CrystalDamageDisplay).
-        stack.set(DataComponents.MAX_DAMAGE, tier)
+        stack.set(DataComponents.MAX_DAMAGE, chargesOf(tier))
         stack.set(DataComponents.ENCHANTMENT_GLINT_OVERRIDE, true)
     }
 
@@ -123,8 +119,18 @@ object CrystalItem {
         Component.literal("The power of teleportation in your hands"),
         Component.literal("Recharges one use every ${CrystalEnergy.RECHARGE_MINUTES} minutes"),
         Component.literal(""),
-        Paint.gold("Charge capacity $tier"),
+        Paint.gold("Charge capacity ${chargesOf(tier)}"),
     )
+
+    /** The number of charges available from a crystal of [tier]. */
+    @JvmStatic
+    fun chargesOf(tier: Int): Int {
+        return when (tier.coerceIn(MIN_TIER, MAX_TIER)) {
+            1 -> 1
+            2 -> 3
+            else -> 5
+        }
+    }
 
     /**
      * True if [stack] is one of our crystals — minted here, or by Nucleus

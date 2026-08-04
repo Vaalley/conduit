@@ -3,6 +3,7 @@ package eu.mctraveler.gametest
 import eu.mctraveler.crystal.CrystalEnergy
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.gametest.framework.GameTestHelper
+import net.minecraft.world.level.Level
 
 /**
  * `/set-teleportation-crystal-energy <energy> [player]` (spec User Story 37).
@@ -14,7 +15,6 @@ import net.minecraft.gametest.framework.GameTestHelper
 class CrystalCommandGameTest {
 
     private val command = "set-teleportation-crystal-energy"
-
     @GameTest
     fun noArgumentsRepliesUsageEvenToANonAdmin(helper: GameTestHelper) {
         // Usage comes before the admin gate (house rule).
@@ -42,7 +42,7 @@ class CrystalCommandGameTest {
                 listOf("ERROR You must be an admin to use this command"),
                 "the reply to a non-admin",
             )
-            helper.assertValueEqual(CrystalEnergy.energyOf(visitor), 3, "a refused command changes nothing")
+            helper.assertValueEqual(CrystalEnergy.energyOf(visitor), 5, "a refused command changes nothing")
             helper.succeed()
         } finally {
             visitor.leave()
@@ -54,12 +54,12 @@ class CrystalCommandGameTest {
         val admin = MessageCapturingPlayer.join(helper, "CrystalBoss1")
         try {
             admin.makeAdmin()
-            for (energy in listOf(4, -1)) {
+            for (energy in listOf(6, -1)) {
                 admin.messages.clear()
                 admin.runCommand("$command $energy")
                 helper.assertValueEqual(
                     admin.messages.map { it.string },
-                    listOf("ERROR Energy must be between 0 and 3"),
+                    listOf("ERROR Energy must be between 0 and 5"),
                     "the reply to energy $energy",
                 )
             }
@@ -138,11 +138,42 @@ class CrystalCommandGameTest {
                 "the target should be told nothing",
             )
             helper.assertValueEqual(CrystalEnergy.energyOf(target), 0, "the target's energy")
-            helper.assertValueEqual(CrystalEnergy.energyOf(admin), 3, "the sender's own energy is untouched")
+            helper.assertValueEqual(CrystalEnergy.energyOf(admin), 5, "the sender's own energy is untouched")
             helper.succeed()
         } finally {
             admin.leave()
             target.leave()
+        }
+    }
+
+    @GameTest
+    fun spawnCommandsTeleportForFree(helper: GameTestHelper) {
+        val player = MessageCapturingPlayer.join(helper, "CrystalSpawnCommands")
+        try {
+            CrystalEnergy.setEnergy(player, 2)
+            player.runCommand("spawn1")
+            helper.assertValueEqual(player.x, 16.5, "spawn1 x")
+            helper.assertValueEqual(player.y, 71.0, "spawn1 y")
+            helper.assertValueEqual(player.z, -15.5, "spawn1 z")
+            helper.assertValueEqual(player.yRot, 180.0f, "spawn1 yaw")
+            helper.assertValueEqual(CrystalEnergy.energyOf(player), 2, "energy after spawn1")
+            helper.assertValueEqual(player.messages.last().string, "SUCCESS Arrived at spawn 1", "spawn1 reply")
+
+            player.runCommand("spawn2")
+            helper.assertValueEqual(
+                player.level().dimension(),
+                Level.OVERWORLD,
+                "spawn2 dimension",
+            )
+            helper.assertValueEqual(player.x, 0.5, "spawn2 x")
+            helper.assertValueEqual(player.y, 67.5, "spawn2 y")
+            helper.assertValueEqual(player.z, 802816.5, "spawn2 z")
+            helper.assertValueEqual(player.yRot, 0.0f, "spawn2 yaw")
+            helper.assertValueEqual(CrystalEnergy.energyOf(player), 2, "energy after spawn2")
+            helper.assertValueEqual(player.messages.last().string, "SUCCESS Arrived at spawn 2", "spawn2 reply")
+            helper.succeed()
+        } finally {
+            player.leave()
         }
     }
 }

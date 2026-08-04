@@ -52,9 +52,10 @@ class CrystalItemTest {
     }
 
     @Test
-    fun `the charge capacity is the tier`() {
-        for (tier in 1..3) {
-            assertEquals(tier, CrystalItem.of(tier).get(DataComponents.MAX_DAMAGE), "tier $tier max damage")
+    fun `the charge capacity follows the tier mapping`() {
+        for ((tier, charges) in mapOf(1 to 1, 2 to 3, 3 to 5)) {
+            assertEquals(charges, CrystalItem.chargesOf(tier))
+            assertEquals(charges, CrystalItem.of(tier).get(DataComponents.MAX_DAMAGE), "tier $tier max damage")
         }
     }
 
@@ -78,7 +79,7 @@ class CrystalItemTest {
                 "The power of teleportation in your hands",
                 "Recharges one use every 15 minutes",
                 "",
-                "Charge capacity 2",
+                "Charge capacity 3",
             ),
             lore.map { it.string },
         )
@@ -92,6 +93,13 @@ class CrystalItemTest {
                 CrystalItem.of(tier)
             }
         }
+    }
+
+    @Test
+    fun `charge capacity clamps unknown tiers`() {
+        assertEquals(1, CrystalItem.chargesOf(0))
+        assertEquals(1, CrystalItem.chargesOf(-1))
+        assertEquals(5, CrystalItem.chargesOf(4))
     }
 
     // ---- Nucleus-era crystals (spec deviation 18) ----

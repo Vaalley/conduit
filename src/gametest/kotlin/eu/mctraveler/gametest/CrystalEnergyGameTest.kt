@@ -32,7 +32,7 @@ class CrystalEnergyGameTest {
         val viewer = MessageCapturingPlayer.join(helper, "CrystalGauge")
         try {
             viewer.inventory.setItem(0, CrystalItem.of(3))
-            for ((energy, expectedDamage) in listOf(3 to 0, 2 to 1, 1 to 2, 0 to 3)) {
+            for ((energy, expectedDamage) in listOf(5 to 0, 4 to 1, 3 to 2, 2 to 3, 1 to 4, 0 to 5)) {
                 CrystalEnergy.setEnergy(viewer, energy)
                 PacketCapture.drain(viewer)
                 viewer.containerMenu.sendAllDataToRemote()
@@ -79,9 +79,9 @@ class CrystalEnergyGameTest {
         val rich = MessageCapturingPlayer.join(helper, "CrystalRich")
         val poor = MessageCapturingPlayer.join(helper, "CrystalPoor")
         try {
-            CrystalEnergy.setEnergy(rich, 3)
+            CrystalEnergy.setEnergy(rich, 5)
             CrystalEnergy.setEnergy(poor, 0)
-            for ((viewer, expectedDamage) in listOf(rich to 0, poor to 3)) {
+            for ((viewer, expectedDamage) in listOf(rich to 0, poor to 5)) {
                 PacketCapture.drain(viewer)
                 viewer.connection.send(
                     ClientboundContainerSetSlotPacket(0, 0, 36, CrystalItem.of(3)),
@@ -120,13 +120,13 @@ class CrystalEnergyGameTest {
             val cursor = sent.filterIsInstance<ClientboundSetCursorItemPacket>().single()
             helper.assertValueEqual(
                 cursor.contents().getOrDefault(DataComponents.DAMAGE, 0),
-                2,
+                4,
                 "the damage bar on the cursor",
             )
             val slot = sent.filterIsInstance<ClientboundSetPlayerInventoryPacket>().single()
             helper.assertValueEqual(
                 slot.contents().getOrDefault(DataComponents.DAMAGE, 0),
-                2,
+                4,
                 "the damage bar on a pushed inventory slot",
             )
             helper.succeed()
@@ -171,8 +171,8 @@ class CrystalEnergyGameTest {
                 "the name on a legacy crystal",
             )
             helper.assertValueEqual(seen.get(DataComponents.MAX_STACK_SIZE) ?: 0, 1, "its stack size")
-            helper.assertValueEqual(seen.get(DataComponents.MAX_DAMAGE) ?: 0, 2, "its charge capacity")
-            helper.assertValueEqual(seen.getOrDefault(DataComponents.DAMAGE, 0), 2, "its damage bar")
+            helper.assertValueEqual(seen.get(DataComponents.MAX_DAMAGE) ?: 0, 3, "its charge capacity")
+            helper.assertValueEqual(seen.getOrDefault(DataComponents.DAMAGE, 0), 4, "its damage bar")
             helper.assertValueEqual(seen.get(DataComponents.ENCHANTMENT_GLINT_OVERRIDE) ?: false, true, "its glint")
             helper.assertValueEqual(
                 seen.get(DataComponents.LORE)?.lines().orEmpty().map { it.string },
@@ -180,7 +180,7 @@ class CrystalEnergyGameTest {
                     "The power of teleportation in your hands",
                     "Recharges one use every 15 minutes",
                     "",
-                    "Charge capacity 2",
+                    "Charge capacity 3",
                 ),
                 "its lore",
             )
@@ -263,11 +263,11 @@ class CrystalEnergyGameTest {
         val player = MessageCapturingPlayer.join(helper, "CrystalRested")
         try {
             setPlayTime(player, 0)
-            CrystalEnergy.setEnergy(player, 2)
+            CrystalEnergy.setEnergy(player, 4)
             setPlayTime(player, CrystalEnergy.RECHARGE_TICKS)
             helper.runAfterDelay(21) {
                 try {
-                    helper.assertValueEqual(CrystalEnergy.energyOf(player), 3, "energy after the last point")
+                    helper.assertValueEqual(CrystalEnergy.energyOf(player), 5, "energy after the last point")
                     helper.assertTrue(
                         CrystalEnergy.nextRegenAt(store(), player.uuid) == null,
                         "a full player should have no recharge pending",

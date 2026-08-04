@@ -146,7 +146,7 @@ class EmbassyImportTest {
 
         val report = import()
 
-        assertEquals(3, store.crystalEnergy(nomad))
+        assertEquals(5, store.crystalEnergy(nomad))
         assertEquals(listOf("$nomad had 9"), report.clampedEnergies)
     }
 

@@ -16,6 +16,7 @@ import net.minecraft.server.level.ServerPlayer
 
 /**
  * `/set-teleportation-crystal-energy <energy> [player]` (spec User Story 37).
+ * `/spawn1` and `/spawn2` teleport the sender to the free crystal spawns.
  *
  * Nucleus sent both the bounds error and the success line to the *target*,
  * leaving the sender staring at nothing after setting someone else's energy —
@@ -53,6 +54,15 @@ object CrystalCommands {
                         ),
                 ),
         )
+        // Re-read first: registration runs on startup and on every `/reload`,
+        // and the destination is looked up again when the command runs, so an
+        // edited config never leaves a command pointing at stale coordinates.
+        CrystalSpawns.reload().indices.forEach { index ->
+            dispatcher.register(
+                Commands.literal(CrystalSpawns.commandName(index))
+                    .executes { ctx -> reply(ctx) { sender -> spawn(sender, index) } },
+            )
+        }
     }
 
     private fun energyArg(ctx: CommandContext<CommandSourceStack>): Int =
@@ -78,6 +88,13 @@ object CrystalCommands {
             Paint.green(energy),
             " energy",
         )
+    }
+
+    private fun spawn(sender: ServerPlayer, index: Int): Component {
+        val definition = CrystalSpawns.definitions().getOrNull(index)
+            ?: return Paint.error("That spawn is no longer configured")
+        CrystalSpawns.landing(sender, definition).send(sender)
+        return Paint.success("Arrived at ", Paint.green(definition.name))
     }
 
     private inline fun reply(

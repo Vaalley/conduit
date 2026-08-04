@@ -104,6 +104,7 @@ object CrystalFeature {
      * not getting any closer.
      */
     private fun onEndServerTick(server: MinecraftServer) {
+        CrystalRequests.sweep(server)
         if (server.tickCount % REGEN_CHECK_INTERVAL_TICKS != 0) return
         for (player in server.playerList.players) {
             if (!CrystalEnergy.regen(player)) continue

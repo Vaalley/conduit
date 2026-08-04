@@ -10,7 +10,7 @@ import net.minecraft.stats.Stats
  * Teleportation Crystal energy (spec User Stories 24-25; Nucleus
  * `modifyEnergy`/`getEnergy` and its regen task).
  *
- * Energy is a per-*player* pool of 0-3 points shared by every crystal they
+ * Energy is a per-*player* pool of 0-5 points shared by every crystal they
  * carry, not a per-item charge — which is why the damage bar is painted per
  * viewer ([CrystalDamageDisplay]) rather than stored on the stack.
  *
@@ -27,7 +27,7 @@ import net.minecraft.stats.Stats
 object CrystalEnergy {
 
     /** A full pool, and the value a player with no stored energy reads as. */
-    const val MAX_ENERGY = 3
+    const val MAX_ENERGY = 5
 
     /** Nucleus's `kRechargeMinutes`, quoted in the crystal's own lore. */
     const val RECHARGE_MINUTES = 15

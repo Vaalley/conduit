@@ -20,11 +20,11 @@ _Avoid_: the migration (that is the Portal cutover), the import (that is Nucleus
 A player-owned protected cuboid in a dimension, with members, flags, and optional sub-regions. Protection applies to player actions and (since the port) environmental damage. Regions record their dimension as one of the Portal's legacy world strings — `world`, `world_nether`, `world_the_end`, plus `embassies` — and that is stored-data compatibility, deliberately kept, **not** a surviving World concept. Do not "clean it up".
 
 **Teleportation Crystal**:
-A craftable hand-held teleporter: a re-skinned Echo Shard, identified by a custom-data marker, in three tiers. The tier is its charge capacity — how far into an empty Energy pool it still works.
+A craftable hand-held teleporter: a re-skinned Echo Shard, identified by a custom-data marker, in three tiers. Each tier has a charge capacity — 1, 3, or 5 — which determines how far into an empty Energy pool it still works.
 _Avoid_: crystal item, teleporter (ambiguous with the embassy anchors)
 
 **Energy**:
-The pool of 0–3 teleport charges a player carries, shared by every Teleportation Crystal they own and recharging one point per 15 minutes of play time. Shown to each player as the damage bar of every crystal they see, so the same crystal reads differently for different viewers.
+The pool of 0–5 teleport charges a player carries, shared by every Teleportation Crystal they own and recharging one point per 15 minutes of play time. Shown to each player as the damage bar of every crystal they see, so the same crystal reads differently for different viewers.
 _Avoid_: charges, durability (the damage bar is a display of Energy, not wear)
 
 **Admin**:

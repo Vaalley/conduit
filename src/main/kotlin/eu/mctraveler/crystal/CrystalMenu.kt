@@ -20,7 +20,6 @@ import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 import net.minecraft.world.item.component.ResolvableProfile
 import net.minecraft.world.item.component.TooltipDisplay
-import net.minecraft.world.level.Level
 import net.minecraft.world.level.portal.TeleportTransition
 
 /**
@@ -28,8 +27,9 @@ import net.minecraft.world.level.portal.TeleportTransition
  * `createTeleportationCrystalInventory`, `createPlayersInventory`,
  * `useTeleportationCrystal` and `TeleportationCrystalListener.onInventoryClick`).
  *
- * Right-clicking a crystal opens a chest GUI of five destinations; picking one
- * closes the menu, moves the player, and spends a point of [CrystalEnergy].
+ * Right-clicking a crystal opens a chest GUI of configured destinations; picking one
+ * closes the menu, moves the player, and spends a point of [CrystalEnergy]
+ * unless it is one of the two free spawns.
  * Picking *Player* opens a second GUI of everyone else online, and clicking a
  * head sends them a teleport request ([CrystalRequests]).
  *
@@ -51,16 +51,10 @@ object CrystalMenu {
     /** The head GUI's title. */
     const val PLAYERS_TITLE = "Select a player"
 
-    /** The slot Nucleus's first destination sits in. */
+    /** The slot the first destination sits in. */
     const val FIRST_ACTION_SLOT = 11
 
-    /**
-     * The last slot a click is *accepted* in. There are only five destinations,
-     * so slot 16 — a blue pane — is accepted and then maps to nothing. Nucleus's
-     * window was one wider than its action list and this reproduces that
-     * exactly; the visible behaviour is that clicking that pane does nothing,
-     * which is also what the panes either side of it do.
-     */
+    /** The last action slot on the default three-row destination screen. */
     const val LAST_ACTION_SLOT = 16
 
     /** Which of the two GUIs a [CrystalChestMenu] is. */
@@ -70,7 +64,7 @@ object CrystalMenu {
     data class Head(val uuid: UUID, val name: String)
 
     /**
-     * One of the five buttons: how it looks, and where it leads. A null landing
+     * One destination button: how it looks, whether it is free, and where it leads. A null landing
      * means the click is over — either the destination refused (and has said so)
      * or it opened the head GUI instead — and in that case no energy is spent.
      */
@@ -78,80 +72,104 @@ object CrystalMenu {
         val name: String,
         val icon: Item,
         val lore: List<String>,
-        val resolve: (ServerPlayer) -> Landing?,
+        val free: Boolean = false,
+        val resolve: (ServerPlayer, Int) -> Landing?,
     )
 
     /**
-     * Nucleus's five destinations in its own order; the slot each occupies is
+     * The fixed destinations and configured spawns in their menu order; the slot each occupies is
      * [FIRST_ACTION_SLOT] plus its index here.
      */
-    private val DESTINATIONS: List<Destination> = listOf(
-        Destination(
-            name = "Bed",
-            // Dyed variants live in a ColorCollection since 26.2 rather than as
-            // one constant per colour.
-            icon = Items.BED.blue(),
-            lore = listOf("Go back to your place of rest"),
-            resolve = ::bed,
-        ),
-        Destination(
-            name = "Spawn",
-            icon = Items.SPAWNER,
-            lore = listOf("Head to spawn town"),
-            resolve = ::spawn,
-        ),
-        Destination(
-            name = "Player",
-            icon = Items.PLAYER_HEAD,
-            lore = listOf("Request to teleport to a player", "costs even if they don't accept"),
-            resolve = ::players,
-        ),
-        Destination(
-            name = "Embassy",
-            icon = Items.SPYGLASS,
-            lore = listOf("Teleport to the embassy world"),
-            resolve = ::embassy,
-        ),
-        Destination(
-            name = "Wilderness",
-            icon = Items.GRASS_BLOCK,
-            lore = listOf("Coming soon"),
-            resolve = ::wilderness,
-        ),
-    )
+    private fun destinations(): List<Destination> {
+        return buildList {
+            add(
+                Destination(
+                    name = "Bed",
+                    // Dyed variants live in a ColorCollection since 26.2 rather than as
+                    // one constant per colour.
+                    icon = Items.BED.blue(),
+                    lore = listOf("Go back to your place of rest"),
+                    resolve = { player, _ -> bed(player) },
+                ),
+            )
+            addAll(
+                CrystalSpawns.definitions().mapIndexed { index, spawn ->
+                    Destination(
+                        name = title(spawn.name),
+                        icon = Items.SPAWNER,
+                        lore = if (index == 0) {
+                            listOf("Head to spawn town")
+                        } else if (index == 1 && spawn.name == "spawn 2") {
+                            listOf("Head to the remote spawn")
+                        } else {
+                            listOf("Head to ${spawn.name}")
+                        },
+                        free = true,
+                        resolve = { player, _ -> CrystalSpawns.landing(player, spawn) },
+                    )
+                },
+            )
+            add(
+                Destination(
+                    name = "Player",
+                    icon = Items.PLAYER_HEAD,
+                    lore = listOf("Request to teleport to a player", "costs one energy when they accept"),
+                    resolve = ::players,
+                ),
+            )
+            add(
+                Destination(
+                    name = "Embassy",
+                    icon = Items.SPYGLASS,
+                    lore = listOf("Teleport to the embassy world"),
+                    resolve = { player, _ -> embassy(player) },
+                ),
+            )
+            add(
+                Destination(
+                    name = "Wilderness",
+                    icon = Items.GRASS_BLOCK,
+                    lore = listOf("Coming soon"),
+                    resolve = { player, _ -> wilderness(player) },
+                ),
+            )
+        }
+    }
+
+    private fun visibleDestinations(): List<Destination> =
+        destinations().take((MAX_ROWS - 2) * ACTIONS_PER_ROW)
 
     // ---- opening ----
 
     /**
-     * Right-click with a crystal of [tier] (spec story 27). Refuses when a
-     * crystal menu is already open, or when the player has too little energy
-     * for this tier — a tier-1 crystal needs a full pool, a tier-3 works down
-     * to one point. Neither refusal costs anything.
+     * Right-click with a crystal of [tier] (spec story 27). Refuses only when
+     * a crystal menu is already open. Paid destinations apply the tier's
+     * charge requirement when clicked; free spawns are always available.
      */
     fun use(player: ServerPlayer, tier: Int) {
         if (openMenuOf(player) != null) {
             player.sendSystemMessage(Paint.error("You are already in a teleportation crystal."))
             return
         }
-        if (CrystalEnergy.energyOf(player) <= CrystalEnergy.MAX_ENERGY - tier) {
-            player.sendSystemMessage(Paint.error("You have no energy, please wait for a recharge"))
-            return
-        }
-        openDestinations(player)
+        openDestinations(player, CrystalItem.chargesOf(tier))
     }
 
     /** Opens the destination GUI (spec story 26). */
-    fun openDestinations(player: ServerPlayer) {
-        val contents = SimpleContainer(27)
+    fun openDestinations(player: ServerPlayer, crystalCharges: Int) {
+        val destinations = visibleDestinations()
+        val rows = destinationRows(destinations.size)
+        val contents = SimpleContainer(rows * 9)
         val black = Items.STAINED_GLASS_PANE.black()
         val blue = Items.STAINED_GLASS_PANE.blue()
-        for (column in 0 until 9) {
-            contents.setItem(column, pane(black))
-            contents.setItem(column + 18, pane(black))
-            val destination = DESTINATIONS.getOrNull(column - 2).takeIf { column in 2..6 }
-            contents.setItem(column + 9, destination?.let(::button) ?: pane(blue))
+        for (slot in 0 until contents.containerSize) {
+            val row = slot / 9
+            contents.setItem(slot, pane(if (row == 0 || row == rows - 1) black else blue))
         }
-        open(player, Kind.DESTINATIONS, contents, rows = 3, title = TITLE, heads = emptyList())
+        contents.setItem(4, energyInfo(player))
+        for ((slot, destination) in actionSlots(destinations.size).zip(destinations)) {
+            contents.setItem(slot, button(destination))
+        }
+        open(player, Kind.DESTINATIONS, contents, rows, TITLE, emptyList(), crystalCharges)
     }
 
     /** The tallest chest screen the protocol has: six rows of nine. */
@@ -168,13 +186,13 @@ object CrystalMenu {
      * cap is a real limit on who can be picked, so it takes the first
      * [MAX_ROWS] * 9 rather than silently building a broken screen.
      */
-    fun openPlayers(player: ServerPlayer, others: List<ServerPlayer>) {
+    fun openPlayers(player: ServerPlayer, others: List<ServerPlayer>, crystalCharges: Int) {
         val shown = others.take(MAX_ROWS * 9)
         val rows = rowsFor(shown.size)
         val contents = SimpleContainer(rows * 9)
         for ((slot, other) in shown.withIndex()) contents.setItem(slot, head(other))
         val heads = shown.map { Head(it.uuid, it.gameProfile.name) }
-        open(player, Kind.PLAYERS, contents, rows, PLAYERS_TITLE, heads)
+        open(player, Kind.PLAYERS, contents, rows, PLAYERS_TITLE, heads, crystalCharges)
     }
 
     private fun open(
@@ -184,11 +202,12 @@ object CrystalMenu {
         rows: Int,
         title: String,
         heads: List<Head>,
+        crystalCharges: Int,
     ) {
         player.openMenu(
             SimpleMenuProvider(
                 { containerId, inventory, _ ->
-                    CrystalChestMenu(containerId, inventory, contents, rows, kind, heads)
+                    CrystalChestMenu(containerId, inventory, contents, rows, kind, heads, crystalCharges)
                 },
                 Component.literal(title),
             ),
@@ -221,18 +240,28 @@ object CrystalMenu {
     // ---- clicking ----
 
     /**
-     * A destination was picked (spec story 28). The menu closes first, then the
-     * destination decides; only a destination that actually moved the player
-     * costs energy and reports it.
+     * A destination was picked (spec story 28). Paid destinations first check
+     * the opening crystal's tier requirement; only an allowed destination then
+     * closes the menu and decides whether to spend energy.
      */
-    private fun choose(player: ServerPlayer, destination: Destination) {
+    private fun choose(player: ServerPlayer, destination: Destination, crystalCharges: Int) {
+        if (!destination.free &&
+            CrystalEnergy.energyOf(player) <= CrystalEnergy.MAX_ENERGY - crystalCharges
+        ) {
+            player.sendSystemMessage(Paint.error("You have no energy, please wait for a recharge"))
+            return
+        }
         player.closeContainer()
-        val landing = destination.resolve(player) ?: return
+        val landing = destination.resolve(player, crystalCharges) ?: return
         landing.send(player)
-        CrystalEnergy.modify(player, -1)
-        player.sendSystemMessage(
-            Paint.info("You used one energy going to ", Paint.aqua(destination.name.lowercase())),
-        )
+        if (destination.free) {
+            player.sendSystemMessage(Paint.info("You arrived at ", Paint.aqua(destination.name.lowercase())))
+        } else {
+            CrystalEnergy.modify(player, -1)
+            player.sendSystemMessage(
+                Paint.info("You used one energy going to ", Paint.aqua(destination.name.lowercase())),
+            )
+        }
     }
 
     /** A head was clicked (spec story 34). */
@@ -241,7 +270,7 @@ object CrystalMenu {
         CrystalRequests.send(player, head)
     }
 
-    // ---- the five destinations ----
+    // ---- the destinations ----
 
     /**
      * The player's own respawn point (spec story 29), as vanilla resolves it —
@@ -273,31 +302,17 @@ object CrystalMenu {
     }
 
     /**
-     * Spawn town, in the overworld (spec story 30) — Nucleus's `kSpawnLocation`.
-     *
-     * This used to ask the Worlds service for *Primary's* overworld, because
-     * there were two and only one of them had a spawn town in it. Since the
-     * merge there is one map, so the overworld is the overworld and vanilla's
-     * own key names it.
-     */
-    private fun spawn(player: ServerPlayer): Landing? {
-        val server = player.level().server
-        val level = server.getLevel(Level.OVERWORLD) ?: server.overworld()
-        return Landing(level, 16.5, 71.0, -15.5, 180.0f, 0.0f)
-    }
-
-    /**
      * Not a place but a second menu (spec story 33): the head GUI, unless the
      * player is the only one online. Either way this destination never lands
      * anywhere, so the energy is spent by the *head* click, not by this one.
      */
-    private fun players(player: ServerPlayer): Landing? {
+    private fun players(player: ServerPlayer, crystalCharges: Int): Landing? {
         val others = player.level().server.playerList.players.filter { it != player }
         if (others.isEmpty()) {
             player.sendSystemMessage(Paint.error("No-one else is online"))
             return null
         }
-        openPlayers(player, others)
+        openPlayers(player, others, crystalCharges)
         return null
     }
 
@@ -343,6 +358,32 @@ object CrystalMenu {
             hideAdditionalTooltip(this)
         }
 
+    private fun energyInfo(player: ServerPlayer): ItemStack =
+        ItemStack(Items.AMETHYST_SHARD).apply {
+            set(
+                DataComponents.CUSTOM_NAME,
+                Component.literal("Energy: ${CrystalEnergy.energyOf(player)}/${CrystalEnergy.MAX_ENERGY}"),
+            )
+            hideAdditionalTooltip(this)
+        }
+
+    private fun title(name: String): String =
+        name.replaceFirstChar { it.uppercase() }
+
+    /**
+     * Destination screens are capped at [MAX_ROWS], just like player screens.
+     * Destinations beyond the available slots do not fit and are not shown.
+     */
+    private fun destinationRows(count: Int): Int =
+        (2 + ((count + ACTIONS_PER_ROW - 1) / ACTIONS_PER_ROW).coerceAtLeast(1)).coerceAtMost(MAX_ROWS)
+
+    private fun actionSlots(count: Int): List<Int> =
+        (0 until count).map { index ->
+            (index / ACTIONS_PER_ROW + 1) * 9 + index % ACTIONS_PER_ROW + 2
+        }
+
+    private const val ACTIONS_PER_ROW = 6
+
     /** One online player's head, wearing their own skin (spec story 33). */
     private fun head(other: ServerPlayer): ItemStack =
         ItemStack(Items.PLAYER_HEAD).apply {
@@ -385,6 +426,7 @@ object CrystalMenu {
         rows: Int,
         val kind: Kind,
         val heads: List<Head>,
+        private val crystalCharges: Int,
     ) : ChestMenu(menuTypeFor(rows), containerId, playerInventory, contents, rows) {
 
         /**
@@ -426,11 +468,13 @@ object CrystalMenu {
 
         private fun actionFor(slot: Int): ((ServerPlayer) -> Unit)? = when (kind) {
             Kind.DESTINATIONS ->
-                if (slot !in FIRST_ACTION_SLOT..LAST_ACTION_SLOT) {
+                if (slot !in actionSlots(visibleDestinations().size)) {
                     null
                 } else {
-                    DESTINATIONS.getOrNull(slot - FIRST_ACTION_SLOT)
-                        ?.let { destination -> { player -> choose(player, destination) } }
+                    actionSlots(visibleDestinations().size)
+                        .indexOf(slot)
+                        .takeIf { it >= 0 }
+                        ?.let { index -> { player -> choose(player, visibleDestinations()[index], crystalCharges) } }
                 }
 
             Kind.PLAYERS ->
