@@ -9,14 +9,22 @@ import java.util.UUID
  * The typed fields are the mod's live fields — last World and notepad pages.
  * Anything else found in existing player records (legacy fields from the
  * Portal era and before, including the Portal's `isAdmin` — admin status is
- * vanilla operator status now) must pass through every read-modify-write cycle
- * byte-for-byte.
+ * vanilla operator status now, and the `worlds` object that held the Per-World
+ * Buckets, which the merge retired) must pass through every read-modify-write
+ * cycle byte-for-byte.
  */
 interface PlayerStore {
     /**
      * The World the player was last in — `"primary"` or `"secondary"` — or null
      * for a player with no recorded World. Stored as the Portal's `lastServer`
-     * field; mapping World ids to dimension ids is the Worlds service's concern.
+     * field.
+     *
+     * The merge left one World, and the sweep rewrote every record it saw to
+     * name it, so on a merged server this answers `"primary"` for everyone who
+     * was here on the night. It is kept because the field is still the one thing
+     * that can tell an *unswept* record apart — the quarantined saves the claim
+     * path picks up years later are exactly that case (see
+     * [eu.mctraveler.importer.OrphanedSaveClaim]).
      */
     fun lastWorld(uuid: UUID): String?
 
@@ -29,15 +37,6 @@ interface PlayerStore {
     fun notepadPages(uuid: UUID): List<String>?
 
     fun setNotepadPages(uuid: UUID, pages: List<String>)
-
-    /**
-     * The player's Per-World Bucket for [world] (`"primary"`/`"secondary"`),
-     * or null if they have never left that World — the Worlds service reads
-     * null as "first visit: use the World's spawn".
-     */
-    fun bucket(uuid: UUID, world: String): PerWorldBucket?
-
-    fun setBucket(uuid: UUID, world: String, bucket: PerWorldBucket)
 
     /**
      * The player's Teleportation Crystal energy (0-5), or null if they have

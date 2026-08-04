@@ -9,8 +9,6 @@ import eu.mctraveler.embassy.EmbassiesFeature
 import eu.mctraveler.embassy.EmbassyOrigins
 import eu.mctraveler.region.RegionProtection
 import eu.mctraveler.text.Paint
-import eu.mctraveler.worlds.DimensionRole
-import eu.mctraveler.worlds.WorldsFeature
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
@@ -26,6 +24,7 @@ import net.minecraft.world.InteractionResult
 import net.minecraft.world.inventory.ContainerInput
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
+import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.storage.LevelData
 import net.minecraft.world.phys.BlockHitResult
@@ -495,10 +494,10 @@ class CrystalMenuGameTest {
         player.messages.clear()
 
         helper.afterClick(player, SPAWN_SLOT, player) {
-            // Story 30 names Primary's overworld, not just the coordinates.
+            // Story 30 names the overworld, not just the coordinates.
             helper.assertValueEqual(
                 player.level().dimension(),
-                WorldsFeature.worlds!!.byId("primary")!!.dimension(DimensionRole.OVERWORLD),
+                Level.OVERWORLD,
                 "the dimension spawn town is in",
             )
             helper.assertValueEqual(player.x, 16.5, "spawn x")

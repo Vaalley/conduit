@@ -121,75 +121,22 @@ class JsonPlayerStoreTest {
     }
 
     @Test
-    fun `a player who never visited a World has no bucket there`() {
-        assertNull(store().bucket(uuid, "secondary"))
-    }
-
-    @Test
-    fun `Per-World Buckets round-trip independently per World`() {
-        val store = store()
-        val primary = PerWorldBucket("nether", 100.5, 64.0, -20.5, 90.0f, -10.5f)
-        val secondary = PerWorldBucket("overworld", -3.25, 70.0, 8.0, 0.0f, 0.0f)
-        store.setBucket(uuid, "primary", primary)
-        store.setBucket(uuid, "secondary", secondary)
-        assertEquals(primary, store.bucket(uuid, "primary"))
-        assertEquals(secondary, store.bucket(uuid, "secondary"))
-    }
-
-    @Test
-    fun `a bucket carries no respawn point until one is stored`() {
-        store().setBucket(uuid, "primary", PerWorldBucket("overworld", 1.5, 2.0, 3.5, 0.0f, 0.0f))
-        assertNull(store().bucket(uuid, "primary")?.respawn)
-    }
-
-    @Test
-    fun `respawn points round-trip independently per World`() {
-        val store = store()
-        val primaryBed = RespawnPoint("overworld", 10, 64, -20, 90.0f, 0.0f, forced = false)
-        val secondaryAnchor = RespawnPoint("nether", -3, 40, 8, 180.0f, -12.5f, forced = true)
-        store.setBucket(uuid, "primary", bucketWith(primaryBed))
-        store.setBucket(uuid, "secondary", bucketWith(secondaryAnchor))
-        assertEquals(primaryBed, store.bucket(uuid, "primary")?.respawn)
-        assertEquals(secondaryAnchor, store.bucket(uuid, "secondary")?.respawn)
-    }
-
-    @Test
-    fun `a stored respawn point can be cleared again`() {
-        val store = store()
-        store.setBucket(uuid, "primary", bucketWith(RespawnPoint("end", 1, 2, 3, 0.0f, 0.0f, false)))
-        store.setBucket(uuid, "primary", bucketWith(null))
-        assertNull(store.bucket(uuid, "primary")?.respawn)
-    }
-
-    private fun bucketWith(respawn: RespawnPoint?) =
-        PerWorldBucket("overworld", 0.5, 70.0, 0.5, 0.0f, 0.0f, respawn)
-
-    @Test
-    fun `rewriting one World's bucket leaves the other World's and legacy fields untouched`() {
+    fun `the retired Per-World Bucket field is now legacy data that passes through untouched`() {
+        // The store modelled `worlds` until the merge retired the Worlds; the
+        // field did not go anywhere, so every migrated record on this server
+        // still carries one and the store must now leave it exactly alone. The
+        // merge tool reads and rewrites it through
+        // `eu.mctraveler.importer.PerWorldBuckets` instead.
         val file = dir.resolve("$uuid.json")
-        // A record as a future version might write it: legacy economy data, a
-        // bucket field carrying keys this version doesn't know (ticket 05's
-        // respawn), and predecessor-era number formatting throughout.
-        Files.writeString(
-            file,
+        val record =
             """{"balance":1234.50,"worlds":{"secondary":{"dimension":"end",""" +
                 """"x":1.0,"y":2.0,"z":3.0,"yaw":0.0,"pitch":0.0,"futureRespawn":{"x":1}}},""" +
-                """"lastServer":"secondary"}""",
-        )
-        store().setBucket(uuid, "primary", PerWorldBucket("overworld", 0.5, 80.0, 0.5, 180.0f, 0.0f))
-        val written = Files.readString(file)
-        // The other World's bucket slice (unknown keys and all) and the legacy
-        // fields ride through byte-for-byte; only the primary bucket is new.
-        assert(
-            written.contains(
-                """"secondary":{"dimension":"end","x":1.0,"y":2.0,"z":3.0,""" +
-                    """"yaw":0.0,"pitch":0.0,"futureRespawn":{"x":1}}""",
-            ),
-        ) { "secondary bucket was not preserved verbatim: $written" }
-        assert(written.contains(""""balance":1234.50""")) { "legacy field disturbed: $written" }
+                """"lastServer":"secondary"}"""
+        Files.writeString(file, record)
+        store().setLastWorld(uuid, "primary")
         assertEquals(
-            PerWorldBucket("overworld", 0.5, 80.0, 0.5, 180.0f, 0.0f),
-            store().bucket(uuid, "primary"),
+            record.replace(""""lastServer":"secondary"""", """"lastServer":"primary""""),
+            Files.readString(file),
         )
     }
 

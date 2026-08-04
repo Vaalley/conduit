@@ -10,16 +10,23 @@ import net.minecraft.world.level.Level
  * The one place dimensions and the Portal's legacy world strings meet.
  *
  * Regions are stored under the Portal's strings — `world`, `world_nether`,
- * `world_the_end` for the Primary trio and `last`, `last_nether`,
- * `last_the_end` for Secondary — so migrated `regions.json` data reads
- * unchanged. Primary is the vanilla trio; the Secondary dimension ids below
- * anticipate ticket 04's datapack trio (adjust here, and only here, if that
- * ticket lands on different ids).
+ * `world_the_end` — so migrated `regions.json` data reads unchanged. Keeping
+ * that vocabulary long after the Portal is what lets a Region written in 2019
+ * still protect the same ground without anybody rewriting a file.
  *
- * The out-of-trio embassies dimension (ADR 0003) is here for the same reason:
- * Nucleus stored its embassy regions under its Bukkit world name, `embassies`,
- * so keeping that string is what lets the twenty imported embassies be found
- * where they stand.
+ * The Portal's *other* backend was recorded as `last`, `last_nether` and
+ * `last_the_end`, and those strings are deliberately absent. The merge moved
+ * every Region that named one of them onto Primary and rewrote it (see
+ * [eu.mctraveler.importer.MergeRegions]), and the dimensions they named no
+ * longer exist on this server, so a `last*` string arriving here now names
+ * nowhere — which is exactly what [dimensionFor] should say about it. The
+ * strings themselves survive where they are still true: in
+ * [eu.mctraveler.importer.WorldLayout], as facts about a save the merge tool
+ * reads offline.
+ *
+ * The out-of-trio embassies dimension (ADR 0003) is here because Nucleus stored
+ * its embassy regions under its Bukkit world name, `embassies`, so keeping that
+ * string is what lets the twenty imported embassies be found where they stand.
  */
 object RegionWorlds {
     private fun modDimension(path: String): ResourceKey<Level> =
@@ -32,16 +39,13 @@ object RegionWorlds {
         Level.OVERWORLD to "world",
         Level.NETHER to "world_nether",
         Level.END to "world_the_end",
-        modDimension("secondary") to "last",
-        modDimension("secondary_nether") to "last_nether",
-        modDimension("secondary_end") to "last_the_end",
         modDimension("embassies") to EMBASSIES,
     )
 
     /**
      * The legacy world string regions in [dimension] live under. A dimension
-     * outside both trios keeps its own id string — distinct from every legacy
-     * name, so its regions can never bleed into a real World.
+     * with no legacy name keeps its own id string — distinct from every legacy
+     * name, so its regions can never bleed into the map players are on.
      */
     fun legacyName(dimension: ResourceKey<Level>): String =
         legacyNames[dimension] ?: dimension.identifier().toString()
@@ -52,29 +56,33 @@ object RegionWorlds {
     /**
      * The dimension a legacy world string names, or null when nothing on this
      * server answers to it — the inverse of [legacyName], for the stored
-     * destinations that only ever say "world" or "last_nether".
+     * destinations that only ever say "world" or "world_nether".
      *
      * Null is a real answer, not an error: a saved embassy destination naming a
-     * world this server no longer has is simply not somewhere to go.
+     * world this server no longer has is simply not somewhere to go. Since the
+     * merge that is also the answer for `last*`, and it is the right one — an
+     * unswept destination pointing into the retired Secondary trio must lead
+     * nowhere rather than somewhere plausible.
      */
     fun dimensionFor(world: String): ResourceKey<Level>? = dimensions[world]
 
-    /** Whether the legacy world string belongs to the Secondary World. */
-    fun isSecondaryWorld(world: String): Boolean = world.startsWith("last")
-
     /**
-     * `/rg locate`'s `server/dimension` rendering of a legacy world string,
-     * with the Portal's exact mapping. The embassies dimension is in no World
-     * and has no trio to name a role in, so it is simply itself.
+     * `/rg locate`'s rendering of a legacy world string: the dimension, by the
+     * Portal's own mapping.
+     *
+     * The Portal printed `server/dimension`, because a Region genuinely lived on
+     * one of two backend servers. There is one map now, so naming a server would
+     * be naming something that does not exist — the half that carried real
+     * information is the dimension, and that is all that is left (merge spec,
+     * User Story 25). The embassies dimension has no role in any trio to name,
+     * so it is simply itself.
      */
     fun locateInfo(world: String): String {
         if (world == EMBASSIES) return EMBASSIES
-        val server = if (isSecondaryWorld(world)) "secondary" else "primary"
-        val dimension = when {
+        return when {
             world.contains("nether") -> "nether"
             world.contains("end") -> "end"
             else -> "overworld"
         }
-        return "$server/$dimension"
     }
 }

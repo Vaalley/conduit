@@ -271,9 +271,17 @@ Entries keep their numbers permanently; tickets cite them as "deviation N".
    gamerules are per-server. Only the user-visible effects are reproduced, by
    dimension-scoped means: all player damage cancelled (subsumes fall/fire/freeze/
    drowning rules), `fixed_time` for the frozen daylight, biome
-   `has_precipitation: false` for the missing weather, empty biome spawners for the
-   missing mobs. Keep-inventory and immediate-respawn are moot (players cannot die
-   there); the remaining rules governed systems that do not exist on the plots.
+   `has_precipitation: false` for the missing weather, and `EmbassiesFeature.accepts`
+   for the missing mobs. Keep-inventory and immediate-respawn are moot (players cannot
+   die there); the remaining rules governed systems that do not exist on the plots.
+
+   The mobs were the biome's empty spawners until ticket 06. They could not be: the
+   plots are Nucleus's own chunks, copied in whole by ticket 05, and a generated chunk
+   carries its own biomes in its sections — every imported plot still reads
+   `minecraft:plains`, spawn list and all, and only the air generated around them was
+   ever `mctraveler:embassies_plains`. The empty spawners stay (they are honest about
+   the chunks this server does generate), but the rule that holds is the runtime one.
+   The same fact still defeats `has_precipitation` on the imported plots; see ticket 06.
 2. **Frozen time of day**: Nucleus froze time at whatever it was at world creation;
    we fix it at noon.
 3. **Admin back-link**: Nucleus's clickable back-link ran Bukkit

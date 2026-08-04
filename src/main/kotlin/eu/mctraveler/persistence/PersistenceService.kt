@@ -15,6 +15,14 @@ import java.nio.file.Path
  * mod's directory is beats two.
  */
 class PersistenceService(val root: Path) {
-    val players: PlayerStore = JsonPlayerStore(root.resolve("players"))
+    /**
+     * Where the per-player records are, stated once for the same reason [root]
+     * is: the merge stamp is a raw field [PlayerStore] does not model, so the
+     * migration writes it into these files directly rather than through the
+     * store, and two statements of where they live is exactly one too many.
+     */
+    val playersDir: Path = root.resolve("players")
+
+    val players: PlayerStore = JsonPlayerStore(playersDir)
     val names: NameCache = NameCache(root.resolve("uuid-cache.json"))
 }

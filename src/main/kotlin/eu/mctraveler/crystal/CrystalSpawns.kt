@@ -5,9 +5,7 @@ import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import eu.mctraveler.MCTraveler
-import eu.mctraveler.worlds.DimensionRole
 import eu.mctraveler.worlds.Landing
-import eu.mctraveler.worlds.WorldsFeature
 import java.nio.file.Files
 import java.nio.file.Path
 import net.fabricmc.loader.api.FabricLoader
@@ -54,12 +52,10 @@ object CrystalSpawns {
     /** The public command name assigned to the zero-based [index]. */
     fun commandName(index: Int): String = "spawn${index + 1}"
 
-    /** Resolves [definition] in the primary overworld, with the existing fallback. */
+    /** Resolves [definition] in the overworld. */
     fun landing(player: ServerPlayer, definition: Definition): Landing {
         val server = player.level().server
-        val primary = WorldsFeature.worlds?.byId("primary")?.dimension(DimensionRole.OVERWORLD)
-            ?: Level.OVERWORLD
-        val level = server.getLevel(primary) ?: server.overworld()
+        val level = server.getLevel(Level.OVERWORLD) ?: server.overworld()
         return Landing(level, definition.x, definition.y, definition.z, definition.yaw, 0.0f)
     }
 

@@ -209,12 +209,11 @@ object RegionCommands {
         if (start.world != world) {
             return Paint.error("Regions may only be created in the same world.")
         }
-        // Same World analog (the Portal's same-backend-server check). The
-        // world strings above already encode the World, so this cannot fire
-        // today; it is kept for the Portal's validation sequence.
-        if (RegionWorlds.isSecondaryWorld(start.world) != RegionWorlds.isSecondaryWorld(world)) {
-            return Paint.error("Regions may only be created on the same server. Use /rg start again.")
-        }
+        // The Portal's second check here was its same-backend-server one, which
+        // refused a Region spanning two Worlds. It went with the Worlds: a
+        // validation step that can no longer fire says nothing about what the
+        // command accepts, and one left standing reads as a rule (merge spec,
+        // User Story 26).
 
         // Area on the raw positions, +1 per axis for inclusive block spans —
         // exactly the Portal's arithmetic.
