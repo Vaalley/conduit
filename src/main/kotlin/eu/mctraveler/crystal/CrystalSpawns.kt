@@ -36,15 +36,23 @@ object CrystalSpawns {
         Definition("spawn 2", 0.5, 67.5, 802816.5, 0.0f),
     )
 
-    /** The active spawn definitions, in menu and command order. */
-    fun definitions(): List<Definition> = reload()
+    @Volatile
+    private var cached: List<Definition>? = null
 
     /**
-     * Re-reads the config file. Commands use this at registration and
-     * execution, while menus use it when opened, so an edited file never
-     * leaves stale coordinates or entries behind.
+     * The active spawn definitions, in menu and command order. Served from the
+     * last [reload], so the menu and command paths do not touch the disk on
+     * every open, click, and teleport.
      */
-    fun reload(): List<Definition> = load(configFile())
+    fun definitions(): List<Definition> = cached ?: reload()
+
+    /**
+     * Re-reads the config file. Command registration runs this, and the server
+     * registers commands on startup and on every `/reload`, so an edited file
+     * takes effect there — a mod-init load would be too early for the game
+     * directory, and a `SERVER_STARTING` load too late for registration.
+     */
+    fun reload(): List<Definition> = load(configFile()).also { cached = it }
 
     private fun configFile(): Path =
         FabricLoader.getInstance().getGameDir().resolve("mctraveler").resolve(CONFIG_FILE)
