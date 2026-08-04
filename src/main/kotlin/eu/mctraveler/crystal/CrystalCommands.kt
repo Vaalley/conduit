@@ -54,10 +54,13 @@ object CrystalCommands {
                         ),
                 ),
         )
-        CrystalSpawns.definitions().forEachIndexed { index, definition ->
+        // Re-read first: registration runs on startup and on every `/reload`,
+        // and the destination is looked up again when the command runs, so an
+        // edited config never leaves a command pointing at stale coordinates.
+        CrystalSpawns.reload().indices.forEach { index ->
             dispatcher.register(
                 Commands.literal(CrystalSpawns.commandName(index))
-                    .executes { ctx -> reply(ctx) { sender -> spawn(sender, definition) } },
+                    .executes { ctx -> reply(ctx) { sender -> spawn(sender, index) } },
             )
         }
     }
@@ -87,10 +90,9 @@ object CrystalCommands {
         )
     }
 
-    private fun spawn(
-        sender: ServerPlayer,
-        definition: CrystalSpawns.Definition,
-    ): Component {
+    private fun spawn(sender: ServerPlayer, index: Int): Component {
+        val definition = CrystalSpawns.definitions().getOrNull(index)
+            ?: return Paint.error("That spawn is no longer configured")
         CrystalSpawns.landing(sender, definition).send(sender)
         return Paint.success("Arrived at ", Paint.green(definition.name))
     }
