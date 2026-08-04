@@ -525,7 +525,7 @@ class CrystalMenuGameTest {
         helper.afterClick(player, SPAWN2_SLOT, player) {
             helper.assertValueEqual(
                 player.level().dimension(),
-                WorldsFeature.worlds!!.byId("primary")!!.dimension(DimensionRole.OVERWORLD),
+                Level.OVERWORLD,
                 "the dimension spawn 2 is in",
             )
             helper.assertValueEqual(player.x, 0.5, "spawn 2 x")

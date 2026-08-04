@@ -1,10 +1,9 @@
 package eu.mctraveler.gametest
 
 import eu.mctraveler.crystal.CrystalEnergy
-import eu.mctraveler.worlds.DimensionRole
-import eu.mctraveler.worlds.WorldsFeature
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.gametest.framework.GameTestHelper
+import net.minecraft.world.level.Level
 
 /**
  * `/set-teleportation-crystal-energy <energy> [player]` (spec User Story 37).
@@ -163,7 +162,7 @@ class CrystalCommandGameTest {
             player.runCommand("spawn2")
             helper.assertValueEqual(
                 player.level().dimension(),
-                WorldsFeature.worlds!!.byId("primary")!!.dimension(DimensionRole.OVERWORLD),
+                Level.OVERWORLD,
                 "spawn2 dimension",
             )
             helper.assertValueEqual(player.x, 0.5, "spawn2 x")
