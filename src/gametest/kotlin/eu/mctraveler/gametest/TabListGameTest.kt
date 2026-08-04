@@ -1,7 +1,5 @@
 package eu.mctraveler.gametest
 
-import eu.mctraveler.worlds.DimensionRole
-import eu.mctraveler.worlds.WorldsFeature
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.ChatFormatting
 import net.minecraft.gametest.framework.GameTestHelper
@@ -12,11 +10,12 @@ import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket
 import net.minecraft.network.protocol.game.ClientboundTabListPacket
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.server.network.ServerCommonPacketListenerImpl
+import net.minecraft.world.level.Level
 
 /**
  * The unified tab list (spec stories 6-8): the Portal's exact header and footer with the
  * footer's TPS now the server's real TPS (deviation 4), entries carrying latency in the
- * display name, and every player in one list regardless of World.
+ * display name, and every player in one list wherever they are standing.
  *
  * Expected texts are the inventory's literals (portal-feature-inventory.md §2.6/§2.18).
  */
@@ -73,21 +72,25 @@ class TabListGameTest {
         }
     }
 
+    /**
+     * One list for everybody, wherever they are standing.
+     *
+     * This case used to send the traveler into Secondary's overworld, because
+     * the strongest thing it could say was that a whole other World did not
+     * split the list. There is one World now, so it says the same thing about
+     * the strongest separation left — a different dimension — which is what it
+     * asserted before the Worlds existed at all.
+     */
     @GameTest(maxTicks = 100)
-    fun playersInDifferentWorldsShareOneList(helper: GameTestHelper) {
+    fun playersInDifferentDimensionsShareOneList(helper: GameTestHelper) {
         val server = helper.level.server
         val viewer = helper.makeMockServerPlayerInLevel()
         val traveler = helper.makeMockServerPlayerInLevel()
 
-        // The real Secondary World, not a stand-in: this test predates ticket 04's
-        // topology and used the vanilla nether until the Worlds service existed.
-        val secondary = checkNotNull(WorldsFeature.worlds) {
-            "the Worlds service did not come up with the test server"
-        }.all.single { it.id == "secondary" }
-        val destination = server.getLevel(secondary.dimension(DimensionRole.OVERWORLD))
-            ?: throw AssertionError("Secondary's overworld is not loaded on the test server")
+        val destination = server.getLevel(Level.NETHER)
+            ?: throw AssertionError("the nether is not loaded on the test server")
         traveler.teleportTo(destination, 0.5, 128.0, 0.5, emptySet(), 0f, 0f, true)
-        check(traveler.level() === destination) { "the traveler did not reach Secondary" }
+        check(traveler.level() === destination) { "the traveler did not reach the nether" }
 
         PacketCapture.drain(viewer)
         helper.runAfterDelay(30) {
@@ -96,7 +99,7 @@ class TabListGameTest {
             val removed = packets.filterIsInstance<ClientboundPlayerInfoRemovePacket>()
                 .flatMap { it.profileIds() }
             check(traveler.uuid !in removed) {
-                "the viewer's tab list dropped the player in the other World"
+                "the viewer's tab list dropped the player in the other dimension"
             }
 
             val refreshed = packets.filterIsInstance<ClientboundPlayerInfoUpdatePacket>()
@@ -104,7 +107,7 @@ class TabListGameTest {
                 .flatMap { it.entries() }
                 .map { it.profileId() }
             check(refreshed.containsAll(listOf(viewer.uuid, traveler.uuid))) {
-                "the tab refresh does not cover players in every World: $refreshed"
+                "the tab refresh does not cover players in every dimension: $refreshed"
             }
 
             removePlayers(helper, viewer, traveler)

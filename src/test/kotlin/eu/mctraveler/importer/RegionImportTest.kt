@@ -63,7 +63,7 @@ class RegionImportTest {
     """.trimIndent()
 
     @Test
-    fun `every world string the Portal wrote names a dimension of the merged server`() {
+    fun `every world string the Portal wrote names a dimension the migration writes`() {
         assertEquals(WorldLayout.PRIMARY.dimension(DimensionRole.OVERWORLD), RegionImport.dimensionOf("world"))
         assertEquals(WorldLayout.PRIMARY.dimension(DimensionRole.NETHER), RegionImport.dimensionOf("world_nether"))
         assertEquals(WorldLayout.PRIMARY.dimension(DimensionRole.END), RegionImport.dimensionOf("world_the_end"))
@@ -83,19 +83,19 @@ class RegionImportTest {
     }
 
     @Test
-    fun `a region in a world the merged server does not have is refused`() {
+    fun `a region in a world the migration does not have is refused`() {
         val orphaned = legacyFile.replace("\"world\": \"last_nether\"", "\"world\": \"creative\"")
 
         val error = assertThrows(IllegalArgumentException::class.java) { RegionImport.migrate(orphaned) }
 
         assertEquals(
-            "region \"Far Outpost\" is in world \"creative\", which no World of the merged server has",
+            "region \"Far Outpost\" is in world \"creative\", which neither of the Portal's Worlds has",
             error.message,
         )
     }
 
     @Test
-    fun `a sub-region in a world the merged server does not have is refused too`() {
+    fun `a sub-region in a world the migration does not have is refused too`() {
         val orphaned = """
             {"regions":{"0":{"title":"Spawn Town","start-x":-10,"start-z":-10,"end-x":10,"end-z":10,
             "world":"world","members":[],"sub-regions":{"0":{"title":"Vault","start-x":-2,"start-z":-2,
@@ -105,7 +105,7 @@ class RegionImportTest {
         val error = assertThrows(IllegalArgumentException::class.java) { RegionImport.migrate(orphaned) }
 
         assertEquals(
-            "region \"Vault\" is in world \"creative\", which no World of the merged server has",
+            "region \"Vault\" is in world \"creative\", which neither of the Portal's Worlds has",
             error.message,
         )
     }

@@ -158,9 +158,9 @@ class PortalImport(private val plan: ImportPlan) {
             // Portal's own files are disturbed.
             var quarantined = 0
             if (plan.worldTransfer == WorldTransfer.COPY) quarantined = stageTransfers(orphans)
-            val store = JsonPlayerStore(staging.resolve("$MOD_DIRECTORY/players"))
+            val recordsDir = staging.resolve("$MOD_DIRECTORY/players")
             val records = stagePlayerRecords()
-            val buckets = stageSaves(saves, store)
+            val buckets = stageSaves(saves, JsonPlayerStore(recordsDir), recordsDir)
             val names = stageNameCache(identities)
             regions?.let { Files.writeString(staging.resolve(REGIONS_FILE), it.text) }
             Files.writeString(staging.resolve(OPS_FILE), OpsImport.serialize(ops.entries))
@@ -534,7 +534,7 @@ class PortalImport(private val plan: ImportPlan) {
         Files.newDirectoryStream(to, "*.json").use { return it.count() }
     }
 
-    private fun stageSaves(saves: List<PlayerSaves>, store: PlayerStore): Int {
+    private fun stageSaves(saves: List<PlayerSaves>, store: PlayerStore, records: Path): Int {
         var buckets = 0
         for (player in saves) {
             val identity = player.identity
@@ -543,7 +543,15 @@ class PortalImport(private val plan: ImportPlan) {
                 copyPlayerFile(player.live.levelDir, ADVANCEMENTS_DIRECTORY, identity)
                 copyPlayerFile(player.live.levelDir, STATS_DIRECTORY, identity)
                 player.other?.let { other ->
-                    store.setBucket(identity.uuid, other.world.id, PlayerdataImport.bucket(read(other.file)))
+                    // The Per-World Bucket is legacy data the live server no
+                    // longer models, so it is written straight into the record
+                    // ([PerWorldBuckets]) rather than through the store. What it
+                    // is for has not changed: `mergeWorlds` reads it next.
+                    PerWorldBuckets.into(
+                        records.resolve("${identity.uuid}$RECORD_SUFFIX"),
+                        other.world.id,
+                        PlayerdataImport.bucket(read(other.file)),
+                    )
                     buckets++
                 }
                 if (store.lastWorld(identity.uuid) != player.live.world.id) {
@@ -673,6 +681,9 @@ class PortalImport(private val plan: ImportPlan) {
         const val USER_CACHE_FILE = "usercache.json"
         const val PLAYERDATA_DIRECTORY = "playerdata"
         const val PLAYERDATA_SUFFIX = ".dat"
+
+        /** One player record, as [JsonPlayerStore] names it. */
+        const val RECORD_SUFFIX = ".json"
 
         /** Version 3 — md5-derived, i.e. an offline-mode uuid. A Mojang uuid is version 4. */
         const val OFFLINE_UUID_VERSION = 3

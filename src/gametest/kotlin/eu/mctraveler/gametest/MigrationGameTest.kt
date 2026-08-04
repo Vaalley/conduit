@@ -12,27 +12,36 @@ import java.util.Comparator
 import java.util.UUID
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.SharedConstants
-import net.minecraft.core.registries.Registries
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.nbt.DoubleTag
 import net.minecraft.nbt.FloatTag
 import net.minecraft.nbt.ListTag
 import net.minecraft.nbt.NbtIo
-import net.minecraft.resources.Identifier
-import net.minecraft.resources.ResourceKey
 import net.minecraft.server.MinecraftServer
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.storage.LevelResource
 
 /**
  * The cutover, against a running server (spec User Stories 43–44): a migrated
- * player logs in through the real login path and Travels with the Per-World
- * Bucket the migration seeded, and a migrated region resolves against a
- * dimension the booted server actually has.
+ * player logs in through the real login path where the Portal left them, and a
+ * migrated region resolves against a dimension the booted server actually has.
  *
  * The importer's own transforms are covered by the unit tier; what only a
  * server can show is that what it wrote is what the live code reads.
+ *
+ * **Both cases are about the Primary half of a migration, and that is the whole
+ * of what this seam can still say.** They used to be about the Secondary half —
+ * a player logging into `mctraveler:secondary` and Travelling back to the
+ * Per-World Bucket the migration seeded, and a Region recorded under
+ * `last_nether` — because that was the half a single-server port had to prove it
+ * had reproduced. Neither is assertable now: `mergeWorlds` relocates Secondary's
+ * chunk data into Primary's dimensions and this build then removes those
+ * dimensions, so a booted server has nowhere to put such a player and no
+ * dimension for such a Region to name. What the merge writes, and how a booted
+ * server reads it back, is ticket 11's merge gametest rather than this one's —
+ * `migrate` runs long before the merge, and its Secondary output is the merge's
+ * input, not this server's.
  */
 class MigrationGameTest {
 
@@ -40,7 +49,7 @@ class MigrationGameTest {
     private val migrantName = "Migrant"
 
     @GameTest(maxTicks = 600)
-    fun aMigratedPlayerLogsInWhereThePortalLeftThemAndTravelsBackToTheirOldPosition(helper: GameTestHelper) {
+    fun aMigratedPlayerLogsInWhereThePortalLeftThem(helper: GameTestHelper) {
         val server = helper.level.server
         val migrated = migrate(server)
         try {
@@ -64,27 +73,13 @@ class MigrationGameTest {
             try {
                 helper.assertValueEqual(
                     player.level().dimension(),
-                    secondaryDimension("secondary"),
-                    "the World a migrated player logs into",
-                )
-                helper.assertValueEqual(
-                    listOf(player.x, player.y, player.z),
-                    listOf(500.5, 71.0, 600.5),
-                    "the position a migrated player logs into",
-                )
-
-                // Their Primary save became Primary's Per-World Bucket, so
-                // Travel puts them back exactly where the other backend had them.
-                server.commands.performPrefixedCommand(player.createCommandSourceStack(), "switch")
-                helper.assertValueEqual(
-                    player.level().dimension(),
                     Level.NETHER,
-                    "the dimension a migrated player Travels back to",
+                    "the dimension a migrated player logs into",
                 )
                 helper.assertValueEqual(
                     listOf(player.x, player.y, player.z),
                     listOf(10.5, 70.0, -20.5),
-                    "the Position Memory the migration seeded",
+                    "the position a migrated player logs into",
                 )
             } finally {
                 TestPlayers.logout(player)
@@ -96,13 +91,13 @@ class MigrationGameTest {
     }
 
     @GameTest
-    fun aMigratedRegionStillCoversItsGroundInTheWorldItWasBuiltIn(helper: GameTestHelper) {
+    fun aMigratedRegionStillCoversItsGroundInTheDimensionItWasBuiltIn(helper: GameTestHelper) {
         val server = helper.level.server
         val migrated = migrate(server)
         try {
             val regions = RegionService(migrated.resolve("regions.json"))
-            val nether = checkNotNull(server.getLevel(secondaryDimension("secondary_nether"))) {
-                "Secondary's nether is not loaded on the server"
+            val nether = checkNotNull(server.getLevel(Level.NETHER)) {
+                "the nether is not loaded on the server"
             }
 
             val region = regions.regionAt(RegionWorlds.legacyName(nether.dimension()), 0, 70, 0)
@@ -110,7 +105,7 @@ class MigrationGameTest {
             helper.assertValueEqual(
                 region?.title ?: "<no region>",
                 "Wanderer's Keep",
-                "the region a migrated file puts at 0/70/0 of Secondary's nether",
+                "the region a migrated file puts at 0/70/0 of the nether",
             )
         } finally {
             deleteRecursively(migrated.parent)
@@ -130,14 +125,18 @@ class MigrationGameTest {
         val primary = portal.resolve("minecraft-server/primary")
         val secondary = portal.resolve("minecraft-server/secondary")
         write(portal.resolve("uuid-cache.json"), """{"$migrantUuid":"$migrantName"}""")
+        // Last in Primary, so the Primary save is the one the migration makes
+        // live and this server can actually read back. Their Secondary save
+        // still becomes a Per-World Bucket in the record — legacy data now, and
+        // the merge's input rather than this server's.
         write(
             portal.resolve("players/$migrantUuid.json"),
-            """{"lastServer":"secondary","notepad":["a migrated page"]}""",
+            """{"lastServer":"primary","notepad":["a migrated page"]}""",
         )
         write(
             portal.resolve("regions.json"),
             """{"regions":{"0":{"title":"Wanderer's Keep","start-x":-10,"start-z":-10,""" +
-                """"end-x":10,"end-z":10,"world":"last_nether","members":["$migrantUuid"]}}}""",
+                """"end-x":10,"end-z":10,"world":"world_nether","members":["$migrantUuid"]}}}""",
         )
         for (level in listOf(primary.resolve("world"), secondary.resolve("last"))) {
             Files.createDirectories(level)
@@ -190,7 +189,4 @@ class MigrationGameTest {
             paths.sorted(Comparator.reverseOrder()).forEach(Files::deleteIfExists)
         }
     }
-
-    private fun secondaryDimension(path: String): ResourceKey<Level> =
-        ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath("mctraveler", path))
 }

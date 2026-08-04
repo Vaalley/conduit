@@ -16,10 +16,13 @@ import org.spongepowered.asm.mixin.injection.At;
  * Test-harness-only mixin (mod {@code mctraveler-test}, never shipped): the
  * vanilla gametest server bakes its world against an <em>empty</em> level-stem
  * registry, silently dropping every datapack-defined dimension — so the
- * Secondary trio the production server loads from the mod jar would not exist
- * on the test server at all. This swaps in the datapack dimension registry the
- * surrounding {@link WorldLoader} already loaded, making the gametest server
+ * Embassies dimension the production server loads from the mod jar would not
+ * exist on the test server at all. This swaps in the datapack dimension registry
+ * the surrounding {@link WorldLoader} already loaded, making the gametest server
  * honor datapacks exactly as a dedicated server does.
+ *
+ * <p>It was written for Secondary's trio, which shipped the same way until the
+ * merge retired it; the Embassies (ADR 0003) are what still need it.
  *
  * <p>Targets the world-data supplier lambda inside
  * {@link GameTestServer#create}; the synthetic method name is stable for a

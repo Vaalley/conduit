@@ -5,9 +5,17 @@ backend server directories plus the Portal's own data files — into a Fabric se
 directory ready to boot. It is safe to rehearse: it refuses to touch a run directory that
 already holds a migrated save, and writes nothing at all unless the whole migration succeeds.
 
-It is the first of two imports. The embassies predate the Portal and are in none of its files;
-they come across separately, from the retired Nucleus server, before the new build's first
-boot — see `docs/nucleus-import.md`.
+It is the first of three cutover operations. The embassies predate the Portal and are in none of
+its files; they come across separately, from the retired Nucleus server, before the new build's
+first boot — see `docs/nucleus-import.md`. Later, in its own downtime window, `mergeWorlds`
+collapses the two Worlds this migration produces into one map — see `docs/merge.md`.
+
+**This runbook describes the two-World server**, because that is what `migrate` builds. Where it
+mentions Travel, `/switch` moving a player between Worlds, or a Per-World Bucket, it is
+describing the state between the Portal cutover and the merge; afterwards there is one map,
+`/switch` is a signpost, and the Worlds are retired (ADR 0004). The quarantine section is the
+exception — it stays live for the whole life of the quarantine and already covers both sides of
+the merge.
 
 ## What it carries over
 
@@ -124,6 +132,54 @@ refused for good. The usual cause is playerdata this server cannot place (see th
 below). A **skipped** line is worth a look too — it means a quarantined save is keyed to the name
 of somebody who already plays here.
 
+Once Secondary has been merged into Primary, every claim line also says what the merge did to
+the save on the way in. A save out of `secondary/` is put down where the landmass went, by the
+same offset the merge applied to everyone who was here on the night; a save out of `primary/`
+is not moved at all, because its owner was never anywhere that moved:
+
+```
+[mctraveler] orphaned-save claim: … DataVersion 4536, moved by the Secondary merge: x +8192,
+             z -4096 in the overworld (x +1024, z -512 in the nether)
+[mctraveler] orphaned-save claim: … DataVersion 4536, not moved by the Secondary merge — it
+             came out of Primary's quarantine, which did not move
+```
+
+That clause is the only record of which of the two happened. A claim is invisible to the player
+and refused for good once they have a save of their own, so a player who comes back years from
+now and reports landing somewhere wrong is diagnosable from this line or from nothing. A claim
+that was moved also leaves a `merge` stamp on the player's record, exactly as the merge's own
+sweep did. On a server that has not been merged the clause is absent and every claim behaves
+as it always has.
+
+**The offset comes out of `mctraveler/merge.json`**, the marker the merge writes about itself
+when it commits. There is nothing to configure and nothing to fill in: the file records the
+offset the run actually applied, and the claim path reads it back on every claim for as long as
+the quarantine exists. A run directory with no marker has not been merged, and its claims move
+nobody — the state of every server before the operation.
+
+**Do not edit or delete that file.** It is also what a second merge refuses over, and a claim
+that finds it damaged says so and stops:
+
+```
+[mctraveler] orphaned-save claim: FAILED for Dave (…): /srv/mc/mctraveler/merge.json says this
+             save has been merged but cannot be read, so how far Secondary moved is unknown: …
+```
+
+That is deliberate, and it is the one **FAILED** line that affects everybody rather than one
+player: nothing was written and the quarantine is intact, but every claim will keep failing
+until the file is restored — from a backup, or from the offset in the merge's own report.
+Reading a damaged marker as "never merged" would be far worse, because it would silently put
+every returning player back at their pre-merge coordinates, once each, with no line in the log
+and no second chance.
+
+**A player quarantined on both sides gets the save from the World they were last in.** Their
+record's `lastServer` cannot answer that after the merge — the sweep rewrote it to `primary`
+for everyone, correctly, because there is one World now — so the sweep keeps the value it
+replaced in the `merge` stamp on the record, and the claim path reads it from there. A player
+the sweep never saw has no stamp and claims by their record exactly as before. Getting this
+wrong would have been quiet: the coordinates come out right either way, and only the inventory,
+XP and advancements would have been the other save's.
+
 The quarantine only shrinks, never grows. Once the community has cycled through and the log has
 gone quiet, whatever is left belongs to players who never came back, and the directory can be
 archived and deleted.
@@ -143,7 +199,8 @@ The migration prints a summary. Then:
    the version jump on first boot: the level directory is relaid out
    (`playerdata` → `players/data`, `region` → `dimensions/minecraft/overworld/region`, …) and
    every chunk and save is upgraded as it loads. This first boot takes longer than usual.
-4. Verify, in this order:
+4. Verify, in this order (this is the two-World server; after the merge the checks are
+   `docs/merge.md`'s):
    - the log lists `mctraveler:secondary`, `mctraveler:secondary_nether`, `mctraveler:secondary_end`;
    - an operator from the old server has operator status (`/op` list, or just use an admin command);
    - a well-travelled player logs in to the World they left, at the position they left;
@@ -160,13 +217,17 @@ Cutover facts to communicate, not bugs to fix:
 - **Secondary's world seed.** The merged save keeps Primary's `level.dat`, and the whole server
   generates from one seed. Secondary's already-generated chunks come over intact, but terrain
   generated *beyond* its current frontier will not match what the old Secondary backend would
-  have generated. Expect seams at the edge of explored Secondary terrain.
+  have generated. Expect seams at the edge of explored Secondary terrain. One seed has a second
+  consequence that only shows up at the merge: every chunk Secondary generates from now on is a
+  twin of Primary's chunk at the same coordinates, and after the merge both exist in one map at
+  different places. Nothing can prevent that — see `docs/merge.md`.
 - **Secondary's level-wide saved data is not imported** — maps, in-progress raids, its world
   border, force-loaded chunks and scoreboard objectives. Map ids are level-wide and cannot be
   merged with Primary's without renumbering every map item. Primary's carry over normally.
 - **Advancements and statistics come from the live World only.** A player's progress on the
   other backend is dropped: two sets cannot merge into the one shared set the port keeps
-  (ADR 0001).
+  (ADR 0001, superseded by ADR 0004 once the Worlds are retired — the one shared set is
+  unchanged by that).
 - **Whitelists and bans are not imported.** The Portal did its own authentication; set them up
   fresh if you want them.
 - **Playerdata that predates 1.16** (a player who has not logged in for years) names its

@@ -4,11 +4,9 @@ import kotlin.math.abs
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
-import net.minecraft.core.registries.Registries
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.network.protocol.game.ServerboundClientCommandPacket
 import net.minecraft.network.protocol.game.ServerboundPlayerLoadedPacket
-import net.minecraft.resources.Identifier
 import net.minecraft.resources.ResourceKey
 import net.minecraft.server.MinecraftServer
 import net.minecraft.server.level.ServerLevel
@@ -28,41 +26,36 @@ import net.minecraft.world.level.block.state.properties.BedPart
 import net.minecraft.world.level.storage.LevelData
 
 /**
- * Each World is a complete, self-contained trio (spec stories 22-23): death
- * never crosses Worlds, and nether/end portals lead into the traveller's own
- * trio.
+ * Respawning and portals, which are vanilla's own again.
+ *
+ * This suite existed to prove the opposite: that each World was a complete,
+ * self-contained trio, that death never crossed Worlds, and that a portal led
+ * into the traveller's own trio rather than into Primary's (the retired spec's
+ * stories 22-23). All three claims were made by mixins that translated vanilla's
+ * hardcoded dimension keys, and the merge deleted those mixins along with the
+ * second World they served.
+ *
+ * What is kept is the single-World half of each case — a bedless death goes to
+ * the world spawn, a bed catches a death beside it, a nether portal leads to the
+ * nether and back, an end portal to the End and back. Those were the "Primary
+ * behaves exactly as vanilla does" halves, and they are worth keeping precisely
+ * because there are no longer any mixins standing between vanilla and the
+ * player: they are what will catch it if something starts translating again.
  */
 class RespawnAndPortalsGameTest {
 
     @GameTest(maxTicks = 600)
-    fun dyingWithNoRespawnPointLandsAtTheWorldOfDeathsSpawn(helper: GameTestHelper) {
+    fun dyingWithNoRespawnPointLandsAtTheWorldSpawn(helper: GameTestHelper) {
         val server = helper.level.server
         var player: ServerPlayer = TestPlayers.login(server, "SpawnFaller")
         try {
-            runSwitch(server, player)
-            helper.assertValueEqual(
-                player.level().dimension(),
-                secondaryDimension("secondary"),
-                "the World the player travelled to",
-            )
-
-            player = dieAndRespawn(server, player)
-            helper.assertValueEqual(
-                player.level().dimension(),
-                secondaryDimension("secondary"),
-                "the World a bedless death in Secondary respawns into",
-            )
-            assertNearSpawn(helper, player, "the bedless respawn in Secondary")
-
-            // Primary keeps behaving exactly as vanilla does.
-            runSwitch(server, player)
             player = dieAndRespawn(server, player)
             helper.assertValueEqual(
                 player.level().dimension(),
                 Level.OVERWORLD,
-                "the World a bedless death in Primary respawns into",
+                "the dimension a bedless death respawns into",
             )
-            assertNearSpawn(helper, player, "the bedless respawn in Primary")
+            assertNearSpawn(helper, player, "the bedless respawn")
         } finally {
             TestPlayers.logout(player)
         }
@@ -70,57 +63,19 @@ class RespawnAndPortalsGameTest {
     }
 
     @GameTest(maxTicks = 600)
-    fun aBedInPrimaryNeverCatchesADeathInSecondary(helper: GameTestHelper) {
+    fun aBedCatchesTheDeathOfThePlayerWhoSleptInIt(helper: GameTestHelper) {
         val server = helper.level.server
-        val primary = level(server, Level.OVERWORLD)
-        var player: ServerPlayer = TestPlayers.login(server, "OneBedOnly")
-        try {
-            sleepAt(player, primary, LONE_BED)
-            runSwitch(server, player)
-
-            // Secondary has no bed of this player's anywhere in it, so the
-            // Primary bed must not reach across — Secondary's own spawn does.
-            player = dieAndRespawn(server, player)
-            helper.assertValueEqual(
-                player.level().dimension(),
-                secondaryDimension("secondary"),
-                "the World a death in Secondary respawns into with a bed only in Primary",
-            )
-            assertNearSpawn(helper, player, "a death in Secondary with a bed only in Primary")
-
-            // ...and the Primary bed is still waiting, untouched, back home.
-            runSwitch(server, player)
-            player = dieAndRespawn(server, player)
-            assertWokeUpAt(helper, player, primary, LONE_BED, "a death back in Primary")
-        } finally {
-            TestPlayers.logout(player)
-        }
-        helper.succeed()
-    }
-
-    @GameTest(maxTicks = 600)
-    fun eachWorldsBedCatchesOnlyItsOwnDeaths(helper: GameTestHelper) {
-        val server = helper.level.server
-        val primary = level(server, Level.OVERWORLD)
-        val secondary = level(server, secondaryDimension("secondary"))
+        val overworld = level(server, Level.OVERWORLD)
         var player: ServerPlayer = TestPlayers.login(server, "BedKeeper")
         try {
-            sleepAt(player, primary, PRIMARY_BED)
-            runSwitch(server, player)
-            sleepAt(player, secondary, SECONDARY_BED)
+            sleepAt(player, overworld, LONE_BED)
 
             player = dieAndRespawn(server, player)
-            assertWokeUpAt(helper, player, secondary, SECONDARY_BED, "a death in Secondary")
+            assertWokeUpAt(helper, player, overworld, LONE_BED, "a death with a bed set")
 
-            // The bed left behind in Primary is still Primary's, and only
-            // Primary's — Travel swapped both respawn points with the buckets.
-            runSwitch(server, player)
+            // And it goes on catching deaths, rather than being consumed by one.
             player = dieAndRespawn(server, player)
-            assertWokeUpAt(helper, player, primary, PRIMARY_BED, "a death in Primary")
-
-            runSwitch(server, player)
-            player = dieAndRespawn(server, player)
-            assertWokeUpAt(helper, player, secondary, SECONDARY_BED, "a second death in Secondary")
+            assertWokeUpAt(helper, player, overworld, LONE_BED, "a second death with the same bed")
         } finally {
             TestPlayers.logout(player)
         }
@@ -128,22 +83,12 @@ class RespawnAndPortalsGameTest {
     }
 
     @GameTest(maxTicks = 600)
-    fun netherPortalsLeadIntoTheTravellersOwnTrio(helper: GameTestHelper) {
+    fun netherPortalsLeadToTheNetherAndBack(helper: GameTestHelper) {
         val server = helper.level.server
         val player = TestPlayers.login(server, "NetherWalker")
         try {
-            // Primary is the vanilla trio and behaves exactly as vanilla does.
             assertPortalLeads(helper, server, Blocks.NETHER_PORTAL, player, Level.OVERWORLD, Level.NETHER)
             assertPortalLeads(helper, server, Blocks.NETHER_PORTAL, player, Level.NETHER, Level.OVERWORLD)
-            // Secondary's nether is reachable only from Secondary, and leads back there.
-            assertPortalLeads(
-                helper, server, Blocks.NETHER_PORTAL, player,
-                secondaryDimension("secondary"), secondaryDimension("secondary_nether"),
-            )
-            assertPortalLeads(
-                helper, server, Blocks.NETHER_PORTAL, player,
-                secondaryDimension("secondary_nether"), secondaryDimension("secondary"),
-            )
         } finally {
             TestPlayers.logout(player)
         }
@@ -151,20 +96,12 @@ class RespawnAndPortalsGameTest {
     }
 
     @GameTest(maxTicks = 600)
-    fun endPortalsLeadIntoTheTravellersOwnTrio(helper: GameTestHelper) {
+    fun endPortalsLeadToTheEndAndBack(helper: GameTestHelper) {
         val server = helper.level.server
         val player = TestPlayers.login(server, "EndWalker")
         try {
             assertPortalLeads(helper, server, Blocks.END_PORTAL, player, Level.OVERWORLD, Level.END)
             assertPortalLeads(helper, server, Blocks.END_PORTAL, player, Level.END, Level.OVERWORLD)
-            assertPortalLeads(
-                helper, server, Blocks.END_PORTAL, player,
-                secondaryDimension("secondary"), secondaryDimension("secondary_end"),
-            )
-            assertPortalLeads(
-                helper, server, Blocks.END_PORTAL, player,
-                secondaryDimension("secondary_end"), secondaryDimension("secondary"),
-            )
         } finally {
             TestPlayers.logout(player)
         }
@@ -172,20 +109,19 @@ class RespawnAndPortalsGameTest {
     }
 
     @GameTest(maxTicks = 600)
-    fun portalsKeepNonPlayersInTheirOwnTrioToo(helper: GameTestHelper) {
+    fun portalsRouteEntitiesThatAreNotPlayersToo(helper: GameTestHelper) {
         val server = helper.level.server
-        // Items, mobs and minecarts route by the World the portal stands in,
-        // not by any player, so a dropped item never surfaces in the other
-        // World's nether.
+        // A portal's destination is decided by the portal, not by any player
+        // standing in it, so a dropped item finds the nether on its own.
         assertPortalLeadsFor(
             helper, Blocks.NETHER_PORTAL,
-            droppedStone(level(server, secondaryDimension("secondary"))),
-            secondaryDimension("secondary_nether"),
+            droppedStone(level(server, Level.OVERWORLD)),
+            Level.NETHER,
         )
         assertPortalLeadsFor(
             helper, Blocks.END_PORTAL,
-            droppedStone(level(server, secondaryDimension("secondary_end"))),
-            secondaryDimension("secondary"),
+            droppedStone(level(server, Level.END)),
+            Level.OVERWORLD,
         )
         helper.succeed()
     }
@@ -301,15 +237,8 @@ class RespawnAndPortalsGameTest {
         return respawned
     }
 
-    private fun runSwitch(server: MinecraftServer, player: ServerPlayer) {
-        server.commands.performPrefixedCommand(player.createCommandSourceStack(), "switch")
-    }
-
     private fun level(server: MinecraftServer, dimension: ResourceKey<Level>): ServerLevel =
         checkNotNull(server.getLevel(dimension)) { "${dimension.identifier()} is not loaded" }
-
-    private fun secondaryDimension(path: String): ResourceKey<Level> =
-        ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath("mctraveler", path))
 
     private companion object {
         /** How far vanilla's respawn placement may roam from the spawn block. */
@@ -318,10 +247,10 @@ class RespawnAndPortalsGameTest {
         /** How far beside a bed vanilla stands a sleeper up. */
         const val BED_STAND_UP_RADIUS = 3.0
 
-        // Fixed spots well clear of the World spawn, so "at the bed" and "at the
-        // World's spawn" can never be confused for one another.
-        val PRIMARY_BED: BlockPos = BlockPos(3000, 80, 3000)
-        val SECONDARY_BED: BlockPos = BlockPos(-3000, 80, -3000)
+        /**
+         * A fixed spot well clear of the world spawn, so "at the bed" and "at
+         * the world spawn" can never be confused for one another.
+         */
         val LONE_BED: BlockPos = BlockPos(3000, 80, -3000)
     }
 }
