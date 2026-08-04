@@ -1,11 +1,7 @@
 package eu.mctraveler.tablist
 
-import eu.mctraveler.MCTraveler
+import eu.mctraveler.mixin.ClientboundPlayerInfoUpdatePacketAccessor
 import eu.mctraveler.region.RegionsFeature
-import java.lang.reflect.Constructor
-import java.lang.reflect.ParameterizedType
-import java.lang.reflect.RecordComponent
-import java.util.UUID
 import net.minecraft.network.chat.Component
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket
 import net.minecraft.server.level.ServerPlayer
@@ -37,60 +33,37 @@ import net.minecraft.world.level.GameType
  * `GameType` when its UUID matches the client's own, so lying to the spectating admin's own
  * client would break the very thing they are trying to do.
  *
- * The entry type and the packet's `(actions, entries)` constructor are narrower than
- * public, and this build ships no ProGuard mappings to hand-verify a descriptor against
- * (26.1+ is remap-free — see `docs/dev-loop.md`), so both are found by runtime shape —
- * a record component typed `UUID`, one typed `GameType`, one typed `Component`, a
- * constructor whose second parameter is generically a `Collection` of the entry type —
- * rather than a guessed name. Every lookup fails open: if the shape it finds ever stops
- * matching, [maskFor] returns null and the real, unmasked packet goes out — today's
- * behaviour, not a crash.
+ * [ClientboundPlayerInfoUpdatePacket.Entry]'s canonical constructor is public (verified
+ * with `javap` against the real 26.2 jar — this build ships no ProGuard mappings to check
+ * a guess against otherwise), so a masked copy is built by calling it directly. The outer
+ * packet has no such constructor for a ready-made entry list, so a masked packet is instead
+ * built the long way: a normal, empty one via the public `(actions, Collection<ServerPlayer>)`
+ * constructor, then [ClientboundPlayerInfoUpdatePacketAccessor] overwrites its entries — a
+ * real Mixin-generated setter, not reflection.
  */
 object SpectatorVisibility {
-
-    private var loggedFailure = false
-
-    private var resolved = false
-    private var resolutionFailed = false
-    private var entryComponents: Array<RecordComponent>? = null
-    private var entryConstructor: Constructor<*>? = null
-    private var gameModeIndex = -1
-    private var profileIdIndex = -1
-
-    /** -1 when not found: hearts-masking degrades gracefully, gameMode-masking still works. */
-    private var displayNameIndex = -1
-    private var packetConstructor: Constructor<*>? = null
 
     /**
      * A copy of [packet] with every entry belonging to someone other than [viewer] masked
      * as described on the class, or null when nothing needs masking — [viewer] is an admin,
-     * no entry is a non-self Spectator/Creative, or the reflective lookups above could not
-     * find what they need.
+     * or no entry is a non-self Spectator/Creative.
      */
     @JvmStatic
     fun maskFor(viewer: ServerPlayer, packet: ClientboundPlayerInfoUpdatePacket): ClientboundPlayerInfoUpdatePacket? {
         if (RegionsFeature.isAdmin(viewer)) return null
         val entries = packet.entries()
-        if (entries.isEmpty() || !resolve(entries)) return null
-
-        val components = entryComponents ?: return null
-        val ctor = entryConstructor ?: return null
-        val gmIndex = gameModeIndex
-        val pidIndex = profileIdIndex
-        val dnIndex = displayNameIndex
+        if (entries.isEmpty()) return null
 
         var changed = false
         val maskedEntries = entries.map { entry ->
-            val profileId = components[pidIndex].accessor.invoke(entry) as UUID
-            val gameMode = components[gmIndex].accessor.invoke(entry) as GameType
-            val maskGameMode = gameMode == GameType.SPECTATOR
-            val maskHearts = dnIndex >= 0 && (gameMode == GameType.SPECTATOR || gameMode == GameType.CREATIVE)
+            val maskGameMode = entry.gameMode() == GameType.SPECTATOR
+            val maskHearts = entry.gameMode() == GameType.SPECTATOR || entry.gameMode() == GameType.CREATIVE
 
-            if (profileId == viewer.uuid || !(maskGameMode || maskHearts)) {
+            if (entry.profileId() == viewer.uuid || !(maskGameMode || maskHearts)) {
                 entry
             } else {
                 val fullHeartsName = if (maskHearts) {
-                    viewer.level().server.playerList.getPlayer(profileId)
+                    viewer.level().server.playerList.getPlayer(entry.profileId())
                         ?.let(TabListFeature::displayNameWithFullHearts)
                 } else {
                     null
@@ -99,96 +72,31 @@ object SpectatorVisibility {
                     entry
                 } else {
                     changed = true
-                    val args = components.mapIndexed { index, component ->
-                        when {
-                            index == gmIndex && maskGameMode -> GameType.SURVIVAL
-                            index == dnIndex && fullHeartsName != null -> fullHeartsName
-                            else -> component.accessor.invoke(entry)
-                        }
-                    }.toTypedArray()
-                    runCatching { ctor.newInstance(*args) }
-                        .getOrElse { return fail("could not build a masked tab-list entry: ${it.message}") }
+                    maskedEntry(entry, maskGameMode, fullHeartsName)
                 }
             }
         }
         if (!changed) return null
 
-        val packetCtor = packetConstructor ?: return null
-        return runCatching {
-            packetCtor.newInstance(packet.actions(), maskedEntries) as ClientboundPlayerInfoUpdatePacket
-        }.getOrElse { fail("could not build a masked tab-list packet: ${it.message}") }
+        val fresh = ClientboundPlayerInfoUpdatePacket(packet.actions(), emptyList<ServerPlayer>())
+        (fresh as ClientboundPlayerInfoUpdatePacketAccessor).`mctraveler$setEntries`(maskedEntries)
+        return fresh
     }
 
-    private fun fail(reason: String): ClientboundPlayerInfoUpdatePacket? {
-        if (!loggedFailure) {
-            loggedFailure = true
-            MCTraveler.LOGGER.warn(
-                "SpectatorVisibility: $reason — Spectator/Creative will show real state to every viewer " +
-                    "until the next restart.",
-            )
-        }
-        return null
-    }
-
-    /** Resolves every reflective handle exactly once, from a real entry's own runtime shape. */
-    private fun resolve(entries: List<*>): Boolean {
-        if (resolved) return !resolutionFailed
-        resolved = true
-
-        val sample = entries[0]
-        if (sample == null) {
-            resolutionFailed = true
-            fail("a null tab-list entry")
-            return false
-        }
-        val entryClass = sample.javaClass
-        val components = entryClass.recordComponents
-        if (components == null || components.isEmpty()) {
-            resolutionFailed = true
-            fail("the tab-list entry type is not a record")
-            return false
-        }
-
-        val gmIndex = components.indexOfFirst { it.type == GameType::class.java }
-        val pidIndex = components.indexOfFirst { it.type == UUID::class.java }
-        if (gmIndex < 0 || pidIndex < 0) {
-            resolutionFailed = true
-            fail("the tab-list entry has no GameType/UUID record component")
-            return false
-        }
-        val dnIndex = components.indexOfFirst { it.type == Component::class.java }
-
-        val ctor = runCatching {
-            entryClass.getDeclaredConstructor(*components.map { it.type }.toTypedArray())
-                .apply { isAccessible = true }
-        }.getOrNull()
-        if (ctor == null) {
-            resolutionFailed = true
-            fail("no canonical constructor on the tab-list entry type")
-            return false
-        }
-
-        val packetCtor = ClientboundPlayerInfoUpdatePacket::class.java.declaredConstructors.firstOrNull { candidate ->
-            val params = candidate.parameterTypes
-            params.size == 2 &&
-                Set::class.java.isAssignableFrom(params[0]) &&
-                Collection::class.java.isAssignableFrom(params[1]) &&
-                (candidate.genericParameterTypes.getOrNull(1) as? ParameterizedType)
-                    ?.actualTypeArguments?.singleOrNull() == entryClass
-        }?.apply { isAccessible = true }
-        if (packetCtor == null) {
-            resolutionFailed = true
-            fail("no (actions, entries) constructor on the tab-list packet type")
-            return false
-        }
-
-        components.forEach { it.accessor.isAccessible = true }
-        entryComponents = components
-        entryConstructor = ctor
-        gameModeIndex = gmIndex
-        profileIdIndex = pidIndex
-        displayNameIndex = dnIndex
-        packetConstructor = packetCtor
-        return true
-    }
+    /** [entry] with [GameType.SURVIVAL] swapped in iff [maskGameMode], and [fullHeartsName] iff non-null. */
+    private fun maskedEntry(
+        entry: ClientboundPlayerInfoUpdatePacket.Entry,
+        maskGameMode: Boolean,
+        fullHeartsName: Component?,
+    ): ClientboundPlayerInfoUpdatePacket.Entry = ClientboundPlayerInfoUpdatePacket.Entry(
+        entry.profileId(),
+        entry.profile(),
+        entry.listed(),
+        entry.latency(),
+        if (maskGameMode) GameType.SURVIVAL else entry.gameMode(),
+        fullHeartsName ?: entry.displayName(),
+        entry.showHat(),
+        entry.listOrder(),
+        entry.chatSession(),
+    )
 }

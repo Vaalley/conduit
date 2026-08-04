@@ -141,26 +141,29 @@ class TabListGameTest {
         subject.health = 10.0f
         subject.setGameMode(GameType.SPECTATOR)
 
+        val bystanderEntry = lastEntrySentFor(bystander, subject)
         helper.assertValueEqual(
-            lastGameModeSentFor(bystander, subject),
+            bystanderEntry.gameMode(),
             GameType.SURVIVAL,
             "the gamemode a non-admin bystander is shown for a spectating admin",
         )
-        assertHearts(displayNameSentFor(bystander, subject), redCount = 10, grayCount = 0, goldCount = 0)
+        assertHearts(checkNotNull(bystanderEntry.displayName()), redCount = 10, grayCount = 0, goldCount = 0)
 
+        val staffEntry = lastEntrySentFor(staff, subject)
         helper.assertValueEqual(
-            lastGameModeSentFor(staff, subject),
+            staffEntry.gameMode(),
             GameType.SPECTATOR,
             "the gamemode a fellow admin is shown for a spectating admin",
         )
-        assertHearts(displayNameSentFor(staff, subject), redCount = 5, grayCount = 5, goldCount = 0)
+        assertHearts(checkNotNull(staffEntry.displayName()), redCount = 5, grayCount = 5, goldCount = 0)
 
+        val selfEntry = lastEntrySentFor(subject, subject)
         helper.assertValueEqual(
-            lastGameModeSentFor(subject, subject),
+            selfEntry.gameMode(),
             GameType.SPECTATOR,
             "the gamemode the spectating admin's own client is shown",
         )
-        assertHearts(displayNameSentFor(subject, subject), redCount = 5, grayCount = 5, goldCount = 0)
+        assertHearts(checkNotNull(selfEntry.displayName()), redCount = 5, grayCount = 5, goldCount = 0)
 
         removePlayers(helper, subject, bystander, staff)
         helper.succeed()
@@ -180,12 +183,13 @@ class TabListGameTest {
         subject.health = 10.0f
         subject.setGameMode(GameType.CREATIVE)
 
+        val bystanderEntry = lastEntrySentFor(bystander, subject)
         helper.assertValueEqual(
-            lastGameModeSentFor(bystander, subject),
+            bystanderEntry.gameMode(),
             GameType.CREATIVE,
             "the gamemode a non-admin bystander is shown for a Creative admin",
         )
-        assertHearts(displayNameSentFor(bystander, subject), redCount = 10, grayCount = 0, goldCount = 0)
+        assertHearts(checkNotNull(bystanderEntry.displayName()), redCount = 10, grayCount = 0, goldCount = 0)
 
         removePlayers(helper, subject, bystander)
         helper.succeed()
@@ -206,13 +210,15 @@ class TabListGameTest {
         }
     }
 
-    /** The `GameType` most recently sent to [viewer] for [subject]'s tab entry. */
-    private fun lastGameModeSentFor(viewer: ServerPlayer, subject: ServerPlayer): GameType =
+    /** The last tab entry sent to [viewer] for [subject], draining the packet queue once. */
+    private fun lastEntrySentFor(
+        viewer: ServerPlayer,
+        subject: ServerPlayer,
+    ): ClientboundPlayerInfoUpdatePacket.Entry =
         PacketCapture.drainOf<ClientboundPlayerInfoUpdatePacket>(viewer)
             .flatMap { it.entries() }
             .lastOrNull { it.profileId() == subject.uuid }
-            ?.gameMode()
-            ?: throw AssertionError("no gamemode was sent to the viewer for ${subject.uuid}")
+            ?: throw AssertionError("no tab entry was sent to the viewer for ${subject.uuid}")
 
     // --- Shared assertions -----------------------------------------------------------------
 
