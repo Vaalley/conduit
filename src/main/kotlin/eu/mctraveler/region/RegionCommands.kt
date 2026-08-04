@@ -446,14 +446,21 @@ object RegionCommands {
         )
     }
 
-    private fun locate(player: ServerPlayer, query: String): Component? {
+    private fun locate(player: ServerPlayer, rawQuery: String): Component? {
         RegionsFeature.adminGate(player)?.let { return it }
         val server = player.level().server
-        val found = RegionsFeature.requireService().search(query) { uuid ->
-            RegionsFeature.usernameFor(server, uuid)
-        }
+        val service = RegionsFeature.requireService()
+        val usernameLookup = { uuid: UUID -> RegionsFeature.usernameFor(server, uuid) }
+
+        val (searchQuery, requestedPage) = parseLocateQuery(
+            rawQuery,
+            hasMatches = { service.search(it, usernameLookup).isNotEmpty() },
+            maxPages = { (service.search(it, usernameLookup).size + 9) / 10 },
+        )
+
+        val found = service.search(searchQuery, usernameLookup)
         if (found.isEmpty()) {
-            return Paint.error("No regions found matching \"$query\"")
+            return Paint.error("No regions found matching \"$searchQuery\"")
         }
         if (found.size == 1) {
             val region = found.single()
@@ -463,8 +470,34 @@ object RegionCommands {
                 "/", Paint.green(RegionWorlds.locateInfo(region.world)),
             )
         }
-        player.sendSystemMessage(Paint("Located regions (", Paint.yellow(found.size), "):"))
-        for (region in found.take(10)) {
+
+        val pageSize = 10
+        val maxPages = (found.size + pageSize - 1) / pageSize
+        val page = requestedPage.coerceIn(1, maxPages)
+        val startIndex = (page - 1) * pageSize
+        val endIndex = minOf(startIndex + pageSize, found.size)
+        val pageRegions = found.subList(startIndex, endIndex)
+
+        if (maxPages > 1) {
+            val pageHeader = if (page < maxPages) {
+                Paint.gray("[").append(
+                    Paint.yellow.runs("/rg locate $searchQuery ${page + 1}")("Page $page/$maxPages")
+                ).append(Paint.gray("]:"))
+            } else if (page > 1) {
+                Paint.gray("[").append(
+                    Paint.yellow.runs("/rg locate $searchQuery 1")("Page $page/$maxPages")
+                ).append(Paint.gray("]:"))
+            } else {
+                Paint.gray("[Page $page/$maxPages]:")
+            }
+            player.sendSystemMessage(
+                Paint("Located regions (", Paint.yellow(found.size), ") ", pageHeader)
+            )
+        } else {
+            player.sendSystemMessage(Paint("Located regions (", Paint.yellow(found.size), "):"))
+        }
+
+        for (region in pageRegions) {
             player.sendSystemMessage(
                 Paint(
                     " - ", Paint.yellow(region.title), " ",
@@ -472,10 +505,45 @@ object RegionCommands {
                 ),
             )
         }
-        if (found.size > 10) {
-            player.sendSystemMessage(Paint.gray(" ...and ${found.size - 10} more"))
+
+        if (maxPages > 1) {
+            val prevBtn = if (page > 1) {
+                Paint.yellow.bold.runs("/rg locate $searchQuery ${page - 1}")("[< Prev]")
+            } else {
+                Paint.darkGray("[< Prev]")
+            }
+            val nextBtn = if (page < maxPages) {
+                Paint.yellow.bold.runs("/rg locate $searchQuery ${page + 1}")("[Next >]")
+            } else {
+                Paint.darkGray("[Next >]")
+            }
+            player.sendSystemMessage(
+                Paint(prevBtn, " ", Paint.gray("Page $page/$maxPages"), " ", nextBtn)
+            )
         }
+
         return null
+    }
+    internal fun parseLocateQuery(
+        rawQuery: String,
+        hasMatches: (String) -> Boolean,
+        maxPages: (String) -> Int,
+    ): Pair<String, Int> {
+        val trimmed = rawQuery.trim()
+        val lastSpace = trimmed.lastIndexOf(' ')
+        if (lastSpace != -1) {
+            val candidateQuery = trimmed.substring(0, lastSpace).trim()
+            val candidatePage = trimmed.substring(lastSpace + 1).toIntOrNull()
+            if (candidatePage != null && candidatePage >= 1 && candidateQuery.isNotEmpty()) {
+                val candidateHasMatches = hasMatches(candidateQuery)
+                val fullHasMatches = hasMatches(trimmed)
+                val maxPagesForCandidate = maxPages(candidateQuery)
+                if (candidateHasMatches && (!fullHasMatches || candidatePage <= maxPagesForCandidate)) {
+                    return candidateQuery to candidatePage
+                }
+            }
+        }
+        return trimmed to 1
     }
 
     // ---- shared lookups ----
