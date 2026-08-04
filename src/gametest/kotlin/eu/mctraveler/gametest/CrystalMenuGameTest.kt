@@ -238,31 +238,40 @@ class CrystalMenuGameTest {
     }
 
     @GameTest
-    fun aTierNeedsTheEnergyItsCapacityImplies(helper: GameTestHelper) {
-        // Story 27: energy <= 3 - tier is refused. A tier-1 crystal needs a
-        // full pool; a tier-3 still works on the last point.
+    fun everyTierOpensTheMenuRegardlessOfEnergy(helper: GameTestHelper) {
+        // Story 27: opening is always allowed. Paid destinations apply the
+        // crystal's tier requirement when they are clicked.
         val player = MessageCapturingPlayer.join(helper, "TCEnergyGate")
         try {
-            for ((tier, energy, opens) in TIER_ENERGY_CASES) {
+            for ((tier, energy) in TIER_ENERGY_CASES) {
                 CrystalEnergy.setEnergy(player, energy)
                 player.messages.clear()
                 player.usesCrystal(tier)
-                val menu = CrystalMenu.openMenuOf(player)
-                helper.assertTrue(
-                    (menu != null) == opens,
-                    "tier $tier at $energy energy should ${if (opens) "open" else "refuse"}",
-                )
-                if (opens) {
-                    player.closeContainer()
-                } else {
-                    helper.assertOnlyMessage(
-                        player,
-                        Paint.error("You have no energy, please wait for a recharge"),
-                        "the no-energy refusal for tier $tier at $energy",
-                    )
-                }
+                helper.assertTrue(CrystalMenu.openMenuOf(player) != null, "tier $tier at $energy did not open")
+                player.closeContainer()
             }
             helper.succeed()
+        } finally {
+            player.leave()
+        }
+    }
+
+    @GameTest
+    fun aPaidDestinationRefusesWhenTheCrystalTierHasInsufficientEnergy(helper: GameTestHelper) {
+        val player = MessageCapturingPlayer.join(helper, "TCEnergyClick")
+        try {
+            CrystalEnergy.setEnergy(player, 0)
+            player.usesCrystal(tier = 3)
+            player.messages.clear()
+
+            helper.afterClick(player, BED_SLOT, player) {
+                helper.assertOnlyMessage(
+                    player,
+                    Paint.error("You have no energy, please wait for a recharge"),
+                    "the paid destination refusal",
+                )
+                helper.assertValueEqual(CrystalEnergy.energyOf(player), 0, "energy after the refusal")
+            }
         } finally {
             player.leave()
         }
@@ -481,7 +490,7 @@ class CrystalMenuGameTest {
     @GameTest
     fun spawn1SendsThePlayerToSpawnTownForFree(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "TCSpawn")
-        CrystalEnergy.setEnergy(player, 5)
+        CrystalEnergy.setEnergy(player, 0)
         player.usesCrystal(tier = 3)
         player.messages.clear()
 
@@ -497,7 +506,7 @@ class CrystalMenuGameTest {
             helper.assertValueEqual(player.z, -15.5, "spawn z")
             helper.assertValueEqual(player.yRot, 180.0f, "spawn yaw")
             helper.assertValueEqual(player.xRot, 0.0f, "spawn pitch")
-            helper.assertValueEqual(CrystalEnergy.energyOf(player), 5, "energy after a free destination")
+            helper.assertValueEqual(CrystalEnergy.energyOf(player), 0, "energy after a free destination")
             helper.assertOnlyMessage(
                 player,
                 Paint.info("You arrived at ", Paint.aqua("spawn 1")),
@@ -1075,14 +1084,14 @@ class CrystalMenuGameTest {
         const val EMBASSY_SLOT = 15
         const val WILDERNESS_SLOT = 16
 
-        /** tier, energy, whether the menu opens (story 27). */
+        /** tier and energy, including the low-energy cases (story 27). */
         val TIER_ENERGY_CASES = listOf(
-            Triple(1, 5, true),
-            Triple(1, 4, false),
-            Triple(2, 3, true),
-            Triple(2, 2, false),
-            Triple(3, 1, true),
-            Triple(3, 0, false),
+            1 to 5,
+            1 to 4,
+            2 to 3,
+            2 to 2,
+            3 to 1,
+            3 to 0,
         )
     }
 }
