@@ -241,7 +241,10 @@ class RegionAdminCommandGameTest {
         val before = admin.messages.size
         admin.runCommand("rg locate zq7keep")
 
-        val expected = mutableListOf<Component>(Paint("Located regions (", Paint.yellow(12), "):"))
+        val pageHeader = Paint.gray("[").append(
+            Paint.yellow.runs("/rg locate zq7keep 2")("Page 1/2")
+        ).append(Paint.gray("]:"))
+        val expected = mutableListOf<Component>(Paint("Located regions (", Paint.yellow(12), ") ", pageHeader))
         for (i in 1..10) {
             expected.add(
                 Paint(
@@ -250,7 +253,15 @@ class RegionAdminCommandGameTest {
                 ),
             )
         }
-        expected.add(Paint.gray(" ...and 2 more"))
+        expected.add(
+            Paint(
+                Paint.darkGray("[< Prev]"),
+                " ",
+                Paint.gray("Page 1/2"),
+                " ",
+                Paint.yellow.bold.runs("/rg locate zq7keep 2")("[Next >]"),
+            ),
+        )
         helper.assertValueEqual(admin.messages.drop(before), expected.toList(), "the multi-result locate replies")
         admin.leave()
         helper.succeed()
