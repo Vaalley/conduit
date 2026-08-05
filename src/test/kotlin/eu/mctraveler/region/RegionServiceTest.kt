@@ -417,4 +417,22 @@ class RegionServiceTest {
         val service = serviceWith(legacyFile)
         assertTrue(service.search("zzz") { null }.isEmpty())
     }
+    @Test
+    fun `search results support pagination slicing across pages`() {
+        val service = serviceWith(legacyFile)
+        val names = mapOf(alice to "Alice", bob to "BobTheBuilder")
+        val allMatches = service.search("") { names[it] }
+        assertTrue(allMatches.size >= 3)
+
+        val pageSize = 2
+        val maxPages = (allMatches.size + pageSize - 1) / pageSize
+        val page1 = allMatches.subList(0, pageSize)
+        val page2 = allMatches.subList(pageSize, minOf(2 * pageSize, allMatches.size))
+
+        assertEquals(2, page1.size)
+        assertEquals(allMatches.size - 2, page2.size)
+        assertEquals(allMatches[0].title, page1[0].title)
+        assertEquals(allMatches[2].title, page2[0].title)
+        assertTrue(maxPages >= 2)
+    }
 }
