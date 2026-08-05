@@ -13,12 +13,16 @@ import net.fabricmc.fabric.api.event.player.UseEntityCallback
 import net.fabricmc.fabric.api.event.player.UseItemCallback
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents
 import net.minecraft.core.BlockPos
+import net.minecraft.core.component.DataComponents
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.tags.DamageTypeTags
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
+import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.monster.Enemy
 import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.Items
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.ButtonBlock
 import net.minecraft.world.level.block.DoorBlock
@@ -156,6 +160,7 @@ object RegionProtection {
             val player = context.player
             // This event's "not my business" answer is null, not PASS.
             if (player is ServerPlayer &&
+                !context.itemInHand.`is`(Items.FIREWORK_ROCKET) &&
                 !isExemptItem(context.itemInHand) &&
                 !allowsBlockChange(player, context.level, context.clickedPos)
             ) {
@@ -191,8 +196,8 @@ object RegionProtection {
         }
 
         // ---- entities ----
-        AttackEntityCallback.EVENT.register { player, _, _, _, _ ->
-            allowedOrFail(player !is ServerPlayer || allowsEntityAttack(player))
+        AttackEntityCallback.EVENT.register { player, _, _, entity, _ ->
+            allowedOrFail(player !is ServerPlayer || allowsEntityAttack(player, entity))
         }
         UseEntityCallback.EVENT.register { player, _, hand, _, _ ->
             allowedOrFail(player !is ServerPlayer || allowsEntityInteract(player, hand))
@@ -309,16 +314,32 @@ object RegionProtection {
      * exempt item — the Teleportation Crystal — is nobody's business but its
      * own. A false answer has already told them why.
      */
-    private fun allowsItemUse(player: ServerPlayer, stack: ItemStack): Boolean {
+    @JvmStatic
+    fun allowsItemUse(player: ServerPlayer?, stack: ItemStack): Boolean {
         if (stack.isEmpty || isExemptItem(stack)) return true
-        val region = RegionTracker.regionOf(player) ?: return true
-        return canModifyRegion(player, region) || refuse(player, region)
+        if (stack.has(DataComponents.FOOD) ||
+            stack.has(DataComponents.POTION_CONTENTS) ||
+            stack.`is`(Items.POTION) ||
+            stack.`is`(Items.MILK_BUCKET) ||
+            stack.`is`(Items.HONEY_BOTTLE) ||
+            stack.`is`(Items.GOLDEN_APPLE) ||
+            stack.`is`(Items.ENCHANTED_GOLDEN_APPLE) ||
+            stack.`is`(Items.FIREWORK_ROCKET)
+        ) {
+            return true
+        }
+        val p = player ?: return true
+        val region = RegionTracker.regionOf(p) ?: return true
+        return canModifyRegion(p, region) || refuse(p, region)
     }
 
-    /** Hitting anything inside a protected region is always refused. */
-    private fun allowsEntityAttack(player: ServerPlayer): Boolean {
-        val region = entityProtectionAround(player) ?: return true
-        return refuse(player, region)
+    /** Hitting anything inside a protected region is refused unless it is an Enemy. */
+    @JvmStatic
+    fun allowsEntityAttack(player: ServerPlayer?, entity: Entity?): Boolean {
+        if (entity is Enemy) return true
+        val p = player ?: return true
+        val region = entityProtectionAround(p) ?: return true
+        return refuse(p, region)
     }
 
     /**

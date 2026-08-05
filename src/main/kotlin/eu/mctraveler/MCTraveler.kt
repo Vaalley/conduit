@@ -7,6 +7,8 @@ import eu.mctraveler.chat.PrivateMessages
 import eu.mctraveler.crystal.CrystalFeature
 import eu.mctraveler.embassy.EmbassiesFeature
 import eu.mctraveler.http.HttpApi
+import eu.mctraveler.map.MapCommand
+import eu.mctraveler.map.MapItemGuard
 import eu.mctraveler.notepad.NotepadFeature
 import eu.mctraveler.persistence.PersistenceService
 import eu.mctraveler.region.RegionsFeature
@@ -62,6 +64,8 @@ object MCTraveler : ModInitializer {
         EmbassiesFeature.register()
         CrystalFeature.register()
         HttpApi.register()
+        MapCommand.register()
+        MapItemGuard.register()
         LOGGER.info("MCTraveler initialized")
     }
 }
