@@ -62,6 +62,7 @@ class Paint private constructor(private val style: Style) {
      * content it wraps rather than the whole line.
      */
     fun runs(command: String): Paint = Paint(style.withClickEvent(ClickEvent.RunCommand(command)))
+    fun opensUrl(url: String): Paint = Paint(style.withClickEvent(ClickEvent.OpenUrl(java.net.URI.create(url))))
 
     /** Builds a component carrying this chain's style over the given content. */
     operator fun invoke(vararg content: Any?): MutableComponent {
@@ -98,6 +99,7 @@ class Paint private constructor(private val style: Style) {
         val strikethrough: Paint get() = plain.strikethrough
 
         fun runs(command: String): Paint = plain.runs(command)
+        fun opensUrl(url: String): Paint = plain.opensUrl(url)
 
         /** Unstyled composition: `Paint("Hello ", name)`. */
         operator fun invoke(vararg content: Any?): MutableComponent = plain(*content)

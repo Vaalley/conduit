@@ -111,13 +111,26 @@ object PlayerdataImport {
      * overworld is where vanilla itself puts a player whose dimension it cannot
      * honour, so unplaceable saves land there and are named in the log.
      */
-    private fun roleOf(dimensionId: String): DimensionRole =
-        WorldLayout.backendRole(dimensionId) ?: DimensionRole.OVERWORLD.also {
+    private fun roleOf(dimensionId: String): DimensionRole {
+        val role = when (dimensionId) {
+            "minecraft:overworld", "overworld", "minecraft:last", "minecaft:last", "last",
+            "mctraveler:secondary", "world" -> DimensionRole.OVERWORLD
+
+            "minecraft:the_nether", "nether", "the_nether", "minecraft:last_nether", "last_nether",
+            "mctraveler:secondary_nether", "world_nether" -> DimensionRole.NETHER
+
+            "minecraft:the_end", "end", "the_end", "minecraft:last_the_end", "last_the_end",
+            "mctraveler:secondary_end", "world_the_end" -> DimensionRole.END
+
+            else -> WorldLayout.backendRole(dimensionId)
+        }
+        return role ?: DimensionRole.OVERWORLD.also {
             LOGGER.warn(
                 "playerdata names dimension \"{}\", which is not part of a backend's trio — placing in the overworld",
                 dimensionId,
             )
         }
+    }
 
     private fun missing(what: String) = IllegalArgumentException("playerdata is missing \"$what\"")
 
