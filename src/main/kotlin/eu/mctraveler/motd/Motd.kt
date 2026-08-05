@@ -1,6 +1,7 @@
 package eu.mctraveler.motd
 
 import eu.mctraveler.text.Paint
+import java.time.Year
 import net.minecraft.network.chat.Component
 import net.minecraft.network.protocol.status.ServerStatus
 import net.minecraft.server.MinecraftServer
@@ -20,14 +21,20 @@ object Motd {
     /** Up to this many players appear in the server-list sample (Portal main.ts). */
     const val SAMPLE_SIZE = 12
 
+    /** The server first opened in 2011; the anniversary line counts years from here. */
+    const val FOUNDING_YEAR = 2011
+
     /**
      * The Portal's exact two MOTD lines: the play address in green with MCTraveler
-     * bold, then the anniversary line in gray — spacing verbatim.
+     * bold, then the anniversary line in gray — spacing verbatim. The year count is
+     * computed from [FOUNDING_YEAR] against [year] (the current year by default), so
+     * it advances automatically: the status is rebuilt every few seconds and each
+     * rebuild asks for a fresh description.
      */
-    val DESCRIPTION: Component = Paint(
+    fun description(year: Int = Year.now().value): Component = Paint(
         Paint.green("                  play.", Paint.bold("MCTraveler"), ".eu"),
         "\n",
-        Paint.gray("       Celebrating 13 years of vanilla survival"),
+        Paint.gray("       Celebrating ${year - FOUNDING_YEAR} years of vanilla survival"),
     )
 
     /**
@@ -39,14 +46,14 @@ object Motd {
         decorate(status, roster(server))
 
     /**
-     * Decorates a vanilla-built [status]: the description becomes [DESCRIPTION] and the
+     * Decorates a vanilla-built [status]: the description becomes [description] and the
      * player sample the first [SAMPLE_SIZE] of [roster] (the online players, in join
      * order, already anonymized where a player opts out of listing). The vanilla
      * max/online counts, version, favicon, and secure-chat advertisement are preserved.
      */
     fun decorate(status: ServerStatus, roster: List<NameAndId>): ServerStatus =
         ServerStatus(
-            DESCRIPTION,
+            description(),
             status.players().map { ServerStatus.Players(it.max(), it.online(), roster.take(SAMPLE_SIZE)) },
             status.version(),
             status.favicon(),

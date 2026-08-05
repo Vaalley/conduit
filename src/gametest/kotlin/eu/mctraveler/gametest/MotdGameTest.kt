@@ -11,9 +11,11 @@ import net.minecraft.server.MinecraftServer
  */
 class MotdGameTest {
 
+    private val expectedYears = java.time.Year.now().value - eu.mctraveler.motd.Motd.FOUNDING_YEAR
+
     private val expectedMotd =
         "                  play.MCTraveler.eu\n" +
-            "       Celebrating 13 years of vanilla survival"
+            "       Celebrating $expectedYears years of vanilla survival"
 
     @GameTest
     fun serverListCarriesThePortalMotd(helper: GameTestHelper) {
@@ -34,7 +36,7 @@ class MotdGameTest {
         }
         check(
             runs.any {
-                it.color == "gray" && it.text.contains("Celebrating 13 years of vanilla survival")
+                it.color == "gray" && it.text.contains("Celebrating $expectedYears years of vanilla survival")
             },
         ) { "the anniversary line is not gray on the live status: $runs" }
 

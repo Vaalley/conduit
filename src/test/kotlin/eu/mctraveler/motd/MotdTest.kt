@@ -38,13 +38,31 @@ class MotdTest {
 
     // --- The two MOTD lines (Portal: MotdFeature.test.ts "MOTD lines and formatting") ---
 
+    /** The anniversary count the live server should advertise right now. */
+    private val currentYears = java.time.Year.now().value - Motd.FOUNDING_YEAR
+
     @Test
     fun `description carries the Portal's exact two MOTD lines`() {
         val description = Motd.decorate(vanillaStatus(), emptyList()).description()
         assertEquals(
             "                  play.MCTraveler.eu\n" +
-                "       Celebrating 13 years of vanilla survival",
+                "       Celebrating $currentYears years of vanilla survival",
             description.string,
+        )
+    }
+
+    @Test
+    fun `anniversary counts years since the 2011 founding`() {
+        assertEquals(2011, Motd.FOUNDING_YEAR)
+        assertEquals(
+            "                  play.MCTraveler.eu\n" +
+                "       Celebrating 13 years of vanilla survival",
+            Motd.description(year = 2024).string,
+        )
+        assertEquals(
+            "                  play.MCTraveler.eu\n" +
+                "       Celebrating 15 years of vanilla survival",
+            Motd.description(year = 2026).string,
         )
     }
 
@@ -62,7 +80,7 @@ class MotdTest {
                 Triple("MCTraveler", green, true),
                 Triple(".eu", green, false),
                 Triple("\n", null, false),
-                Triple("       Celebrating 13 years of vanilla survival", gray, false),
+                Triple("       Celebrating $currentYears years of vanilla survival", gray, false),
             ),
             rendered,
         )
