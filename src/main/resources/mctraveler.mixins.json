@@ -16,6 +16,7 @@
     "SpectatorVisibilityMixin",
     "ClientboundPlayerInfoUpdatePacketAccessor",
     "RegionSignEditMixin",
+    "SignBlockEntityMixin",
     "RegionContainerSessionMixin",
     "RegionContainerClickMixin",
     "RegionExplosionMixin",
