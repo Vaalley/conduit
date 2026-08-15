@@ -12,6 +12,7 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.core.BlockPos
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.server.level.ServerLevel
+import net.minecraft.world.level.GameType
 import net.minecraft.world.attribute.EnvironmentAttributes
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EntitySpawnReason
@@ -224,6 +225,14 @@ class EmbassiesGameTest {
         val at = BlockPos(1100, 0, 1100)
         level.setBlockAndUpdate(at, Blocks.STONE.defaultBlockState())
         player.arriveIn(level, at.x + 0.5, 1.0, at.z + 1.5)
+        helper.assertValueEqual(
+            player.gameMode.gameModeForPlayer,
+            GameType.ADVENTURE,
+            "a foreign embassy arrival did not enter Adventure mode",
+        )
+        // This direct server-side call tests the authoritative refusal beneath
+        // Adventure mode's client-side prevention.
+        player.setGameMode(GameType.SURVIVAL)
 
         helper.assertFalse(player.gameMode.destroyBlock(at), "a player dug up the protected embassies void")
         helper.assertValueEqual(
