@@ -25,6 +25,7 @@
     "RegionEndermanTakeMixin",
     "RegionEndermanPlaceMixin",
     "RegionPressurePlateMixin",
+    "RegionFarmlandMixin",
     "EmbassyOriginMixin",
     "CrystalCraftingGuardMixin",
     "CrystalDamageDisplayMixin",

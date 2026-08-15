@@ -27,7 +27,9 @@ public abstract class RegionContainerSessionMixin {
     @Inject(method = "initMenu", at = @At("HEAD"))
     private void mctraveler$captureContainerRegion(AbstractContainerMenu menu, CallbackInfo ci) {
         ServerPlayer player = (ServerPlayer) (Object) this;
-        if (menu != player.inventoryMenu && !RegionProtection.isModOwnedMenu(menu)) {
+        if (menu != player.inventoryMenu
+                && !RegionProtection.isModOwnedMenu(menu)
+                && !RegionProtection.isPersonalEnderChestMenu(menu)) {
             RegionProtection.containerOpened(player);
         }
     }

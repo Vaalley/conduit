@@ -31,6 +31,7 @@ public abstract class RegionContainerClickMixin {
         AbstractContainerMenu menu = (AbstractContainerMenu) (Object) this;
         if (menu.containerId == 0
                 || RegionProtection.isModOwnedMenu(menu)
+                || RegionProtection.isPersonalEnderChestMenu(menu)
                 || !(player instanceof ServerPlayer clicker)) {
             return;
         }

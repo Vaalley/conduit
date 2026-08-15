@@ -15,11 +15,16 @@ import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EntityTypes
+import net.minecraft.world.entity.decoration.ArmorStand
+import net.minecraft.world.entity.decoration.ItemFrame
 import net.minecraft.world.inventory.ContainerInput
+import net.minecraft.world.inventory.ChestMenu
+import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 import net.minecraft.world.level.GameType
 import net.minecraft.world.level.block.Blocks
+import net.minecraft.world.SimpleMenuProvider
 import net.minecraft.world.level.block.entity.ChestBlockEntity
 import net.minecraft.world.level.block.entity.SignBlockEntity
 import net.minecraft.world.phys.BlockHitResult
@@ -131,6 +136,72 @@ class RegionProtectionGameTest {
         alice.standAt(helper, 2.0, 2.0, 1.0)
         alice.startsDigging(helper)
         helper.assertBlockNotPresent(Blocks.STONE, STONE_AT)
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest(maxTicks = 100)
+    fun aDigRefusalIsThrottledButNeverAllowed(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T14ThrottleA")
+        val bob = MessageCapturingPlayer.join(helper, "T14ThrottleB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(STONE_AT, Blocks.STONE)
+        bob.setGameMode(GameType.CREATIVE)
+        bob.standAt(helper, 2.0, 2.0, 1.0)
+        bob.messages.clear()
+
+        val expectedRefusal = protectedBy("T14ThrottleA's Place")
+        bob.startsDigging(helper)
+        helper.assertBlockPresent(Blocks.STONE, STONE_AT)
+        val firstRefusals = bob.messages.filter { it == expectedRefusal }
+        helper.assertValueEqual(firstRefusals.size, 1, "the first refusal was not immediate")
+        helper.assertValueEqual(
+            firstRefusals.first(),
+            expectedRefusal,
+            "the first refusal",
+        )
+
+        bob.startsDigging(helper)
+        helper.assertBlockPresent(Blocks.STONE, STONE_AT)
+        val immediateRefusals = bob.messages.filter { it == expectedRefusal }
+        helper.assertValueEqual(immediateRefusals.size, 1, "a rapid repeat emitted another refusal")
+
+        helper.runAfterDelay(20) {
+            bob.startsDigging(helper)
+            helper.assertBlockPresent(Blocks.STONE, STONE_AT)
+            val expiredRefusals = bob.messages.filter { it == expectedRefusal }
+            helper.assertValueEqual(expiredRefusals.size, 2, "the refusal did not reappear after 20 ticks")
+            helper.assertValueEqual(
+                expiredRefusals.last(),
+                expectedRefusal,
+                "the refusal after the cooldown",
+            )
+            alice.leave()
+            bob.leave()
+            helper.succeed()
+        }
+    }
+
+    @GameTest
+    fun nonBlockingItemUsesAreNotRefusedInsideForeignLand(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T14SafeUseA")
+        val bob = MessageCapturingPlayer.join(helper, "T14SafeUseB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(FLOOR_AT, Blocks.STONE)
+        bob.standAt(helper, 2.0, 2.0, 1.0)
+        bob.messages.clear()
+
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.BREAD))
+        helper.assertTrue(
+            bob.usesHeldItemOn(helper, FLOOR_AT),
+            "food was refused while used on a block inside foreign land",
+        )
+        helper.assertFalse(
+            bob.wasRefusedBy("T14SafeUseA's Place"),
+            "food-on-block emitted a protection refusal",
+        )
+        helper.assertTrue(bob.messages.isEmpty(), "an exempt food emitted an unrelated message")
         alice.leave()
         bob.leave()
         helper.succeed()
@@ -281,6 +352,28 @@ class RegionProtectionGameTest {
     }
 
     @GameTest
+    fun aNonMemberMayUseTheirPersonalEnderChestInForeignLand(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T14EnderA")
+        val bob = MessageCapturingPlayer.join(helper, "T14EnderB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        bob.standAt(helper, 2.0, 1.0, 2.0)
+        bob.enderChestInventory.setItem(0, ItemStack(Items.DIAMOND))
+        bob.messages.clear()
+
+        bob.opensEnderChest()
+        bob.clicksFirstSlot()
+
+        helper.assertFalse(
+            bob.containerMenu.carried.isEmpty,
+            "a foreign-region player could not take from their personal ender chest",
+        )
+        helper.assertTrue(bob.messages.isEmpty(), "the personal ender chest emitted a protection refusal")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
     fun publicContainersOpenTheChestToStrangers(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T14CtnA")
         val bob = MessageCapturingPlayer.join(helper, "T14CtnB")
@@ -390,6 +483,34 @@ class RegionProtectionGameTest {
     }
 
     @GameTest
+    fun aNonMemberCannotAttackAnimalsHostilesOrPlayers(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T14AttackA")
+        val bob = MessageCapturingPlayer.join(helper, "T14AttackB")
+        val charlie = MessageCapturingPlayer.join(helper, "T14AttackC")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        val cow = helper.spawnWithNoFreeWill(EntityTypes.COW, BlockPos(2, 2, 2))
+        val zombie = helper.spawnWithNoFreeWill(EntityTypes.ZOMBIE, BlockPos(3, 2, 2))
+        charlie.standAt(helper, 2.0, 2.0, 3.0)
+        // The attacker is just beyond the region's eastern edge, but every
+        // target remains close enough for the server's attack-range check.
+        bob.standAt(helper, 4.25, 2.0, 2.0)
+        bob.messages.clear()
+
+        bob.attacks(cow)
+        bob.attacks(zombie)
+        bob.attacks(charlie)
+
+        helper.assertValueEqual(cow.health, cow.maxHealth, "a stranger hurt a protected cow")
+        helper.assertValueEqual(zombie.health, zombie.maxHealth, "a stranger hurt a protected hostile")
+        helper.assertValueEqual(charlie.health, charlie.maxHealth, "a stranger hurt a protected player")
+        helper.assertTrue(bob.wasRefusedBy("T14AttackA's Place"), "no entity-attack refusal")
+        alice.leave()
+        bob.leave()
+        charlie.leave()
+        helper.succeed()
+    }
+
+    @GameTest
     fun disablingAnimalProtectionOpensTheHunt(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T14AnimA")
         val bob = MessageCapturingPlayer.join(helper, "T14AnimB")
@@ -402,6 +523,62 @@ class RegionProtectionGameTest {
         bob.attacks(cow)
         helper.assertTrue(cow.health < cow.maxHealth, "DISABLE_ANIMAL_PROTECTION still shielded the animal")
         helper.assertFalse(bob.wasRefusedBy("T14AnimA's Place"), "the unprotected animal still refused the hit")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun anEmptyHandedStrangerCannotRotateAnItemFrame(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T14FrameA")
+        val bob = MessageCapturingPlayer.join(helper, "T14FrameB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        val frame = ItemFrame(helper.level, helper.absolutePos(BlockPos(2, 2, 2)), Direction.NORTH)
+        helper.level.addFreshEntity(frame)
+        frame.setItem(ItemStack(Items.DIAMOND))
+        val frameRotation = frame.rotation
+        val frameItem = frame.item.copy()
+        bob.standAt(helper, 4.25, 2.0, 2.0)
+        bob.messages.clear()
+
+        bob.interactsWith(frame, secondaryAction = false)
+
+        helper.assertValueEqual(frame.rotation, frameRotation, "a stranger rotated an item frame")
+        helper.assertTrue(ItemStack.matches(frame.item, frameItem), "a stranger changed item-frame contents")
+        helper.assertValueEqual(
+            bob.messages.last(),
+            protectedBy("T14FrameA's Place"),
+            "the item-frame interaction refusal",
+        )
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun anEmptyHandedStrangerCannotRemoveArmorStandEquipment(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T14ArmorA")
+        val bob = MessageCapturingPlayer.join(helper, "T14ArmorB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        val armorAt = helper.absolutePos(BlockPos(3, 2, 2))
+        val armorStand = ArmorStand(helper.level, armorAt.x.toDouble(), armorAt.y.toDouble(), armorAt.z.toDouble())
+        helper.level.addFreshEntity(armorStand)
+        armorStand.setItemSlot(EquipmentSlot.HEAD, ItemStack(Items.DIAMOND))
+        val head = armorStand.getItemBySlot(EquipmentSlot.HEAD).copy()
+        bob.standAt(helper, 4.25, 2.0, 2.0)
+        bob.messages.clear()
+
+        bob.isShiftKeyDown = true
+        bob.interactsWith(armorStand, secondaryAction = true)
+        helper.assertTrue(
+            ItemStack.matches(armorStand.getItemBySlot(EquipmentSlot.HEAD), head),
+            "a stranger removed armor-stand equipment",
+        )
+        helper.assertValueEqual(
+            bob.messages.last(),
+            protectedBy("T14ArmorA's Place"),
+            "the armor-stand interaction refusal",
+        )
         alice.leave()
         bob.leave()
         helper.succeed()
@@ -573,6 +750,13 @@ private fun MessageCapturingPlayer.placesOn(helper: GameTestHelper, floor: Block
 private fun MessageCapturingPlayer.usesHeldItem(): Boolean =
     gameMode.useItem(this, level(), mainHandItem, InteractionHand.MAIN_HAND) != InteractionResult.FAIL
 
+/** Uses the held item against [at], as a client does while looking at a block. */
+private fun MessageCapturingPlayer.usesHeldItemOn(helper: GameTestHelper, at: BlockPos): Boolean {
+    val target = helper.absolutePos(at)
+    val hit = BlockHitResult(Vec3.atCenterOf(target), Direction.UP, target, false)
+    return gameMode.useItemOn(this, level(), mainHandItem, InteractionHand.MAIN_HAND, hit) != InteractionResult.FAIL
+}
+
 /** Puts a sign in the world that [editor] is the one allowed to write on. */
 private fun GameTestHelper.placeSignFor(editor: MessageCapturingPlayer): SignBlockEntity {
     setBlock(SIGN_AT, Blocks.OAK_SIGN)
@@ -601,6 +785,17 @@ private fun GameTestHelper.stockedChest(): ChestBlockEntity {
 private fun MessageCapturingPlayer.opensChest(helper: GameTestHelper) {
     openMenu(helper.level.getBlockEntity(helper.absolutePos(CHEST_AT)) as ChestBlockEntity)
 }
+private fun MessageCapturingPlayer.opensEnderChest() {
+    openMenu(
+        SimpleMenuProvider(
+            { containerId, inventory, _ ->
+                ChestMenu.threeRows(containerId, inventory, enderChestInventory)
+            },
+            Component.literal("Ender Chest"),
+        ),
+    )
+}
+
 
 private fun MessageCapturingPlayer.clicksFirstSlot() {
     containerMenu.clicked(0, 0, ContainerInput.PICKUP, this)
@@ -609,9 +804,8 @@ private fun MessageCapturingPlayer.clicksFirstSlot() {
 private fun MessageCapturingPlayer.attacks(target: Entity) {
     connection.handleAttack(ServerboundAttackPacket(target.id))
 }
-
-private fun MessageCapturingPlayer.interactsWith(target: Entity) {
+private fun MessageCapturingPlayer.interactsWith(target: Entity, secondaryAction: Boolean = false) {
     connection.handleInteract(
-        ServerboundInteractPacket(target.id, InteractionHand.MAIN_HAND, Vec3.ZERO, false),
+        ServerboundInteractPacket(target.id, InteractionHand.MAIN_HAND, Vec3.ZERO, secondaryAction),
     )
 }
