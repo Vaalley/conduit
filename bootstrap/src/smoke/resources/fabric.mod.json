@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "mctraveler-smoke",
+  "version": "${version}",
+  "name": "MCTraveler production smoke hook",
+  "description": "Verifies the bootstrap side-loaded the runtime and the dimensions are right, then stops the server (prodServer task). Ships separately from the gametest mod because gametest classes reference runtime-classloader classes and cannot load on a production server.",
+  "environment": "server",
+  "entrypoints": {
+    "server": [
+      {
+        "adapter": "kotlin",
+        "value": "eu.mctraveler.smoke.SmokeHook"
+      }
+    ]
+  },
+  "depends": {
+    "mctraveler": "*"
+  }
+}
