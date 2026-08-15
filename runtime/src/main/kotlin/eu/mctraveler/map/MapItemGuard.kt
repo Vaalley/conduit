@@ -1,5 +1,6 @@
 package eu.mctraveler.map
 
+import eu.mctraveler.reloadable
 import net.fabricmc.fabric.api.event.player.UseItemCallback
 import net.minecraft.core.component.DataComponents
 import net.minecraft.world.InteractionResult
