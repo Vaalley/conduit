@@ -467,7 +467,7 @@ object RegionCommands {
             val region = found.single()
             return Paint(
                 Paint.yellow(region.title),
-                " - ", Paint.white("${centerX(region)}/~/${centerZ(region)}"),
+                " - ", locateCoordinates(region),
                 "/", Paint.green(RegionWorlds.locateInfo(region.world)),
             )
         }
@@ -502,7 +502,7 @@ object RegionCommands {
             player.sendSystemMessage(
                 Paint(
                     " - ", Paint.yellow(region.title), " ",
-                    Paint.gray("${centerX(region)}/${centerZ(region)}/${RegionWorlds.locateInfo(region.world)}"),
+                    locateCoordinates(region, includeY = false), "/", Paint.gray(RegionWorlds.locateInfo(region.world)),
                 ),
             )
         }
@@ -545,6 +545,19 @@ object RegionCommands {
             }
         }
         return trimmed to 1
+    }
+
+    /**
+     * The coordinates in a locate result take an admin straight to that Region.
+     * An old saved world with no live dimension remains visible but deliberately
+     * has no click command: there is nowhere valid to execute it.
+     */
+    private fun locateCoordinates(region: Region, includeY: Boolean = true): Component {
+        val x = centerX(region)
+        val z = centerZ(region)
+        val coordinates = if (includeY) "$x/~/$z" else "$x/$z"
+        val dimension = RegionWorlds.dimensionFor(region.world)?.identifier() ?: return Paint.white(coordinates)
+        return Paint.white.runs("/execute in $dimension run tp @s $x ~ $z")(coordinates)
     }
 
     // ---- shared lookups ----
