@@ -82,6 +82,9 @@ object MixinHooksImpl : MixinHooks {
 
     override fun isModOwnedMenu(menu: AbstractContainerMenu): Boolean = RegionProtection.isModOwnedMenu(menu)
 
+    override fun isPersonalEnderChestMenu(menu: AbstractContainerMenu): Boolean =
+        RegionProtection.isPersonalEnderChestMenu(menu)
+
     override fun allowsContainerUse(player: ServerPlayer): Boolean = RegionProtection.allowsContainerUse(player)
 
     override fun containerOpened(player: ServerPlayer) = RegionProtection.containerOpened(player)

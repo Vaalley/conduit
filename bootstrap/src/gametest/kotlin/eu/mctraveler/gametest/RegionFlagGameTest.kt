@@ -201,6 +201,21 @@ class RegionFlagGameTest {
     }
 
     @GameTest
+    fun withoutTheFlagAnyoneMayStandOnThePressurePlate(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T15PlateFree")
+        val bob = MessageCapturingPlayer.join(helper, "T15PlateFreeB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.mount(Blocks.OAK_PRESSURE_PLATE)
+
+        bob.stepsOnThePlate(helper)
+
+        helper.assertBlockProperty(TRIGGER_AT, BlockStateProperties.POWERED, true)
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
     fun aResidentStillStandsOnTheirOwnPressurePlate(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T15PlateOk")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
