@@ -51,8 +51,8 @@ object RegionScoreboard {
     /** The rows on each player's board, so a redraw knows which ones to retract. */
     private val drawn = HashMap<UUID, List<String>>()
 
-    /** Players whose client has been told the objective exists. */
-    private val created = HashSet<UUID>()
+    /** Players whose clients have been told the objective exists. */
+    private val created = HashMap<UUID, ServerPlayer>()
 
     /** Never registered anywhere: it exists only to shape the objective packets. */
     private val packetScoreboard = Scoreboard()
@@ -68,7 +68,7 @@ object RegionScoreboard {
             return
         }
         val connection = player.connection ?: return
-        if (created.add(player.uuid)) {
+        if (created.putIfAbsent(player.uuid, player) == null) {
             connection.send(
                 ClientboundSetObjectivePacket(objective(Component.empty()), ClientboundSetObjectivePacket.METHOD_ADD),
             )
@@ -115,8 +115,19 @@ object RegionScoreboard {
         created.remove(uuid)
     }
 
-    /** Drops every player's board state (the server is going down). */
+    /** Removes the sidebar objective from a client that remains connected across a runtime unload. */
+    fun retire(player: ServerPlayer) {
+        hide(player)
+        if (created.remove(player.uuid) != null) {
+            player.connection?.send(
+                ClientboundSetObjectivePacket(objective(Component.empty()), ClientboundSetObjectivePacket.METHOD_REMOVE),
+            )
+        }
+    }
+
+    /** Retires every client objective before a runtime unload loses its bookkeeping. */
     fun forgetAll() {
+        created.values.toList().forEach(::retire)
         drawn.clear()
         created.clear()
     }
