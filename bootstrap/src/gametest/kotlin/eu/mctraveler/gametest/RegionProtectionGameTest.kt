@@ -398,6 +398,21 @@ class RegionProtectionGameTest {
     }
 
     @GameTest
+    fun aResidentOpensTheirChestByRightClicking(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T14BoxClick")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.stockedChest()
+        alice.standAt(helper, 2.0, 2.0, 1.0)
+
+        helper.assertTrue(alice.usesHeldItemOn(helper, CHEST_AT), "a resident's chest right-click was refused")
+        helper.assertTrue(alice.containerMenu is ChestMenu, "a resident's chest did not open")
+        alice.clicksFirstSlot()
+        helper.assertFalse(alice.containerMenu.carried.isEmpty, "a resident could not take from their right-clicked chest")
+        alice.leave()
+        helper.succeed()
+    }
+
+    @GameTest
     fun aNonMemberMayUseTheirPersonalEnderChestInForeignLand(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T14EnderA")
         val bob = MessageCapturingPlayer.join(helper, "T14EnderB")
