@@ -331,7 +331,7 @@ object RegionCommands {
         // The Portal resolved the online-player argument before the command
         // body ran, so an unknown target is answered ahead of every guard.
         val server = player.level().server
-        val target = server.playerList.getPlayerByName(targetName)
+        val target = RegionsFeature.uuidForUsername(server, targetName)
             ?: return Paint.gray("Player ", Paint.red(targetName), " not found or is offline")
         val region = RegionTracker.regionOf(player)
             ?: return Paint.error("You must stand in the region you want to add a resident to")
@@ -346,11 +346,11 @@ object RegionCommands {
         ) {
             return Paint.error("You are not a member of this region")
         }
-        val name = target.gameProfile.name
-        if (region.isResident(target.uuid)) {
+        val name = RegionsFeature.usernameFor(server, target) ?: targetName
+        if (region.isResident(target)) {
             return Paint.error(Paint.red(name), " is already a member of ", Paint.red(region.title))
         }
-        region.members.add(target.uuid)
+        region.members.add(target)
         RegionsFeature.requireService().save()
         RegionTracker.redraw(server, region)
         return Paint.success(Paint.green(name), " has been added to ", Paint.green(region.title))

@@ -9,10 +9,10 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Protects the target region before {@link Entity#hurtOrSimulate} dispatches to
- * each entity type's damage implementation. This common final method covers
- * living entities, armor stands, item frames, vehicles, and every other entity
- * without maintaining a parallel list of damage overrides.
+ * Covers non-living targets and direct damage paths before
+ * {@link Entity#hurtOrSimulate}. Living targets also pass through Fabric's
+ * {@code ServerLivingEntityEvents.ALLOW_DAMAGE} hook because mob melee invokes
+ * {@code hurtServer} directly.
  */
 @Mixin(Entity.class)
 public abstract class RegionEntityDamageMixin {

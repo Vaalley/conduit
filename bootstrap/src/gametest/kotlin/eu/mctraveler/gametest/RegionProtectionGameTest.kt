@@ -553,6 +553,38 @@ class RegionProtectionGameTest {
     }
 
     @GameTest
+    fun aNonMemberCannotUseATamedWolfToHarmAnimals(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T14WolfA")
+        val bob = MessageCapturingPlayer.join(helper, "T14WolfB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        val cow = helper.spawnWithNoFreeWill(EntityTypes.COW, BlockPos(2, 2, 2))
+        val wolf = helper.spawnWithNoFreeWill(EntityTypes.WOLF, BlockPos(2, 2, 1))
+        wolf.tame(bob)
+        bob.standAt(helper, 4.25, 2.0, 2.0)
+        bob.messages.clear()
+
+        helper.assertFalse(wolf.doHurtTarget(helper.level, cow), "a tamed wolf hurt a protected animal")
+        helper.assertValueEqual(cow.health, cow.maxHealth, "a tamed wolf damaged a protected animal")
+        helper.assertTrue(bob.wasRefusedBy("T14WolfA's Place"), "the tamed-wolf damage emitted no refusal")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun anUntamedWolfCanHarmAnimalsInAProtectedRegion(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T14WildWolfA")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        val cow = helper.spawnWithNoFreeWill(EntityTypes.COW, BlockPos(2, 2, 2))
+        val wolf = helper.spawnWithNoFreeWill(EntityTypes.WOLF, BlockPos(2, 2, 1))
+
+        helper.assertTrue(wolf.doHurtTarget(helper.level, cow), "an untamed wolf could not hurt a protected animal")
+        helper.assertTrue(cow.health < cow.maxHealth, "an untamed wolf did not damage a protected animal")
+        alice.leave()
+        helper.succeed()
+    }
+
+    @GameTest
     fun aNonMemberCannotAttackAnimalsHostilesOrPlayers(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T14AttackA")
         val bob = MessageCapturingPlayer.join(helper, "T14AttackB")

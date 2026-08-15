@@ -25,6 +25,7 @@ import net.minecraft.tags.DamageTypeTags
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
 import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.OwnableEntity
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.entity.decoration.ItemFrame
 import net.minecraft.world.inventory.AbstractContainerMenu
@@ -217,6 +218,13 @@ object RegionProtection {
             entity !is ServerPlayer ||
                 !source.`is`(DamageTypeTags.IS_FALL) ||
                 allowsFallDamage(entity)
+        }
+
+        // Mob melee calls LivingEntity.hurtServer directly instead of
+        // Entity.hurtOrSimulate, so protect living targets at Fabric's shared
+        // server-damage seam as well.
+        ServerLivingEntityEvents.ALLOW_DAMAGE.reloadable.register { entity, source, _ ->
+            allowsEntityDamage(entity, source)
         }
 
         // ---- item use ----
@@ -416,15 +424,22 @@ object RegionProtection {
     }
 
     /**
-     * Damage caused by a player is the projectile-safe form of [allowsEntityAttack]:
-     * [DamageSource.entity] resolves an arrow, trident, or other indirect hit to
-     * its responsible attacker while [entity] remains the target whose region
-     * owns the decision.
+     * Whether [source] may damage [entity].
+     *
+     * Projectile damage already resolves [DamageSource.entity] to its shooter.
+     * A tamed animal is the source itself, however, so resolve its root owner
+     * before applying the usual player-versus-target-region rule.
      */
     @JvmStatic
-    fun allowsEntityDamage(entity: Entity?, source: DamageSource): Boolean {
-        val player = source.entity as? ServerPlayer ?: return true
-        return allowsEntityAttack(player, entity)
+    fun allowsEntityDamage(entity: Entity, source: DamageSource): Boolean {
+        val player = playerResponsibleFor(source) ?: return true
+        val region = entityProtectionAround(player, entity) ?: return true
+        return refuse(player, region)
+    }
+
+    private fun playerResponsibleFor(source: DamageSource): ServerPlayer? {
+        val cause = source.entity
+        return cause as? ServerPlayer ?: (cause as? OwnableEntity)?.rootOwner as? ServerPlayer
     }
 
     /**

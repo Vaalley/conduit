@@ -35,9 +35,9 @@ class RegionMembershipGameTest {
     }
 
     @GameTest
-    fun addingSomeoneOfflineReportsThemNotFoundBeforeAnyRegionCheck(helper: GameTestHelper) {
-        // Standing nowhere near a region: the Portal resolved the target
-        // argument before the command body ran, so this error wins.
+    fun addingAnUnknownPlayerReportsNotFoundBeforeAnyRegionCheck(helper: GameTestHelper) {
+        // Target resolution precedes the command body, so this error wins even
+        // when the sender is standing nowhere near a region.
         val player = MessageCapturingPlayer.join(helper, "T13AddGone")
         player.standAt(helper, 0.0, 1.0, 0.0)
         player.runCommand("rg add Nobody")
@@ -81,6 +81,24 @@ class RegionMembershipGameTest {
         helper.assertTrue(region.isResident(bob.uuid), "the added player is not a member")
         alice.leave()
         bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aResidentAddsAKnownOfflinePlayer(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T13AddOffA")
+        val bob = MessageCapturingPlayer.join(helper, "T13AddOffB")
+        val region = createRegion(helper, alice, 0.0 to 0.0, 7.0 to 1.0)
+        bob.leave()
+
+        alice.runCommand("rg add T13AddOffB")
+        helper.assertValueEqual(
+            alice.messages.last(),
+            Paint.success(Paint.green("T13AddOffB"), " has been added to ", Paint.green("T13AddOffA's Place")),
+            "the cached offline /rg add reply",
+        )
+        helper.assertTrue(region.isResident(bob.uuid), "the known offline player is not a member")
+        alice.leave()
         helper.succeed()
     }
 

@@ -21,10 +21,25 @@ class NameCache(private val file: Path) {
     /** The last username seen for [uuid], or null if never seen. */
     fun usernameFor(uuid: UUID): String? = names[uuid.toString()]
 
+    /** The most recently recorded UUID for [username], or null if never seen. */
+    fun uuidFor(username: String): UUID? =
+        names.entries.lastOrNull { (_, cachedName) -> cachedName.equals(username, ignoreCase = true) }
+            ?.key
+            ?.let(UUID::fromString)
+
     /** Remember [username] as [uuid]'s name, replacing any previous name. */
     fun record(uuid: UUID, username: String) {
-        val replaced = names.put(uuid.toString(), username)
-        if (replaced != username) save()
+        val key = uuid.toString()
+        val latestMatchingKey = names.entries.lastOrNull { (_, cachedName) ->
+            cachedName.equals(username, ignoreCase = true)
+        }?.key
+        if (names[key] == username && latestMatchingKey == key) return
+
+        // LinkedHashMap iteration order records the latest observed owner of a
+        // name, while preserving historical UUID -> name display data.
+        names.remove(key)
+        names[key] = username
+        save()
     }
 
     private fun load(): LinkedHashMap<String, String> {
