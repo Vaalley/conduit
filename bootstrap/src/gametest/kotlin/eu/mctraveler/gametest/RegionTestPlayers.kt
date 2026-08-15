@@ -29,14 +29,23 @@ class MessageCapturingPlayer(
     clientInformation: ClientInformation,
 ) : ServerPlayer(server, level, profile, clientInformation) {
 
+    /** Every system message, preserving the legacy assertion surface used by the suite. */
     val messages = mutableListOf<Component>()
+    val chatMessages = mutableListOf<Component>()
+    val actionBarMessages = mutableListOf<Component>()
 
     override fun sendSystemMessage(message: Component) {
         messages.add(message)
+        chatMessages.add(message)
     }
 
     override fun sendSystemMessage(message: Component, isActionBar: Boolean) {
         messages.add(message)
+        if (isActionBar) {
+            actionBarMessages.add(message)
+        } else {
+            chatMessages.add(message)
+        }
     }
 
     companion object {

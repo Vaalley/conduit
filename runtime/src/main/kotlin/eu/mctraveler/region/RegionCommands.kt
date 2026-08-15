@@ -47,6 +47,7 @@ object RegionCommands {
         "DISABLE_PLAYER_FALL_DAMAGE",
         "ENABLE_PUBLIC_VILLAGER_TRADING",
         "DISABLE_PUBLIC_REDSTONE_TRIGGERS",
+        "DISABLE_WEIGHTED_PRESSURE_PLATES",
         "DISABLE_ANIMAL_PROTECTION",
         "PUBLIC",
     )
@@ -319,8 +320,8 @@ object RegionCommands {
             )
         }
         val title = region.title
-        RegionTracker.clear(player.level().server, region)
         RegionsFeature.requireService().remove(region)
+        RegionTracker.afterRemoval(player.level().server)
         return Paint.success("Deleted region ", Paint.green(title))
     }
 
@@ -330,7 +331,7 @@ object RegionCommands {
         // The Portal resolved the online-player argument before the command
         // body ran, so an unknown target is answered ahead of every guard.
         val server = player.level().server
-        val target = server.playerList.getPlayerByName(targetName)
+        val target = RegionsFeature.uuidForUsername(server, targetName)
             ?: return Paint.gray("Player ", Paint.red(targetName), " not found or is offline")
         val region = RegionTracker.regionOf(player)
             ?: return Paint.error("You must stand in the region you want to add a resident to")
@@ -345,11 +346,11 @@ object RegionCommands {
         ) {
             return Paint.error("You are not a member of this region")
         }
-        val name = target.gameProfile.name
-        if (region.isResident(target.uuid)) {
+        val name = RegionsFeature.usernameFor(server, target) ?: targetName
+        if (region.isResident(target)) {
             return Paint.error(Paint.red(name), " is already a member of ", Paint.red(region.title))
         }
-        region.members.add(target.uuid)
+        region.members.add(target)
         RegionsFeature.requireService().save()
         RegionTracker.redraw(server, region)
         return Paint.success(Paint.green(name), " has been added to ", Paint.green(region.title))
@@ -466,7 +467,7 @@ object RegionCommands {
             val region = found.single()
             return Paint(
                 Paint.yellow(region.title),
-                " - ", Paint.white("${centerX(region)}/~/${centerZ(region)}"),
+                " - ", locateCoordinates(region),
                 "/", Paint.green(RegionWorlds.locateInfo(region.world)),
             )
         }
@@ -501,7 +502,7 @@ object RegionCommands {
             player.sendSystemMessage(
                 Paint(
                     " - ", Paint.yellow(region.title), " ",
-                    Paint.gray("${centerX(region)}/${centerZ(region)}/${RegionWorlds.locateInfo(region.world)}"),
+                    locateCoordinates(region, includeY = false), "/", Paint.gray(RegionWorlds.locateInfo(region.world)),
                 ),
             )
         }
@@ -544,6 +545,19 @@ object RegionCommands {
             }
         }
         return trimmed to 1
+    }
+
+    /**
+     * The coordinates in a locate result take an admin straight to that Region.
+     * An old saved world with no live dimension remains visible but deliberately
+     * has no click command: there is nowhere valid to execute it.
+     */
+    private fun locateCoordinates(region: Region, includeY: Boolean = true): Component {
+        val x = centerX(region)
+        val z = centerZ(region)
+        val coordinates = if (includeY) "$x/~/$z" else "$x/$z"
+        val dimension = RegionWorlds.dimensionFor(region.world)?.identifier() ?: return Paint.white(coordinates)
+        return Paint.white.runs("/execute in $dimension run tp @s $x ~ $z")(coordinates)
     }
 
     // ---- shared lookups ----

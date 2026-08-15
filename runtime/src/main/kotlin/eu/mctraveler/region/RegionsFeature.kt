@@ -63,6 +63,15 @@ object RegionsFeature {
             ?: MCTraveler.persistence?.names?.usernameFor(uuid)
 
     /**
+     * Resolves a present player first, then a player recorded by [NameCache].
+     *
+     * This permits region membership changes for known offline players without
+     * treating an arbitrary, never-seen username as an identity.
+     */
+    fun uuidForUsername(server: MinecraftServer, username: String): UUID? =
+        server.playerList.getPlayerByName(username)?.uuid ?: MCTraveler.persistence?.names?.uuidFor(username)
+
+    /**
      * The deepest region covering [pos] in [level], or null — the block-shaped
      * lookup protection is decided by ([RegionTracker.regionOf] is the
      * player-shaped one).

@@ -7,7 +7,10 @@ import java.util.UUID
 import kotlin.math.floor
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.gametest.framework.GameTestHelper
+import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket
 import net.minecraft.network.chat.Component
+import net.minecraft.network.chat.ClickEvent
+import net.minecraft.server.permissions.LevelBasedPermissionSet
 
 /**
  * The admin-gated region commands — `/rg flag` (toggle + list), `/rg bounds`
@@ -62,7 +65,8 @@ class RegionAdminCommandGameTest {
                 "Invalid flag. Valid flags: EMBASSY, NO_SCOREBOARD, ENABLE_EXPLOSIONS, ADMIN, " +
                     "ENABLE_PUBLIC_CONTAINERS, DISABLE_GATES, ENABLE_FIRE_DAMAGE, " +
                     "DISABLE_PLAYER_FALL_DAMAGE, ENABLE_PUBLIC_VILLAGER_TRADING, " +
-                    "DISABLE_PUBLIC_REDSTONE_TRIGGERS, DISABLE_ANIMAL_PROTECTION, PUBLIC",
+                    "DISABLE_PUBLIC_REDSTONE_TRIGGERS, DISABLE_WEIGHTED_PRESSURE_PLATES, " +
+                    "DISABLE_ANIMAL_PROTECTION, PUBLIC",
             ),
             "the invalid-flag reply",
         )
@@ -117,7 +121,8 @@ class RegionAdminCommandGameTest {
                 Paint.red("ADMIN"), ", ", Paint.red("ENABLE_PUBLIC_CONTAINERS"), ", ",
                 Paint.red("DISABLE_GATES"), ", ", Paint.red("ENABLE_FIRE_DAMAGE"), ", ",
                 Paint.red("DISABLE_PLAYER_FALL_DAMAGE"), ", ", Paint.red("ENABLE_PUBLIC_VILLAGER_TRADING"), ", ",
-                Paint.red("DISABLE_PUBLIC_REDSTONE_TRIGGERS"), ", ", Paint.red("DISABLE_ANIMAL_PROTECTION"),
+                Paint.red("DISABLE_PUBLIC_REDSTONE_TRIGGERS"), ", ",
+                Paint.red("DISABLE_WEIGHTED_PRESSURE_PLATES"), ", ", Paint.red("DISABLE_ANIMAL_PROTECTION"),
             ),
             "the flag list",
         )
@@ -199,13 +204,45 @@ class RegionAdminCommandGameTest {
             admin.messages.last(),
             Paint(
                 Paint.yellow("Qx7Lonely Keep"),
-                " - ", Paint.white("60009/~/109"),
+                " - ", clickableCoordinates(60009, 109),
                 "/", Paint.green("overworld"),
             ),
             "the single-result locate reply",
         )
         admin.leave()
         helper.succeed()
+    }
+
+    @GameTest
+    fun locateCoordinatesRunAnAdminTeleport(helper: GameTestHelper) {
+        insertRegion("Qx7Jump Point", 62000, 100, members = emptyList())
+        val admin = MessageCapturingPlayer.join(helper, "T12LocJump")
+        admin.makeAdmin()
+        admin.runCommand("rg locate qx7jump")
+
+        val click = admin.messages.last().siblings[2].style.clickEvent
+        helper.assertTrue(
+            click == ClickEvent.RunCommand("/execute in minecraft:overworld run tp @s 62009 ~ 109"),
+            "the single-result coordinate teleport command was $click",
+        )
+        PacketCapture.drain(admin)
+        admin.runsClickCommand((click as ClickEvent.RunCommand).command().removePrefix("/"))
+        helper.runAfterDelay(2) {
+            try {
+                val teleport = admin.receivesTeleport()
+                helper.assertTrue(
+                    floor(teleport.change().position().x).toInt() == 62009,
+                    "the click teleport packet x was ${teleport.change().position().x}",
+                )
+                helper.assertTrue(
+                    floor(teleport.change().position().z).toInt() == 109,
+                    "the click teleport packet z was ${teleport.change().position().z}",
+                )
+                helper.succeed()
+            } finally {
+                admin.leave()
+            }
+        }
     }
 
     @GameTest
@@ -217,7 +254,7 @@ class RegionAdminCommandGameTest {
 
         val expected = Paint(
             Paint.yellow("Plain Fields"),
-            " - ", Paint.white("61009/~/209"),
+            " - ", clickableCoordinates(61009, 209),
             "/", Paint.green("overworld"),
         )
         admin.runCommand("rg locate qx8own")
@@ -249,7 +286,8 @@ class RegionAdminCommandGameTest {
             expected.add(
                 Paint(
                     " - ", Paint.yellow("Zq7Keep%02d".format(i)), " ",
-                    Paint.gray("${70000 + 200 * (i - 1) + 9}/9/overworld"),
+                    clickableCoordinates(70000 + 200 * (i - 1) + 9, 9, includeY = false),
+                    "/", Paint.gray("overworld"),
                 ),
             )
         }
@@ -328,4 +366,25 @@ class RegionAdminCommandGameTest {
         region.members.addAll(members)
         RegionsFeature.requireService().add(region, parent = null)
     }
+}
+
+/** Reads the client packet an actual click receives after running its teleport command. */
+private fun MessageCapturingPlayer.receivesTeleport(): ClientboundPlayerPositionPacket {
+    val packets = PacketCapture.drain(this)
+    return checkNotNull(packets.filterIsInstance<ClientboundPlayerPositionPacket>().lastOrNull()) {
+        "the teleport command sent no client position packet"
+    }
+}
+
+/** Runs a click command with the same owner-level permission set a vanilla op has. */
+private fun MessageCapturingPlayer.runsClickCommand(command: String) {
+    level().server.commands.performPrefixedCommand(
+        createCommandSourceStack().withPermission(LevelBasedPermissionSet.OWNER),
+        command,
+    )
+}
+
+private fun clickableCoordinates(x: Int, z: Int, includeY: Boolean = true): Component {
+    val label = if (includeY) "$x/~/$z" else "$x/$z"
+    return Paint.white.runs("/execute in minecraft:overworld run tp @s $x ~ $z")(label)
 }

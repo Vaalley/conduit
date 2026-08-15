@@ -26,12 +26,14 @@ import net.minecraft.resources.ResourceKey
 import net.minecraft.server.MinecraftServer
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.server.players.NameAndId
+import net.minecraft.world.damagesource.DamageSource
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.inventory.CraftingContainer
 import net.minecraft.world.inventory.ResultContainer
 import net.minecraft.world.level.Level
+import net.minecraft.world.level.block.state.BlockState
 
 /**
  * What the bootstrap's permanent mixins call while this runtime is loaded — a
@@ -81,6 +83,8 @@ object MixinHooksImpl : MixinHooks {
         CrystalDamageDisplay.forViewer(viewer, packet)
 
     override fun isModOwnedMenu(menu: AbstractContainerMenu): Boolean = RegionProtection.isModOwnedMenu(menu)
+    override fun isPersonalEnderChestMenu(menu: AbstractContainerMenu): Boolean =
+        RegionProtection.isPersonalEnderChestMenu(menu)
 
     override fun allowsContainerUse(player: ServerPlayer): Boolean = RegionProtection.allowsContainerUse(player)
 
@@ -88,8 +92,11 @@ object MixinHooksImpl : MixinHooks {
 
     override fun containerClosed(player: ServerPlayer) = RegionProtection.containerClosed(player)
 
-    override fun allowsPressurePlate(player: ServerPlayer, level: Level, pos: BlockPos): Boolean =
-        RegionProtection.allowsPressurePlate(player, level, pos)
+    override fun allowsPressurePlate(state: BlockState, level: Level, pos: BlockPos, entity: Entity): Boolean =
+        RegionProtection.allowsPressurePlate(state, level, pos, entity)
+
+    override fun allowsEntityDamage(entity: Entity, source: DamageSource): Boolean =
+        RegionProtection.allowsEntityDamage(entity, source)
 
     override fun allowsBlockChange(player: ServerPlayer, level: Level, pos: BlockPos): Boolean =
         RegionProtection.allowsBlockChange(player, level, pos)

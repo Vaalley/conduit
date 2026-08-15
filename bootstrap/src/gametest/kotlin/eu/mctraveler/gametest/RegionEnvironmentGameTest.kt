@@ -386,6 +386,28 @@ class RegionEnvironmentGameTest {
         helper.assertBlockPresent(Blocks.GRASS_BLOCK, ENDERMAN_DROP_AT)
         helper.succeed()
     }
+
+    // ---- farmland trampling ----
+
+    @GameTest
+    fun aNonmemberCannotTrampleRegionFarmland(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T15FarmA")
+        val bob = MessageCapturingPlayer.join(helper, "T15FarmB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(TARGET_AT, Blocks.FARMLAND)
+        bob.standAt(helper, 2.5, 3.0, 2.5)
+        bob.isInvulnerable = true
+
+        val target = helper.absolutePos(TARGET_AT)
+        val farmland = helper.level.getBlockState(target)
+        Blocks.FARMLAND.fallOn(helper.level, farmland, target, bob, 100.0)
+
+        helper.assertBlockPresent(Blocks.FARMLAND, TARGET_AT)
+        helper.assertTrue(bob.wasRefusedBy("T15FarmA's Place"), "the farmland refusal")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
 }
 
 /** The block every environment test works on, inside the test region. */

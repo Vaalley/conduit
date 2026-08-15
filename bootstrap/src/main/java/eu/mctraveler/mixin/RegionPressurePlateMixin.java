@@ -2,7 +2,6 @@ package eu.mctraveler.mixin;
 
 import eu.mctraveler.bootstrap.Hooks;
 import net.minecraft.core.BlockPos;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.InsideBlockEffectApplier;
 import net.minecraft.world.level.Level;
@@ -14,13 +13,10 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * The half of {@code DISABLE_PUBLIC_REDSTONE_TRIGGERS} that is not a
- * right-click (spec User Story 36): a pressure plate is a trigger a stranger
- * works with their feet, so it is stepping on one — not clicking it — that has
- * to be refused.
- *
- * <p>Only players are judged; a mob or a dropped item still weighs on a plate
- * exactly as before, since only a player can be a member of anything.
+ * Applies the two pressure-plate rules. Ordinary plates honor
+ * {@code DISABLE_PUBLIC_REDSTONE_TRIGGERS} for non-members; weighted plates
+ * remain automation-friendly for every entity unless their dedicated
+ * {@code DISABLE_WEIGHTED_PRESSURE_PLATES} flag disables the plate wholesale.
  */
 @Mixin(BasePressurePlateBlock.class)
 public abstract class RegionPressurePlateMixin {
@@ -34,7 +30,7 @@ public abstract class RegionPressurePlateMixin {
             InsideBlockEffectApplier effectApplier,
             boolean isPrecise,
             CallbackInfo ci) {
-        if (entity instanceof ServerPlayer player && !Hooks.allowsPressurePlate(player, level, pos)) {
+        if (!Hooks.allowsPressurePlate(state, level, pos, entity)) {
             ci.cancel();
         }
     }

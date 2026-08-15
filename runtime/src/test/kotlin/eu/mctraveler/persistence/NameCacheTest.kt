@@ -30,6 +30,23 @@ class NameCacheTest {
     }
 
     @Test
+    fun `a recorded username resolves its uuid regardless of case`() {
+        cache().apply { record(notch, "Notch") }.also {
+            assertEquals(notch, it.uuidFor("nOtCh"))
+        }
+    }
+
+    @Test
+    fun `the newest login wins a duplicate cached username lookup`() {
+        val cache = cache()
+        cache.record(notch, "Notch")
+        cache.record(jeb, "Notch")
+
+        assertEquals(jeb, cache.uuidFor("notch"))
+        assertEquals("Notch", cache.usernameFor(notch))
+    }
+
+    @Test
     fun `a recorded login answers offline lookups`() {
         cache().record(notch, "Notch")
         assertEquals("Notch", cache().usernameFor(notch))

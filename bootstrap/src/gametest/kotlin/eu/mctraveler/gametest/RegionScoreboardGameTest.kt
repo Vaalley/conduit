@@ -2,11 +2,14 @@ package eu.mctraveler.gametest
 
 import eu.mctraveler.MCTraveler
 import eu.mctraveler.region.RegionsFeature
+import eu.mctraveler.region.RegionScoreboard
+import eu.mctraveler.region.RegionTracker
 import eu.mctraveler.text.Paint
 import java.util.UUID
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.network.chat.Component
+import net.minecraft.network.protocol.game.ClientboundSetObjectivePacket
 
 /**
  * The region sidebar scoreboard at the running-server seam (spec story 33):
@@ -91,6 +94,33 @@ class RegionScoreboardGameTest {
             alice.leave()
             helper.succeed()
         }
+    }
+
+    @GameTest
+    fun aRuntimeReloadRemovesItsObjectiveBeforeRedrawingIt(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T13SbReload")
+        val region = createRegion(helper, alice, 0.0 to 0.0, 3.0 to 2.0)
+        RegionTracker.refresh(alice)
+        PacketCapture.drain(alice) // The first runtime's already-created objective.
+
+        // RuntimeHost replays SERVER_STOPPED while the client remains connected.
+        // The old runtime must retire this player before the new runtime starts
+        // with no Kotlin object state and redraws the same sidebar.
+        RegionScoreboard.retire(alice)
+        RegionScoreboard.draw(alice, region)
+
+        val methods = PacketCapture.drainOf<ClientboundSetObjectivePacket>(alice).map { it.method }
+        helper.assertValueEqual(
+            methods,
+            listOf(
+                ClientboundSetObjectivePacket.METHOD_REMOVE,
+                ClientboundSetObjectivePacket.METHOD_ADD,
+                ClientboundSetObjectivePacket.METHOD_CHANGE,
+            ),
+            "the objective packets across a runtime reload",
+        )
+        alice.leave()
+        helper.succeed()
     }
 
     // ---- who is who ----
