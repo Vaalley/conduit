@@ -134,6 +134,8 @@ object MergedPlayerdata {
      */
     private fun roleOf(dimension: String, what: String): DimensionRole =
         DimensionRole.fromId(dimension)
+            ?: secondaryRole(dimension)
+            ?: WorldLayout.backendRole(dimension)
             ?: throw IllegalArgumentException("$what names dimension role \"$dimension\", which is not a role")
 
     // ---- the places that name their own dimension ---------------------------
@@ -332,8 +334,18 @@ object MergedPlayerdata {
      * A save still in the Portal cutover's quarantine spells the same places the
      * other way; see [mergedFromSecondarysQuarantine].
      */
-    private fun secondaryRole(dimensionId: String): DimensionRole? =
-        DimensionRole.entries.firstOrNull { WorldLayout.SECONDARY.dimensionId(it) == dimensionId }
+    private fun secondaryRole(dimensionId: String): DimensionRole? = when (dimensionId) {
+        "minecraft:last", "minecaft:last", "last",
+        WorldLayout.SECONDARY.dimensionId(DimensionRole.OVERWORLD) -> DimensionRole.OVERWORLD
+
+        "minecraft:last_nether", "last_nether",
+        WorldLayout.SECONDARY.dimensionId(DimensionRole.NETHER) -> DimensionRole.NETHER
+
+        "minecraft:last_the_end", "last_the_end",
+        WorldLayout.SECONDARY.dimensionId(DimensionRole.END) -> DimensionRole.END
+
+        else -> null
+    }
 
     // Every key below is one a 26.2 save codec actually writes; the LEGACY_ ones
     // are what the same value was called before 1.21.5's InlineBlockPosFormatFix.
