@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "mctraveler",
+  "version": "${version}",
+  "name": "MCTraveler",
+  "description": "The MCTraveler community server's gameplay as a server-side Fabric mod. Celebrating 13 years of vanilla survival.",
+  "authors": ["MCTraveler"],
+  "environment": "server",
+  "mixins": ["mctraveler.mixins.json"],
+  "entrypoints": {
+    "main": [
+      {
+        "adapter": "kotlin",
+        "value": "eu.mctraveler.bootstrap.ConduitBootstrap"
+      }
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric-api": "*",
+    "fabric-language-kotlin": ">=${flk_version}",
+    "minecraft": "~${minecraft_version}",
+    "java": ">=25"
+  }
+}
