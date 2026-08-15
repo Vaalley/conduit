@@ -2,8 +2,10 @@ package eu.mctraveler.region
 
 import eu.mctraveler.reloadable
 import eu.mctraveler.text.Paint
+import java.util.IdentityHashMap
 import java.util.UUID
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents
+import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
 import net.fabricmc.fabric.api.event.player.AttackBlockCallback
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback
@@ -20,8 +22,11 @@ import net.minecraft.tags.DamageTypeTags
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
 import net.minecraft.world.entity.Entity
-import net.minecraft.world.entity.monster.Enemy
+import net.minecraft.world.entity.decoration.ArmorStand
+import net.minecraft.world.entity.decoration.ItemFrame
 import net.minecraft.world.inventory.AbstractContainerMenu
+import net.minecraft.world.inventory.ChestMenu
+import net.minecraft.world.inventory.PlayerEnderChestContainer
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 import net.minecraft.world.level.Level
@@ -41,8 +46,8 @@ import net.minecraft.world.level.block.state.BlockState
  *
  * What a region stops the *world* doing — explosions, fire, pistons, creatures
  * — is [RegionEnvironment]. The line between them is whether anyone is asking:
- * everything here has a player to refuse and answers with the Portal's one
- * message; nothing there does, and all of it is silent.
+ * everything here has a player to refuse and answers false; its refusal message
+ * may be throttled. Nothing there does, and all of it is silent.
  *
  * Enforcement is server-side cancellation of the action itself. The Portal
  * could only drop the client's packets and dress the player in a fake
@@ -51,12 +56,13 @@ import net.minecraft.world.level.block.state.BlockState
  * packet that stopped it ghosting blocks — are gone (the events used here
  * resync the client themselves).
  *
- * Every refusal answers with the Portal's one message, and every decision is
- * taken from live state — the region under the block or under the player's
- * feet, and that region's current member set. Nothing about a player's
- * protection is cached, so a teleport into a region, a `/rg add`, or an
- * `/rg flag PUBLIC` is in force for the player's very next action. The one
- * deliberate exception is the container session (see [containerOpened]).
+ * A refusal always returns false; when its message is not throttled, it answers
+ * with the Portal's one message. Every decision is taken from live state — the
+ * region under the block or under the player's feet, and that region's current
+ * member set. Nothing about a player's protection is cached, so a teleport into
+ * a region, a `/rg add`, or a `/rg flag PUBLIC` is in force for the player's very
+ * next action. The one deliberate exception is the container session (see
+ * [containerOpened]).
  */
 object RegionProtection {
 
@@ -67,9 +73,16 @@ object RegionProtection {
     private const val DISABLE_PLAYER_FALL_DAMAGE = "DISABLE_PLAYER_FALL_DAMAGE"
     private const val DISABLE_PUBLIC_REDSTONE_TRIGGERS = "DISABLE_PUBLIC_REDSTONE_TRIGGERS"
     private const val DISABLE_GATES = "DISABLE_GATES"
+    private const val REFUSAL_MESSAGE_COOLDOWN_TICKS = 20L
 
     /** The region each player was standing in when they opened their container. */
     private val containerRegions = HashMap<UUID, Region>()
+
+    /**
+     * Last refusal-message tick per player and live region identity. Identity
+     * keys keep distinct region objects independent even if they compare equal.
+     */
+    private val refusalMessageTicks = HashMap<UUID, IdentityHashMap<Region, Long>>()
 
     /**
      * Items whose use no region refuses (see [exemptItem]). Registered once at
@@ -122,6 +135,11 @@ object RegionProtection {
     @JvmStatic
     fun isModOwnedMenu(menu: AbstractContainerMenu): Boolean =
         menuExemptions.any { it(menu) }
+    /** Whether [menu] is a personal ender-chest menu, rather than a world chest. */
+    @JvmStatic
+    fun isPersonalEnderChestMenu(menu: AbstractContainerMenu): Boolean =
+        menu is ChestMenu && menu.container is PlayerEnderChestContainer
+
 
     private fun isExemptItem(stack: ItemStack): Boolean =
         !stack.isEmpty && itemExemptions.any { it(stack) }
@@ -161,8 +179,7 @@ object RegionProtection {
             val player = context.player
             // This event's "not my business" answer is null, not PASS.
             if (player is ServerPlayer &&
-                !context.itemInHand.`is`(Items.FIREWORK_ROCKET) &&
-                !isExemptItem(context.itemInHand) &&
+                !isItemUseExempt(context.itemInHand) &&
                 !allowsBlockChange(player, context.level, context.clickedPos)
             ) {
                 InteractionResult.FAIL
@@ -200,20 +217,30 @@ object RegionProtection {
         AttackEntityCallback.EVENT.reloadable.register { player, _, _, entity, _ ->
             allowedOrFail(player !is ServerPlayer || allowsEntityAttack(player, entity))
         }
-        UseEntityCallback.EVENT.reloadable.register { player, _, hand, _, _ ->
-            allowedOrFail(player !is ServerPlayer || allowsEntityInteract(player, hand))
+        UseEntityCallback.EVENT.reloadable.register { player, _, hand, entity, _ ->
+            allowedOrFail(player !is ServerPlayer || allowsEntityInteract(player, hand, entity))
         }
 
+        ServerPlayerEvents.LEAVE.reloadable.register { player ->
+            containerRegions.remove(player.uuid)
+            refusalMessageTicks.remove(player.uuid)
+        }
         ServerPlayConnectionEvents.DISCONNECT.reloadable.register { handler, _ ->
             containerRegions.remove(handler.player.uuid)
+            refusalMessageTicks.remove(handler.player.uuid)
         }
-        ServerLifecycleEvents.SERVER_STOPPED.reloadable.register { containerRegions.clear() }
+        ServerLifecycleEvents.SERVER_STOPPED.reloadable.register {
+            containerRegions.clear()
+            refusalMessageTicks.clear()
+        }
+
     }
 
     /**
      * Whether [player] may change the block at [pos] — digging, building, and
      * editing a sign all ask this of the *target block's* region, not the one
-     * the player is standing in. A false answer has already told them why.
+     * the player is standing in. A false answer always denies; its refusal
+     * message may be throttled.
      */
     @JvmStatic
     fun allowsBlockChange(player: ServerPlayer, level: Level, pos: BlockPos): Boolean {
@@ -246,7 +273,8 @@ object RegionProtection {
     /**
      * Whether [player] may click in the container they have open. Residents
      * may; so may anyone when the region is `PUBLIC` or opens its containers
-     * to the public. A false answer has already told them why.
+     * to the public. A false answer always denies; its refusal message may be
+     * throttled.
      */
     @JvmStatic
     fun allowsContainerUse(player: ServerPlayer): Boolean {
@@ -262,7 +290,8 @@ object RegionProtection {
      * `DISABLE_GATES` closes the doors, gates and trapdoors,
      * `DISABLE_PUBLIC_REDSTONE_TRIGGERS` the buttons and levers. Both are
      * restrictions on non-members alone (residents, and anyone at all in a
-     * `PUBLIC` region, are unaffected), and a false answer has already said so.
+     * `PUBLIC` region, are unaffected), and a false answer always denies; its
+     * refusal message may be throttled.
      */
     private fun allowsBlockUse(player: ServerPlayer, level: Level, pos: BlockPos, state: BlockState): Boolean {
         val flag = restrictingFlagFor(state) ?: return true
@@ -312,65 +341,82 @@ object RegionProtection {
     /**
      * Whether [player] may use [stack] where they are standing. An empty hand
      * uses no item (the Portal only saw this event holding something), and an
-     * exempt item — the Teleportation Crystal — is nobody's business but its
-     * own. A false answer has already told them why.
+     * exempt item is nobody's business but its own. A false answer always denies;
+     * its refusal message may be throttled.
      */
     @JvmStatic
     fun allowsItemUse(player: ServerPlayer?, stack: ItemStack): Boolean {
-        if (stack.isEmpty || isExemptItem(stack)) return true
-        if (stack.has(DataComponents.FOOD) ||
+        if (isItemUseExempt(stack)) return true
+        val p = player ?: return true
+        val region = RegionTracker.regionOf(p) ?: return true
+        return canModifyRegion(p, region) || refuse(p, region)
+    }
+
+    /** Items whose use is independent of the block or region being looked at. */
+    private fun isItemUseExempt(stack: ItemStack): Boolean =
+        stack.isEmpty ||
+            isExemptItem(stack) ||
+            stack.has(DataComponents.FOOD) ||
             stack.has(DataComponents.POTION_CONTENTS) ||
             stack.`is`(Items.POTION) ||
             stack.`is`(Items.MILK_BUCKET) ||
             stack.`is`(Items.HONEY_BOTTLE) ||
             stack.`is`(Items.GOLDEN_APPLE) ||
             stack.`is`(Items.ENCHANTED_GOLDEN_APPLE) ||
-            stack.`is`(Items.FIREWORK_ROCKET)
-        ) {
-            return true
-        }
-        val p = player ?: return true
-        val region = RegionTracker.regionOf(p) ?: return true
-        return canModifyRegion(p, region) || refuse(p, region)
-    }
+            stack.`is`(Items.FIREWORK_ROCKET) ||
+            stack.`is`(Items.ENDER_PEARL) ||
+            stack.`is`(Items.ENDER_EYE)
 
-    /** Hitting anything inside a protected region is refused unless it is an Enemy. */
+    /** Hitting [entity] is refused in its deepest target region, for every entity type. */
     @JvmStatic
     fun allowsEntityAttack(player: ServerPlayer?, entity: Entity?): Boolean {
-        if (entity is Enemy) return true
         val p = player ?: return true
-        val region = entityProtectionAround(p) ?: return true
+        val region = entityProtectionAround(p, entity) ?: return true
         return refuse(p, region)
     }
 
     /**
-     * Right-clicking an entity is refused only with something in hand: an
-     * empty hand is how a villager is traded with, and the Portal let that
-     * through. `ENABLE_PUBLIC_VILLAGER_TRADING` opens the held-item case too.
+     * Right-clicking [entity] is judged by the deepest region at that target's
+     * block position. Empty-hand interaction remains allowed for ordinary
+     * entities, while item frames and armor stands remain protected.
+     * `ENABLE_PUBLIC_VILLAGER_TRADING` opens held-item interaction too.
      */
-    private fun allowsEntityInteract(player: ServerPlayer, hand: InteractionHand): Boolean {
-        val region = entityProtectionAround(player) ?: return true
-        if (player.getItemInHand(hand).isEmpty) return true
+    @JvmStatic
+    fun allowsEntityInteract(
+        player: ServerPlayer?,
+        hand: InteractionHand,
+        entity: Entity?
+    ): Boolean {
+        val p = player ?: return true
+        val region = entityProtectionAround(p, entity) ?: return true
+        if (entity is ItemFrame || entity is ArmorStand) return refuse(p, region)
+        if (p.getItemInHand(hand).isEmpty) return true
         if (ENABLE_PUBLIC_VILLAGER_TRADING in region.flags) return true
-        return refuse(player, region)
+        return refuse(p, region)
     }
 
     /**
-     * The region whose creatures [player] must leave alone where they stand, or
+     * The deepest target region whose entities [player] must leave alone, or
      * null when they may do as they like — outside a region, inside one they
-     * can modify, or in one flying `DISABLE_ANIMAL_PROTECTION`. The Portal
-     * called this animal protection; the rule it wrote covers every entity.
+     * can modify, or in one flying `DISABLE_ANIMAL_PROTECTION`.
      */
-    private fun entityProtectionAround(player: ServerPlayer): Region? {
-        val region = RegionTracker.regionOf(player) ?: return null
+    private fun entityProtectionAround(player: ServerPlayer, entity: Entity?): Region? {
+        if (entity == null) return null
+        val region = RegionsFeature.regionAt(entity.level(), entity.blockPosition()) ?: return null
         if (canModifyRegion(player, region)) return null
         if (DISABLE_ANIMAL_PROTECTION in region.flags) return null
         return region
     }
 
-    /** Sends the Portal's one refusal message, and answers "not allowed". */
+    /** Sends the Portal's refusal message when its cooldown permits, and always answers "not allowed". */
     private fun refuse(player: ServerPlayer, region: Region): Boolean {
-        player.sendSystemMessage(Paint.error("This area is protected by ", Paint.red(region.title)))
+        val now = player.level().server.tickCount.toLong()
+        val byRegion = refusalMessageTicks.getOrPut(player.uuid) { IdentityHashMap() }
+        val lastSent = byRegion[region]
+        if (lastSent == null || now - lastSent >= REFUSAL_MESSAGE_COOLDOWN_TICKS) {
+            player.sendSystemMessage(Paint.error("This area is protected by ", Paint.red(region.title)))
+            byRegion[region] = now
+        }
         return false
     }
 
