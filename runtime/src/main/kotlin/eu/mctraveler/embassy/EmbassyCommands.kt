@@ -140,9 +140,8 @@ object EmbassyCommands {
         }
 
         EmbassyPlots.clear(level, EmbassyPlots.plotOf(player.blockX, player.blockZ))
-        // Everyone standing in it loses its sidebar before it stops existing.
-        RegionTracker.clear(level.server, region)
         RegionsFeature.requireService().remove(region)
+        RegionTracker.afterRemoval(level.server)
         return Paint.success("Embassy deleted")
     }
 }

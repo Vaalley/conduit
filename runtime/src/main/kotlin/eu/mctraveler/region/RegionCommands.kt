@@ -47,6 +47,7 @@ object RegionCommands {
         "DISABLE_PLAYER_FALL_DAMAGE",
         "ENABLE_PUBLIC_VILLAGER_TRADING",
         "DISABLE_PUBLIC_REDSTONE_TRIGGERS",
+        "DISABLE_WEIGHTED_PRESSURE_PLATES",
         "DISABLE_ANIMAL_PROTECTION",
         "PUBLIC",
     )
@@ -319,8 +320,8 @@ object RegionCommands {
             )
         }
         val title = region.title
-        RegionTracker.clear(player.level().server, region)
         RegionsFeature.requireService().remove(region)
+        RegionTracker.afterRemoval(player.level().server)
         return Paint.success("Deleted region ", Paint.green(title))
     }
 

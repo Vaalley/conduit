@@ -62,7 +62,8 @@ class RegionAdminCommandGameTest {
                 "Invalid flag. Valid flags: EMBASSY, NO_SCOREBOARD, ENABLE_EXPLOSIONS, ADMIN, " +
                     "ENABLE_PUBLIC_CONTAINERS, DISABLE_GATES, ENABLE_FIRE_DAMAGE, " +
                     "DISABLE_PLAYER_FALL_DAMAGE, ENABLE_PUBLIC_VILLAGER_TRADING, " +
-                    "DISABLE_PUBLIC_REDSTONE_TRIGGERS, DISABLE_ANIMAL_PROTECTION, PUBLIC",
+                    "DISABLE_PUBLIC_REDSTONE_TRIGGERS, DISABLE_WEIGHTED_PRESSURE_PLATES, " +
+                    "DISABLE_ANIMAL_PROTECTION, PUBLIC",
             ),
             "the invalid-flag reply",
         )
@@ -117,7 +118,8 @@ class RegionAdminCommandGameTest {
                 Paint.red("ADMIN"), ", ", Paint.red("ENABLE_PUBLIC_CONTAINERS"), ", ",
                 Paint.red("DISABLE_GATES"), ", ", Paint.red("ENABLE_FIRE_DAMAGE"), ", ",
                 Paint.red("DISABLE_PLAYER_FALL_DAMAGE"), ", ", Paint.red("ENABLE_PUBLIC_VILLAGER_TRADING"), ", ",
-                Paint.red("DISABLE_PUBLIC_REDSTONE_TRIGGERS"), ", ", Paint.red("DISABLE_ANIMAL_PROTECTION"),
+                Paint.red("DISABLE_PUBLIC_REDSTONE_TRIGGERS"), ", ",
+                Paint.red("DISABLE_WEIGHTED_PRESSURE_PLATES"), ", ", Paint.red("DISABLE_ANIMAL_PROTECTION"),
             ),
             "the flag list",
         )

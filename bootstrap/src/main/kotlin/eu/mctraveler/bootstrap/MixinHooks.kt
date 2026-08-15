@@ -12,12 +12,14 @@ import net.minecraft.resources.ResourceKey
 import net.minecraft.server.MinecraftServer
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.server.players.NameAndId
+import net.minecraft.world.damagesource.DamageSource
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.inventory.CraftingContainer
 import net.minecraft.world.inventory.ResultContainer
 import net.minecraft.world.level.Level
+import net.minecraft.world.level.block.state.BlockState
 
 /**
  * Everything the (permanent, non-reloadable) mixins need from the (reloadable)
@@ -72,8 +74,9 @@ interface MixinHooks {
     fun allowsContainerUse(player: ServerPlayer): Boolean
     fun containerOpened(player: ServerPlayer)
     fun containerClosed(player: ServerPlayer)
-    fun allowsPressurePlate(player: ServerPlayer, level: Level, pos: BlockPos): Boolean
+    fun allowsPressurePlate(state: BlockState, level: Level, pos: BlockPos, entity: Entity): Boolean
     fun allowsBlockChange(player: ServerPlayer, level: Level, pos: BlockPos): Boolean
+    fun allowsEntityDamage(entity: Entity, source: DamageSource): Boolean
 
     // Region environment
     fun allowsCreatureBlockChange(level: Level, pos: BlockPos, creature: Entity?): Boolean
@@ -167,8 +170,15 @@ object Hooks {
         impl?.containerClosed(player)
     }
 
-    @JvmStatic fun allowsPressurePlate(player: ServerPlayer, level: Level, pos: BlockPos): Boolean =
-        impl?.allowsPressurePlate(player, level, pos) ?: true
+    @JvmStatic fun allowsPressurePlate(
+        state: BlockState,
+        level: Level,
+        pos: BlockPos,
+        entity: Entity,
+    ): Boolean = impl?.allowsPressurePlate(state, level, pos, entity) ?: true
+
+    @JvmStatic fun allowsEntityDamage(entity: Entity, source: DamageSource): Boolean =
+        impl?.allowsEntityDamage(entity, source) ?: true
 
     @JvmStatic fun allowsBlockChange(player: ServerPlayer, level: Level, pos: BlockPos): Boolean =
         impl?.allowsBlockChange(player, level, pos) ?: true

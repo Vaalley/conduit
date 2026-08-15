@@ -16,8 +16,11 @@ import net.fabricmc.fabric.api.event.player.UseEntityCallback
 import net.fabricmc.fabric.api.event.player.UseItemCallback
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents
 import net.minecraft.core.BlockPos
+import net.minecraft.core.Direction
 import net.minecraft.core.component.DataComponents
 import net.minecraft.server.level.ServerPlayer
+import net.minecraft.world.damagesource.DamageSource
+import net.minecraft.tags.BlockTags
 import net.minecraft.tags.DamageTypeTags
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
@@ -29,12 +32,17 @@ import net.minecraft.world.inventory.ChestMenu
 import net.minecraft.world.inventory.PlayerEnderChestContainer
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
+import net.minecraft.world.item.alchemy.PotionContents
+import net.minecraft.world.item.alchemy.Potions
+import net.minecraft.world.item.context.UseOnContext
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.ButtonBlock
 import net.minecraft.world.level.block.DoorBlock
 import net.minecraft.world.level.block.FenceGateBlock
+import net.minecraft.world.level.block.EndPortalFrameBlock
 import net.minecraft.world.level.block.LeverBlock
 import net.minecraft.world.level.block.TrapDoorBlock
+import net.minecraft.world.level.block.WeightedPressurePlateBlock
 import net.minecraft.world.level.block.state.BlockState
 
 /**
@@ -49,12 +57,10 @@ import net.minecraft.world.level.block.state.BlockState
  * everything here has a player to refuse and answers false; its refusal message
  * may be throttled. Nothing there does, and all of it is silent.
  *
- * Enforcement is server-side cancellation of the action itself. The Portal
- * could only drop the client's packets and dress the player in a fake
- * Adventure gamemode to make the client refuse first; on a real server the
- * action simply does not happen, so the illusion — and the dig-acknowledge
- * packet that stopped it ghosting blocks — are gone (the events used here
- * resync the client themselves).
+ * Enforcement is server-side cancellation of the action itself. In addition,
+ * [RegionTracker] keeps survival players in Adventure mode while they stand in
+ * a region they cannot modify, so the client suppresses impossible block
+ * changes before they reach this authoritative layer.
  *
  * A refusal always returns false; when its message is not throttled, it answers
  * with the Portal's one message. Every decision is taken from live state — the
@@ -72,6 +78,7 @@ object RegionProtection {
     private const val DISABLE_ANIMAL_PROTECTION = "DISABLE_ANIMAL_PROTECTION"
     private const val DISABLE_PLAYER_FALL_DAMAGE = "DISABLE_PLAYER_FALL_DAMAGE"
     private const val DISABLE_PUBLIC_REDSTONE_TRIGGERS = "DISABLE_PUBLIC_REDSTONE_TRIGGERS"
+    private const val DISABLE_WEIGHTED_PRESSURE_PLATES = "DISABLE_WEIGHTED_PRESSURE_PLATES"
     private const val DISABLE_GATES = "DISABLE_GATES"
     private const val REFUSAL_MESSAGE_COOLDOWN_TICKS = 20L
 
@@ -177,9 +184,13 @@ object RegionProtection {
         // close the rest.
         ItemEvents.USE_ON.reloadable.register { context ->
             val player = context.player
-            // This event's "not my business" answer is null, not PASS.
+            // This event's "not my business" answer is null, not PASS. Air-use
+            // exemptions still need protection when their use-on path changes
+            // the clicked block (a water potion on dirt or an eye in a frame).
+            val needsBlockProtection =
+                !isItemUseExempt(context.itemInHand) || exemptUseChangesBlock(context)
             if (player is ServerPlayer &&
-                !isItemUseExempt(context.itemInHand) &&
+                needsBlockProtection &&
                 !allowsBlockChange(player, context.level, context.clickedPos)
             ) {
                 InteractionResult.FAIL
@@ -300,16 +311,28 @@ object RegionProtection {
     }
 
     /**
-     * Whether [player] may set off the pressure plate at [pos] —
-     * `DISABLE_PUBLIC_REDSTONE_TRIGGERS` again, since a plate is a trigger a
-     * stranger works with their feet.
+     * Whether [entity] may set off the pressure plate at [pos].
      *
-     * Silent, unlike its right-clicked cousins: standing is not an attempt, and
-     * a plate is asked this on every tick a foot is on it.
+     * Ordinary plates use `DISABLE_PUBLIC_REDSTONE_TRIGGERS`: non-members are
+     * ignored while residents and non-player entities still work the plate.
+     * Weighted plates are automation rather than membership checks, so they
+     * work for every entity by default and are disabled wholesale only by
+     * `DISABLE_WEIGHTED_PRESSURE_PLATES`.
      */
     @JvmStatic
-    fun allowsPressurePlate(player: ServerPlayer, level: Level, pos: BlockPos): Boolean =
-        regionRefusing(player, level, pos, DISABLE_PUBLIC_REDSTONE_TRIGGERS) == null
+    fun allowsPressurePlate(
+        state: BlockState,
+        level: Level,
+        pos: BlockPos,
+        entity: Entity,
+    ): Boolean {
+        val region = RegionsFeature.regionAt(level, pos) ?: return true
+        if (state.block is WeightedPressurePlateBlock) {
+            return DISABLE_WEIGHTED_PRESSURE_PLATES !in region.flags
+        }
+        val player = entity as? ServerPlayer ?: return true
+        return canModifyRegion(player, region) || DISABLE_PUBLIC_REDSTONE_TRIGGERS !in region.flags
+    }
 
     /** Which flag, if any, can take this block's own behaviour away from a stranger. */
     private fun restrictingFlagFor(state: BlockState): String? = when (state.block) {
@@ -367,12 +390,41 @@ object RegionProtection {
             stack.`is`(Items.ENDER_PEARL) ||
             stack.`is`(Items.ENDER_EYE)
 
+    /** Block-changing use-on paths hidden inside otherwise safe air-use items. */
+    private fun exemptUseChangesBlock(context: UseOnContext): Boolean {
+        val stack = context.itemInHand
+        val state = context.level.getBlockState(context.clickedPos)
+        if (stack.`is`(Items.ENDER_EYE)) {
+            return state.block is EndPortalFrameBlock && !state.getValue(EndPortalFrameBlock.HAS_EYE)
+        }
+        if (!stack.`is`(Items.POTION) ||
+            context.clickedFace == Direction.DOWN ||
+            !state.`is`(BlockTags.CONVERTABLE_TO_MUD)
+        ) {
+            return false
+        }
+        val contents = stack.getOrDefault(DataComponents.POTION_CONTENTS, PotionContents.EMPTY)
+        return contents.`is`(Potions.WATER)
+    }
+
     /** Hitting [entity] is refused in its deepest target region, for every entity type. */
     @JvmStatic
     fun allowsEntityAttack(player: ServerPlayer?, entity: Entity?): Boolean {
         val p = player ?: return true
         val region = entityProtectionAround(p, entity) ?: return true
         return refuse(p, region)
+    }
+
+    /**
+     * Damage caused by a player is the projectile-safe form of [allowsEntityAttack]:
+     * [DamageSource.entity] resolves an arrow, trident, or other indirect hit to
+     * its responsible attacker while [entity] remains the target whose region
+     * owns the decision.
+     */
+    @JvmStatic
+    fun allowsEntityDamage(entity: Entity?, source: DamageSource): Boolean {
+        val player = source.entity as? ServerPlayer ?: return true
+        return allowsEntityAttack(player, entity)
     }
 
     /**
@@ -414,7 +466,7 @@ object RegionProtection {
         val byRegion = refusalMessageTicks.getOrPut(player.uuid) { IdentityHashMap() }
         val lastSent = byRegion[region]
         if (lastSent == null || now - lastSent >= REFUSAL_MESSAGE_COOLDOWN_TICKS) {
-            player.sendSystemMessage(Paint.error("This area is protected by ", Paint.red(region.title)))
+            player.sendSystemMessage(Paint.error("This area is protected by ", Paint.red(region.title)), true)
             byRegion[region] = now
         }
         return false

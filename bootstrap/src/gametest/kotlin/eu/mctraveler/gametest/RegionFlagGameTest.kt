@@ -6,6 +6,9 @@ import net.minecraft.core.Direction
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.entity.InsideBlockEffectApplier
+import net.minecraft.world.entity.item.ItemEntity
+import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.Items
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.state.properties.AttachFace
@@ -230,6 +233,38 @@ class RegionFlagGameTest {
         helper.succeed()
     }
 
+    // ---- DISABLE_WEIGHTED_PRESSURE_PLATES ----
+
+    @GameTest
+    fun weightedPressurePlatesWorkInsideRegionsByDefault(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T15WeightA")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        alice.makeAdmin()
+        alice.runCommand("rg flag DISABLE_PUBLIC_REDSTONE_TRIGGERS")
+        helper.mount(Blocks.LIGHT_WEIGHTED_PRESSURE_PLATE)
+
+        helper.dropItemOnWeightedPlate()
+
+        helper.assertBlockProperty(TRIGGER_AT, BlockStateProperties.POWER, 1)
+        alice.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun theWeightedPressurePlateFlagDisablesThemInsideARegion(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T15WeightOff")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        alice.makeAdmin()
+        alice.runCommand("rg flag DISABLE_WEIGHTED_PRESSURE_PLATES")
+        helper.mount(Blocks.LIGHT_WEIGHTED_PRESSURE_PLATE)
+
+        helper.dropItemOnWeightedPlate()
+
+        helper.assertBlockProperty(TRIGGER_AT, BlockStateProperties.POWER, 0)
+        alice.leave()
+        helper.succeed()
+    }
+
     @GameTest
     fun togglingDisablePublicRedstoneTriggersTakesEffectAtOnce(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T15TrigLive")
@@ -422,6 +457,14 @@ private fun MessageCapturingPlayer.stepsOnThePlate(helper: GameTestHelper) {
     standAt(helper, 2.5, 2.0, 2.5)
     val plate = helper.absolutePos(TRIGGER_AT)
     helper.level.getBlockState(plate).entityInside(level(), plate, this, InsideBlockEffectApplier.NOOP, false)
+}
+
+/** Drops one item onto the weighted plate and drives its real entity-inside path. */
+private fun GameTestHelper.dropItemOnWeightedPlate() {
+    val plate = absolutePos(TRIGGER_AT)
+    val item = ItemEntity(level, plate.x + 0.5, plate.y + 0.1, plate.z + 0.5, ItemStack(Items.STONE))
+    level.addFreshEntity(item)
+    level.getBlockState(plate).entityInside(level, plate, item, InsideBlockEffectApplier.NOOP, false)
 }
 
 /** Takes the damage a bad landing does. */

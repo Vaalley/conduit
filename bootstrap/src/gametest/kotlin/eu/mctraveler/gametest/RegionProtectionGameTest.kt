@@ -11,12 +11,14 @@ import net.minecraft.network.protocol.game.ServerboundAttackPacket
 import net.minecraft.network.protocol.game.ServerboundInteractPacket
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket
 import net.minecraft.network.protocol.game.ServerboundSignUpdatePacket
+import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EntityTypes
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.entity.decoration.ItemFrame
+import net.minecraft.world.entity.projectile.arrow.Arrow
 import net.minecraft.world.inventory.ContainerInput
 import net.minecraft.world.inventory.ChestMenu
 import net.minecraft.world.entity.EquipmentSlot
@@ -24,10 +26,12 @@ import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 import net.minecraft.world.level.GameType
 import net.minecraft.world.level.block.Blocks
+import net.minecraft.world.level.block.EndPortalFrameBlock
 import net.minecraft.world.SimpleMenuProvider
 import net.minecraft.world.level.block.entity.ChestBlockEntity
 import net.minecraft.world.level.block.entity.SignBlockEntity
 import net.minecraft.world.phys.BlockHitResult
+import net.minecraft.world.phys.EntityHitResult
 import net.minecraft.world.phys.Vec3
 
 /**
@@ -52,10 +56,23 @@ class RegionProtectionGameTest {
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
         helper.setBlock(STONE_AT, Blocks.STONE)
         bob.standAt(helper, 2.0, 2.0, 1.0)
+        bob.messages.clear()
+        bob.chatMessages.clear()
+        bob.actionBarMessages.clear()
 
         helper.assertFalse(bob.digs(helper), "a non-member broke a block in someone else's region")
         helper.assertBlockPresent(Blocks.STONE, STONE_AT)
-        helper.assertValueEqual(bob.messages.last(), protectedBy("T14DigA's Place"), "the dig refusal")
+        val expectedRefusal = protectedBy("T14DigA's Place")
+        helper.assertValueEqual(bob.messages.last(), expectedRefusal, "the dig refusal")
+        helper.assertValueEqual(
+            bob.actionBarMessages.single(),
+            expectedRefusal,
+            "the refusal shown in the action bar",
+        )
+        helper.assertFalse(
+            bob.chatMessages.any { it == expectedRefusal },
+            "the protection refusal was added to chat",
+        )
         alice.leave()
         bob.leave()
         helper.succeed()
@@ -202,6 +219,35 @@ class RegionProtectionGameTest {
             "food-on-block emitted a protection refusal",
         )
         helper.assertTrue(bob.messages.isEmpty(), "an exempt food emitted an unrelated message")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun blockChangingUsesOfSafeAirItemsStayProtected(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T14SafeBlockA")
+        val bob = MessageCapturingPlayer.join(helper, "T14SafeBlockB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(STONE_AT, Blocks.DIRT)
+        helper.setBlock(OUTER_AT, Blocks.END_PORTAL_FRAME)
+        bob.standAt(helper, 2.0, 2.0, 1.0)
+        bob.messages.clear()
+
+        bob.setItemInHand(InteractionHand.MAIN_HAND, Items.POTION.defaultInstance)
+        helper.assertFalse(
+            bob.usesHeldItemOn(helper, STONE_AT),
+            "a water potion converted protected dirt",
+        )
+        helper.assertBlockPresent(Blocks.DIRT, STONE_AT)
+
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.ENDER_EYE))
+        helper.assertFalse(
+            bob.usesHeldItemOn(helper, OUTER_AT),
+            "an ender eye filled a protected portal frame",
+        )
+        helper.assertBlockProperty(OUTER_AT, EndPortalFrameBlock.HAS_EYE, false)
+        helper.assertTrue(bob.wasRefusedBy("T14SafeBlockA's Place"), "the block-changing uses emitted no refusal")
         alice.leave()
         bob.leave()
         helper.succeed()
@@ -464,6 +510,30 @@ class RegionProtectionGameTest {
         helper.succeed()
     }
 
+    @GameTest
+    fun aStrangerCanPlaceAndTakeFlowersFromRegionPots(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T14PotA")
+        val bob = MessageCapturingPlayer.join(helper, "T14PotB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(FLOOR_AT, Blocks.STONE)
+        helper.setBlock(STONE_AT, Blocks.FLOWER_POT)
+        bob.standAt(helper, 2.0, 2.0, 1.0)
+        bob.setGameMode(GameType.ADVENTURE)
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.POPPY))
+        bob.messages.clear()
+
+        helper.assertTrue(bob.usesHeldItemOn(helper, STONE_AT), "a stranger could not put a flower in a region pot")
+        helper.assertBlockPresent(Blocks.POTTED_POPPY, STONE_AT)
+
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY)
+        helper.assertTrue(bob.usesHeldItemOn(helper, STONE_AT), "a stranger could not take a flower from a region pot")
+        helper.assertBlockPresent(Blocks.FLOWER_POT, STONE_AT)
+        helper.assertFalse(bob.wasRefusedBy("T14PotA's Place"), "the flower-pot interaction emitted a refusal")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
     // ---- entities ----
 
     @GameTest
@@ -507,6 +577,36 @@ class RegionProtectionGameTest {
         alice.leave()
         bob.leave()
         charlie.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun projectilesCannotDamageAnyEntityInAnotherPlayersRegion(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T14ArrowA")
+        val bob = MessageCapturingPlayer.join(helper, "T14ArrowB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        createRegion(helper, bob, 6.0 to 0.0, 10.0 to 4.0)
+        val cow = helper.spawnWithNoFreeWill(EntityTypes.COW, BlockPos(2, 2, 2))
+        val unprotectedCow = helper.spawnWithNoFreeWill(EntityTypes.COW, BlockPos(5, 2, 2))
+        val frame = ItemFrame(helper.level, helper.absolutePos(BlockPos(3, 2, 2)), Direction.NORTH)
+        frame.setItem(ItemStack(Items.DIAMOND))
+        helper.level.addFreshEntity(frame)
+        bob.standAt(helper, 8.0, 2.0, 2.0)
+        bob.messages.clear()
+        bob.shoots(helper, unprotectedCow)
+        bob.shoots(helper, cow)
+        bob.shoots(helper, frame)
+
+        helper.assertTrue(
+            unprotectedCow.health < unprotectedCow.maxHealth,
+            "the arrow control did no damage outside a region",
+        )
+        helper.assertValueEqual(cow.health, cow.maxHealth, "an arrow hurt an animal in another player's region")
+        helper.assertFalse(frame.isRemoved, "an arrow destroyed an item frame in another player's region")
+        helper.assertTrue(ItemStack.matches(frame.item, ItemStack(Items.DIAMOND)), "an arrow removed the framed item")
+        helper.assertTrue(bob.wasRefusedBy("T14ArrowA's Place"), "the projectile damage emitted no refusal")
+        alice.leave()
+        bob.leave()
         helper.succeed()
     }
 
@@ -706,6 +806,77 @@ class RegionProtectionGameTest {
         bob.leave()
         helper.succeed()
     }
+
+    @GameTest(maxTicks = 100)
+    fun aStrangerUsesAdventureModeOnlyWhileInsideAnotherPlayersRegion(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T14AdvA")
+        val bob = MessageCapturingPlayer.join(helper, "T14AdvB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        bob.standAt(helper, 7.0, 2.0, 2.0)
+        helper.assertValueEqual(bob.gameMode.gameModeForPlayer, GameType.SURVIVAL, "the starting game mode")
+
+        bob.standAt(helper, 2.0, 2.0, 2.0)
+        helper.runAfterDelay(2) {
+            try {
+                helper.assertValueEqual(
+                    bob.gameMode.gameModeForPlayer,
+                    GameType.ADVENTURE,
+                    "a stranger's game mode inside another player's region",
+                )
+
+                alice.runCommand("rg add T14AdvB")
+                helper.assertValueEqual(
+                    bob.gameMode.gameModeForPlayer,
+                    GameType.SURVIVAL,
+                    "the game mode after gaining membership without moving",
+                )
+                alice.runCommand("rg remove T14AdvB")
+                helper.assertValueEqual(
+                    bob.gameMode.gameModeForPlayer,
+                    GameType.ADVENTURE,
+                    "the game mode after losing membership without moving",
+                )
+                bob.standAt(helper, 7.0, 2.0, 2.0)
+            } catch (failure: Throwable) {
+                alice.leave()
+                bob.leave()
+                throw failure
+            }
+        }
+        helper.runAfterDelay(4) {
+            try {
+                helper.assertValueEqual(
+                    bob.gameMode.gameModeForPlayer,
+                    GameType.SURVIVAL,
+                    "the game mode after leaving the foreign region",
+                )
+                bob.standAt(helper, 2.0, 2.0, 2.0)
+            } catch (failure: Throwable) {
+                alice.leave()
+                bob.leave()
+                throw failure
+            }
+        }
+        helper.runAfterDelay(6) {
+            try {
+                helper.assertValueEqual(
+                    bob.gameMode.gameModeForPlayer,
+                    GameType.ADVENTURE,
+                    "the game mode after returning to the foreign region",
+                )
+                alice.runCommand("rg delete")
+                helper.assertValueEqual(
+                    bob.gameMode.gameModeForPlayer,
+                    GameType.SURVIVAL,
+                    "the game mode after the foreign region was deleted",
+                )
+                helper.succeed()
+            } finally {
+                alice.leave()
+                bob.leave()
+            }
+        }
+    }
 }
 
 /** The block every dig and place test works on, inside the test region. */
@@ -808,4 +979,19 @@ private fun MessageCapturingPlayer.interactsWith(target: Entity, secondaryAction
     connection.handleInteract(
         ServerboundInteractPacket(target.id, InteractionHand.MAIN_HAND, Vec3.ZERO, secondaryAction),
     )
+}
+
+/** Drives the same hit hook vanilla arrows call after resolving a collision. */
+private fun MessageCapturingPlayer.shoots(helper: GameTestHelper, target: Entity) {
+    val arrow = TestArrow(helper.level, this)
+    arrow.shoot(1.0, 0.0, 0.0, 1.0f, 0.0f)
+    helper.level.addFreshEntity(arrow)
+    arrow.hit(target)
+}
+
+private class TestArrow(level: ServerLevel, shooter: MessageCapturingPlayer) :
+    Arrow(level, shooter, ItemStack(Items.ARROW), ItemStack(Items.BOW)) {
+    fun hit(target: Entity) {
+        onHitEntity(EntityHitResult(target))
+    }
 }
