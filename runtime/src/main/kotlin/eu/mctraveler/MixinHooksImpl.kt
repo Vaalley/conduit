@@ -15,6 +15,7 @@ import eu.mctraveler.region.RegionEnvironment
 import eu.mctraveler.region.RegionProtection
 import eu.mctraveler.tablist.SpectatorVisibility
 import eu.mctraveler.tablist.TabListFeature
+import eu.mctraveler.weather.NoRain
 import java.util.UUID
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
@@ -81,6 +82,9 @@ object MixinHooksImpl : MixinHooks {
 
     override fun crystalDamageForViewer(viewer: ServerPlayer, packet: Packet<*>): Packet<*> =
         CrystalDamageDisplay.forViewer(viewer, packet)
+
+    override fun weatherForViewer(viewer: ServerPlayer, packet: Packet<*>): Packet<*> =
+        NoRain.forViewer(viewer, packet)
 
     override fun isModOwnedMenu(menu: AbstractContainerMenu): Boolean = RegionProtection.isModOwnedMenu(menu)
     override fun isPersonalEnderChestMenu(menu: AbstractContainerMenu): Boolean =

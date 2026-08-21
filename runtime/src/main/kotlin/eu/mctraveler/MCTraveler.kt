@@ -13,6 +13,7 @@ import eu.mctraveler.notepad.NotepadFeature
 import eu.mctraveler.persistence.PersistenceService
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.tablist.TabListFeature
+import eu.mctraveler.weather.NoRain
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents
 import org.slf4j.LoggerFactory
@@ -46,6 +47,7 @@ object MCTraveler {
         ChatFeature.register()
         ChatBridge.register()
         AwayFeature.register()
+        NoRain.register()
 
 
         initialized = true
