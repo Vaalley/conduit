@@ -67,6 +67,7 @@ interface MixinHooks {
         resultSlots: ResultContainer,
     )
     fun crystalDamageForViewer(viewer: ServerPlayer, packet: Packet<*>): Packet<*>
+    fun weatherForViewer(viewer: ServerPlayer, packet: Packet<*>): Packet<*>
 
     // Region protection
     fun isModOwnedMenu(menu: AbstractContainerMenu): Boolean
@@ -155,6 +156,9 @@ object Hooks {
 
     @JvmStatic fun crystalDamageForViewer(viewer: ServerPlayer, packet: Packet<*>): Packet<*> =
         impl?.crystalDamageForViewer(viewer, packet) ?: packet
+
+    @JvmStatic fun weatherForViewer(viewer: ServerPlayer, packet: Packet<*>): Packet<*> =
+        impl?.weatherForViewer(viewer, packet) ?: packet
 
     @JvmStatic fun isModOwnedMenu(menu: AbstractContainerMenu): Boolean = impl?.isModOwnedMenu(menu) ?: false
     @JvmStatic fun isPersonalEnderChestMenu(menu: AbstractContainerMenu): Boolean =
