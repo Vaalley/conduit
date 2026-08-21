@@ -24,6 +24,7 @@ class NoRainTest {
             viewer,
             ClientboundGameEventPacket(ClientboundGameEventPacket.START_RAINING, 1f),
         ) as ClientboundGameEventPacket
+        val stop = ClientboundGameEventPacket(ClientboundGameEventPacket.STOP_RAINING, 0f)
         val rain = NoRain.forViewer(
             viewer,
             ClientboundGameEventPacket(ClientboundGameEventPacket.RAIN_LEVEL_CHANGE, 0.7f),
@@ -33,12 +34,13 @@ class NoRainTest {
             ClientboundGameEventPacket(ClientboundGameEventPacket.THUNDER_LEVEL_CHANGE, 0.8f),
         ) as ClientboundGameEventPacket
 
-        assertEquals(ClientboundGameEventPacket.STOP_RAINING, start.getEvent())
-        assertEquals(0f, start.getParam())
-        assertEquals(ClientboundGameEventPacket.RAIN_LEVEL_CHANGE, rain.getEvent())
-        assertEquals(0f, rain.getParam())
-        assertEquals(ClientboundGameEventPacket.THUNDER_LEVEL_CHANGE, thunder.getEvent())
-        assertEquals(0f, thunder.getParam())
+        assertEquals(ClientboundGameEventPacket.STOP_RAINING, start.event)
+        assertEquals(0f, start.param)
+        assertSame(stop, NoRain.forViewer(viewer, stop))
+        assertEquals(ClientboundGameEventPacket.RAIN_LEVEL_CHANGE, rain.event)
+        assertEquals(0f, rain.param)
+        assertEquals(ClientboundGameEventPacket.THUNDER_LEVEL_CHANGE, thunder.event)
+        assertEquals(0f, thunder.param)
     }
 
     @Test

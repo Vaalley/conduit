@@ -30,8 +30,8 @@
     "EmbassyOriginMixin",
     "CrystalCraftingGuardMixin",
     "CrystalDamageDisplayMixin",
-    "NoRainWeatherMixin",
-    "CrystalAcceptCommandMixin"
+    "CrystalAcceptCommandMixin",
+    "NoRainWeatherMixin"
   ],
   "injectors": {
     "defaultRequire": 1

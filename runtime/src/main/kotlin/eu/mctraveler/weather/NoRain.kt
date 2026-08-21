@@ -10,6 +10,7 @@ import net.minecraft.commands.Commands
 import net.minecraft.network.protocol.Packet
 import net.minecraft.network.protocol.game.ClientboundGameEventPacket
 import net.minecraft.server.level.ServerPlayer
+import java.util.concurrent.ConcurrentHashMap
 import java.util.UUID
 
 /**
@@ -22,7 +23,7 @@ import java.util.UUID
  * object. State is in-memory and session-scoped.
  */
 object NoRain {
-    private val hiddenViewers = HashSet<UUID>()
+    private val hiddenViewers = ConcurrentHashMap.newKeySet<UUID>()
 
     fun register() {
         ServerPlayerEvents.LEAVE.reloadable.register { player -> hiddenViewers.remove(player.uuid) }
@@ -50,12 +51,13 @@ object NoRain {
      */
     internal fun forViewer(viewer: UUID, packet: Packet<*>): Packet<*> {
         if (viewer !in hiddenViewers || packet !is ClientboundGameEventPacket) return packet
-        return when (packet.getEvent()) {
-            ClientboundGameEventPacket.START_RAINING,
-            ClientboundGameEventPacket.STOP_RAINING -> ClientboundGameEventPacket(
+        return when (packet.event) {
+            ClientboundGameEventPacket.START_RAINING -> ClientboundGameEventPacket(
                 ClientboundGameEventPacket.STOP_RAINING,
                 0f,
             )
+
+            ClientboundGameEventPacket.STOP_RAINING -> packet
 
             ClientboundGameEventPacket.RAIN_LEVEL_CHANGE -> ClientboundGameEventPacket(
                 ClientboundGameEventPacket.RAIN_LEVEL_CHANGE,
