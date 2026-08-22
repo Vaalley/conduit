@@ -2,8 +2,11 @@ package eu.mctraveler.chat
 
 import com.mojang.brigadier.CommandDispatcher
 import eu.mctraveler.Conduit
+import eu.mctraveler.geo.GeoIpFeature
 import eu.mctraveler.reloadable
 import eu.mctraveler.text.Paint
+import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.util.Optional
 import java.util.UUID
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback
@@ -48,7 +51,9 @@ object ChatFeature {
      * Players who joined this tick, announced at end of tick — once they are actually
      * in play — so a login that dies mid-placement never ghost-announces (story 5).
      */
-    private val pendingJoins = ArrayDeque<UUID>()
+    private data class PendingJoin(val uuid: UUID, val country: String?)
+
+    private val pendingJoins = ArrayDeque<PendingJoin>()
 
     /** Players whose join line went out; only they get a leave line. */
     private val announced = mutableSetOf<UUID>()
@@ -62,10 +67,15 @@ object ChatFeature {
             !isVanillaPresenceMessage(message)
         }
         ServerPlayConnectionEvents.JOIN.reloadable.register { handler, _, _ ->
-            pendingJoins += handler.player.uuid
+            val address = handler.getRemoteAddress() as? InetSocketAddress
+            val country = address?.address
+                ?.takeUnless(::isPrivateAddress)
+                ?.let(GeoIpFeature::lookup)
+                ?.name
+            pendingJoins += PendingJoin(handler.player.uuid, country)
         }
         ServerPlayConnectionEvents.DISCONNECT.reloadable.register { handler, server ->
-            pendingJoins.remove(handler.player.uuid)
+            pendingJoins.removeIf { it.uuid == handler.player.uuid }
             if (announced.remove(handler.player.uuid)) {
                 broadcast(server, leaveLine(handler.player.gameProfile.name))
             }
@@ -127,11 +137,11 @@ object ChatFeature {
 
     private fun flushPendingJoins(server: MinecraftServer) {
         while (true) {
-            val uuid = pendingJoins.removeFirstOrNull() ?: return
+            val pending = pendingJoins.removeFirstOrNull() ?: return
             // Skip anyone who dropped between login and end of tick: no ghost announcements.
-            val player = server.playerList.getPlayer(uuid) ?: continue
-            announced += uuid
-            broadcast(server, joinLine(player.gameProfile.name))
+            val player = server.playerList.getPlayer(pending.uuid) ?: continue
+            announced += pending.uuid
+            broadcast(server, joinLine(player.gameProfile.name, pending.country))
         }
     }
 
@@ -139,13 +149,25 @@ object ChatFeature {
         server.playerList.broadcastSystemMessage(message, false)
     }
 
-    /** `[+] <name> joined` — the Portal's exact join line. */
-    private fun joinLine(name: String): Component = Paint.gray(
-        Paint.darkGray("["), Paint.green("+"), Paint.darkGray("]"), " ", Paint.green(name), " joined",
+    /** `[+] <name> joined from <Country>` when a country is known. */
+    internal fun joinLine(name: String, country: String? = null): Component = Paint.gray(
+        Paint.darkGray("["),
+        Paint.green("+"),
+        Paint.darkGray("]"),
+        " ",
+        Paint.green(name),
+        " joined",
+        country?.let { Paint.gray(" from ", Paint.green(it)) },
     )
 
     /** `[-] <name> left.` — the Portal's exact leave line (note the trailing period). */
     private fun leaveLine(name: String): Component = Paint.gray(
         Paint.darkGray("["), Paint.red("-"), Paint.darkGray("]"), " ", Paint.red(name), " left.",
     )
+
+    private fun isPrivateAddress(address: InetAddress): Boolean =
+        address.isLoopbackAddress ||
+            address.isSiteLocalAddress ||
+            address.isLinkLocalAddress ||
+            address.isAnyLocalAddress
 }
