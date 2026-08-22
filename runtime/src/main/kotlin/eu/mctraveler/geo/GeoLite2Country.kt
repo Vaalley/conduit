@@ -8,11 +8,26 @@ import java.util.Arrays
 import java.util.Comparator
 import java.util.zip.ZipFile
 
+/** A country as GeoLite2 names it: `Canada`, `CA`. The ISO code is absent for a few entries. */
 data class GeoCountry(
     val name: String,
     val isoCode: String?,
 )
 
+/**
+ * MaxMind's GeoLite2 Country data in its CSV form, loaded into memory for
+ * address → country lookups (docs/geoip.md). The three CSV members — the IPv4
+ * and IPv6 block lists and the English locations list — carry ~650k networks
+ * between them, so each table is stored as parallel primitive arrays sorted by
+ * network start and searched by unsigned binary search, never as a row per
+ * network.
+ *
+ * Columns are read by header name, not position: MaxMind adds columns over time
+ * (`is_anycast` was the last) and a new one must not shift the data out from
+ * under us. A row we cannot make sense of is counted and skipped rather than
+ * failing the load; a header missing a column we need is fatal, because the
+ * alternative is silently answering "unknown country" forever.
+ */
 class GeoLite2Country private constructor(
     private val ipv4: Ipv4Table,
     private val ipv6: Ipv6Table,

@@ -19,6 +19,19 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
 
+/**
+ * The join announcement's country source (docs/geoip.md): keeps a
+ * [GeoLite2Country] loaded from whatever GeoLite2 Country CSV data the operator
+ * put under `<server dir>/mctraveler/geoip/`, and hands [ChatFeature] a country
+ * for a joining player's address.
+ *
+ * Loading parses hundreds of thousands of CSV rows, so it happens on its own
+ * daemon thread and publishes the finished database when it is done; until then
+ * (and whenever there is no data at all) lookups answer null and join lines are
+ * simply the plain ones. The data is MaxMind's and not redistributable, so it
+ * never lives in this repository — an operator either drops the archive in
+ * place or sets the two credential variables and lets the server fetch it.
+ */
 object GeoIpFeature {
     private const val MAX_AGE_DAYS = 7L
     private const val ZIP_NAME = "GeoLite2-Country-CSV.zip"
@@ -82,9 +95,7 @@ object GeoIpFeature {
                 )
                 return
             }
-            val loaded = source.load { summary ->
-                MCTraveler.LOGGER.warn(summary)
-            }
+            val loaded = source.load(MCTraveler.LOGGER::info)
             if (executor !== pool || pool.isShutdown) return
             database = loaded
             MCTraveler.LOGGER.info("GeoLite2 Country data loaded from {}", source.description)
