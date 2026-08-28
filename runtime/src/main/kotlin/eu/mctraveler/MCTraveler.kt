@@ -7,6 +7,7 @@ import eu.mctraveler.chat.PrivateMessages
 import eu.mctraveler.crystal.CrystalFeature
 import eu.mctraveler.embassy.EmbassiesFeature
 import eu.mctraveler.http.HttpApi
+import eu.mctraveler.lodeway.LodewayFeature
 import eu.mctraveler.map.MapCommand
 import eu.mctraveler.map.MapItemGuard
 import eu.mctraveler.notepad.NotepadFeature
@@ -72,6 +73,9 @@ object MCTraveler {
         eu.mctraveler.worlds.WorldsFeature.register()
         RegionsFeature.register()
         EmbassiesFeature.register()
+        // After the regions it publishes: it subscribes to the live service at
+        // SERVER_STARTED, and the service is created by the handler above.
+        LodewayFeature.register()
         CrystalFeature.register()
         HttpApi.register()
         MapCommand.register()

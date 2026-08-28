@@ -36,6 +36,13 @@ dependencies {
     // through standard variants; the old namedElements configuration is gone.)
     implementation(project(":bootstrap"))
 
+    // Lodeway's map plugin API — the optional web-map integration compiles
+    // against it and never ships it (docs/lodeway-map.md, libs/README.md). A
+    // vendored jar rather than a coordinate because the API is pre-release.
+    val lodewayApi = files("../libs/lodeway-pluginapi-0.1.0.jar")
+    compileOnly(lodewayApi)
+    testImplementation(lodewayApi)
+
     testImplementation("net.fabricmc:fabric-loader-junit:$loaderVersion")
 }
 
