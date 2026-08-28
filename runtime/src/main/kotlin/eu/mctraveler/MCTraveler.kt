@@ -6,6 +6,7 @@ import eu.mctraveler.chat.ChatFeature
 import eu.mctraveler.chat.PrivateMessages
 import eu.mctraveler.crystal.CrystalFeature
 import eu.mctraveler.embassy.EmbassiesFeature
+import eu.mctraveler.geo.GeoIpFeature
 import eu.mctraveler.http.HttpApi
 import eu.mctraveler.lodeway.LodewayFeature
 import eu.mctraveler.map.MapCommand
@@ -46,6 +47,7 @@ object MCTraveler {
         TabListFeature.register()
         PrivateMessages.register()
         ChatFeature.register()
+        GeoIpFeature.register()
         ChatBridge.register()
         AwayFeature.register()
         NoRain.register()
