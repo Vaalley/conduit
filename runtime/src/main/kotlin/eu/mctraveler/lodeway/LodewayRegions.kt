@@ -47,6 +47,9 @@ object LodewayRegions {
 
     private const val STROKE_WIDTH = 1
 
+    /** How many members a popup names before it starts counting them instead. */
+    private const val MAX_MEMBERS_SHOWN = 10
+
     /** The live map, once Lodeway has one; null while no Lodeway runtime is attached. */
     private var map: LodewayMap? = null
 
@@ -172,24 +175,31 @@ object LodewayRegions {
         }
     }
 
-    /** The popup: plain text, in the order a visitor wants to read it. */
+    /**
+     * The popup: who lives here, and what kind of region it is. Plain text.
+     *
+     * Deliberately short. The label above it already names the region and the
+     * shape below it already says where it is and how big — a card that
+     * repeated the coordinates would be spending its whole height on what the
+     * map is drawing anyway. What the map cannot draw is the member list, so
+     * that is what the card is for.
+     */
     private fun detail(region: Region, memberName: (UUID) -> String?): String {
         val lines = mutableListOf<String>()
-        val where = RegionWorlds.locateInfo(region.world)
-        lines += if (Region.EMBASSY_FLAG in region.flags) "Embassy in the $where."
-        else "Region in the $where."
-        lines += "Bounds: X ${region.minX} to ${region.maxX}, Z ${region.minZ} to ${region.maxZ}" +
-            " (${region.maxX - region.minX + 1} x ${region.maxZ - region.minZ + 1} blocks)"
-        if (hasCustomHeight(region)) lines += "Height: Y ${region.minY} to ${region.maxY}"
+        if (Region.EMBASSY_FLAG in region.flags) lines += "Embassy"
+        // The embassy flag is what the line above already said.
+        val flags = region.flags.filterNot { it == Region.EMBASSY_FLAG }
+        if (flags.isNotEmpty()) lines += "Flags: ${flags.joinToString(", ")}"
         // An unresolvable member is left out rather than shown as a uuid, which is
         // how `/rg locate` and the sidebar treat one.
         val members = region.members.mapNotNull(memberName)
-        if (members.isNotEmpty()) lines += "Members: ${members.joinToString(", ")}"
-        // The embassy flag is what the first line already said.
-        val flags = region.flags.filterNot { it == Region.EMBASSY_FLAG }
-        if (flags.isNotEmpty()) lines += "Flags: ${flags.joinToString(", ")}"
-        region.parent?.let { lines += "Inside: ${it.title}" }
-        if (region.subRegions.isNotEmpty()) lines += "Sub-regions: ${region.subRegions.size}"
+        if (members.isNotEmpty()) {
+            lines += "Members:"
+            lines += members.take(MAX_MEMBERS_SHOWN)
+            // A region may hold 99 members, and a card that listed all of them
+            // would be taller than the map it sits on.
+            if (members.size > MAX_MEMBERS_SHOWN) lines += "and ${members.size - MAX_MEMBERS_SHOWN} more"
+        }
         return lines.joinToString("\n")
     }
 

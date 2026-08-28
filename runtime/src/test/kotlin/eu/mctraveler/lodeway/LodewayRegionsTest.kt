@@ -4,13 +4,9 @@ import app.lodeway.api.map.Area
 import app.lodeway.api.map.Lodeway
 import eu.mctraveler.region.Region
 import java.util.UUID
-import net.minecraft.SharedConstants
-import net.minecraft.server.Bootstrap
 import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -25,16 +21,6 @@ import org.junit.jupiter.api.Test
  * detect the absence of.
  */
 class LodewayRegionsTest {
-    companion object {
-        // The popup names the dimension through `RegionWorlds`, whose vanilla
-        // `Level` constants need the game bootstrapped even in the unit tier.
-        @JvmStatic
-        @BeforeAll
-        fun bootstrapGame() {
-            SharedConstants.tryDetectVersion()
-            Bootstrap.bootStrap()
-        }
-    }
 
     private val alice = UUID.fromString("11111111-1111-1111-1111-111111111111")
     private val bob = UUID.fromString("22222222-2222-2222-2222-222222222222")
@@ -81,9 +67,49 @@ class LodewayRegionsTest {
         // The far edge of the far block, not its corner: 61 blocks wide.
         assertEquals(listOf(-20.0, 41.0, 41.0, -20.0), area.xs().toList())
         assertEquals(listOf(-20.0, -20.0, 61.0, 61.0), area.zs().toList())
-        assertTrue(area.detail().contains("Region in the overworld."))
-        assertTrue(area.detail().contains("(61 x 81 blocks)"))
-        assertTrue(area.detail().contains("Members: Alice"))
+        assertEquals("Members:\nAlice", area.detail())
+    }
+
+    /**
+     * The card names who lives there and nothing the map is already drawing:
+     * no dimension, no coordinates, no size, no height, no sub-region count.
+     */
+    @Test
+    fun `the popup says nothing the map already shows`() {
+        val town = region(title = "Riverside")
+        town.startY = 96
+        town.endY = 64
+        town.members.add(alice)
+        town.subRegions.add(region(title = "Alice's Plot", startX = 0, startZ = 0, endX = 10, endZ = 10))
+        publish(listOf(town))
+
+        val detail = areas().first { it.label() == "Riverside" }.detail()
+        assertEquals("Members:\nAlice", detail)
+        assertFalse(detail.contains("overworld"))
+        assertFalse(detail.contains("blocks"))
+        assertFalse(detail.contains("Bounds"))
+        assertFalse(detail.contains("Height"))
+        assertFalse(detail.contains("Sub-regions"))
+    }
+
+    /** A region may hold 99 members; a card that listed them all would be a page. */
+    @Test
+    fun `a long member list is cut short and counted`() {
+        val town = region(title = "Riverside")
+        val everyone = (1..14).map { UUID.nameUUIDFromBytes("resident-$it".toByteArray()) }
+        everyone.forEach(town.members::add)
+        LodewayRegions.publishTo(
+            Lodeway.map(),
+            listOf(town),
+            worldName = { "minecraft:overworld" },
+            memberName = { uuid -> "Resident${everyone.indexOf(uuid) + 1}" },
+            previous = emptySet(),
+        )
+
+        val lines = areas().single().detail().lines()
+        assertEquals("Members:", lines.first())
+        assertEquals((1..10).map { "Resident$it" }, lines.drop(1).dropLast(1))
+        assertEquals("and 4 more", lines.last())
     }
 
     /** Full build height is every region's default and says nothing worth drawing. */
@@ -100,11 +126,10 @@ class LodewayRegionsTest {
         assertTrue(area.hasHeight())
         assertEquals(64.0, area.minY())
         assertEquals(97.0, area.maxY())
-        assertTrue(area.detail().contains("Height: Y 64 to 96"))
     }
 
     @Test
-    fun `sub-regions are drawn too, and named after their parent`() {
+    fun `sub-regions are drawn too`() {
         val town = region(title = "Riverside")
         val plot = region(title = "Alice's Plot", startX = 0, startZ = 0, endX = 10, endZ = 10)
         town.subRegions.add(plot)
@@ -112,10 +137,9 @@ class LodewayRegionsTest {
         publish(listOf(town))
 
         assertEquals(listOf("Riverside", "Alice's Plot"), areas().map { it.label() })
-        val parent = areas().first { it.label() == "Riverside" }
+        // The child is its own area, at its own coordinates, inside the parent's.
         val child = areas().first { it.label() == "Alice's Plot" }
-        assertTrue(parent.detail().contains("Sub-regions: 1"))
-        assertTrue(child.detail().contains("Inside: Riverside"))
+        assertEquals(listOf(0.0, 11.0, 11.0, 0.0), child.xs().toList())
     }
 
     /** An embassy is a region with a flag, and reads as one on the map. */
@@ -128,7 +152,7 @@ class LodewayRegionsTest {
         publish(listOf(plain, embassy))
 
         val drawn = areas().associateBy { it.label() }
-        assertTrue(drawn.getValue("Embassy").detail().startsWith("Embassy in the overworld."))
+        assertTrue(drawn.getValue("Embassy").detail().startsWith("Embassy"))
         // The embassy flag is the first line; the others are still worth listing.
         assertTrue(drawn.getValue("Embassy").detail().contains("Flags: PUBLIC"))
         assertTrue(drawn.getValue("Plain").stroke() != drawn.getValue("Embassy").stroke())
@@ -169,7 +193,6 @@ class LodewayRegionsTest {
         home.members.add(UUID.fromString("33333333-3333-3333-3333-333333333333"))
         publish(listOf(home))
 
-        assertEquals("Members: Alice", areas().single().detail().lines().first { it.startsWith("Members") })
-        assertNull(areas().single().detail().lines().firstOrNull { it.contains("3333") })
+        assertEquals(listOf("Members:", "Alice"), areas().single().detail().lines())
     }
 }

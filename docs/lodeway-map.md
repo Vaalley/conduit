@@ -18,8 +18,16 @@ API it does not run either — see *The guard* below.
 | `minX`/`maxX`, `minZ`/`maxZ` | the four corners, the far edge taken one block past `max` |
 | `startY`/`endY`, when not the 320/−64 defaults | the area's height |
 | world | the dimension's full id (`minecraft:overworld`, `mctraveler:embassies`) |
-| members, flags, parent, sub-region count | the popup |
+| members, flags | the popup |
 | the `EMBASSY` flag | a second colour, and the popup's first line |
+
+The popup is deliberately short: `Embassy` when it is one, `Flags: …` when
+any other flag is set, then `Members:` and one member per line, ten of them at
+most and `and N more` after that (a region may hold 99). It says nothing the
+map is already drawing — no dimension, no coordinates, no size, no height, no
+sub-region count. The label above it names the region and the shape below it
+says where and how big; a card repeating those would spend its height on what
+the visitor can already see.
 
 Marker ids are the region's position in the tree — `0`, `0.1`, `3.2` — so a
 rename or a resize updates the marker that was already there. A deletion
