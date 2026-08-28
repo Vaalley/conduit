@@ -22,9 +22,29 @@ class RegionService(private val file: Path) {
     val roots: MutableList<Region> =
         if (Files.exists(file)) RegionStore.parse(Files.readString(file)) else mutableListOf()
 
+    /** What [onChange] registered, in registration order. */
+    private val listeners = mutableListOf<() -> Unit>()
+
+    /**
+     * Runs [listener] after every save — which is after every change, since a
+     * mutation that is not followed by a [save] is a mutation that would not
+     * survive a restart either.
+     *
+     * For the readers that keep their own picture of the tree and cannot poll
+     * for one: the Lodeway map layer
+     * ([eu.mctraveler.lodeway.LodewayRegions]) is the first. A listener runs on
+     * the server thread inside the command that changed something, so it must
+     * be cheap, and it must not throw: an exception here would surface as a
+     * failed `/rg` command.
+     */
+    fun onChange(listener: () -> Unit) {
+        listeners.add(listener)
+    }
+
     fun save() {
         file.parent?.let(Files::createDirectories)
         Files.writeString(file, RegionStore.serialize(roots))
+        listeners.forEach { it() }
     }
 
     /** Attaches [region] under [parent] (or as a root) and saves. */
