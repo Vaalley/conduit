@@ -3,7 +3,6 @@ package eu.mctraveler.geo
 import eu.mctraveler.Conduit
 import eu.mctraveler.MCTraveler
 import eu.mctraveler.reloadable
-import java.io.BufferedInputStream
 import java.net.InetAddress
 import java.net.URI
 import java.net.http.HttpClient
@@ -14,35 +13,25 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.time.Duration
-import java.util.Base64
+import java.time.YearMonth
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
 
 /**
- * The join announcement's country source (docs/geoip.md): keeps a
- * [GeoLite2Country] loaded from whatever GeoLite2 Country CSV data the operator
- * put under `<server dir>/mctraveler/geoip/`, and hands [ChatFeature] a country
- * for a joining player's address.
- *
- * Loading parses hundreds of thousands of CSV rows, so it happens on its own
- * daemon thread and publishes the finished database when it is done; until then
- * (and whenever there is no data at all) lookups answer null and join lines are
- * simply the plain ones. The data is MaxMind's and not redistributable, so it
- * never lives in this repository — an operator either drops the archive in
- * place or sets the two credential variables and lets the server fetch it.
+ * The join announcement's country source: asynchronously loads DB-IP data from
+ * `<server dir>/mctraveler/geoip/` and publishes it for address lookups.
  */
 object GeoIpFeature {
-    private const val MAX_AGE_DAYS = 7L
-    private const val ZIP_NAME = "GeoLite2-Country-CSV.zip"
-    private const val DOWNLOAD_URL =
-        "https://download.maxmind.com/geoip/databases/GeoLite2-Country-CSV/download?suffix=zip"
-    private const val IPV4_NAME = GeoLite2Country.IPV4_FILE
-    private const val IPV6_NAME = GeoLite2Country.IPV6_FILE
-    private const val LOCATIONS_NAME = GeoLite2Country.LOCATIONS_FILE
+    private const val AUTO_DOWNLOAD_ENV = "CONDUIT_GEOIP_AUTO_DOWNLOAD"
+    private const val DOWNLOAD_URL = "https://download.db-ip.com/free/dbip-country-lite-%s.csv.gz"
+    private val MONTH_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM")
 
     @Volatile
-    private var database: GeoLite2Country? = null
+    private var database: DbIpCountry? = null
 
     @Volatile
     private var executor: ExecutorService? = null
@@ -81,145 +70,109 @@ object GeoIpFeature {
     private fun load(directory: Path, pool: ExecutorService) {
         try {
             Files.createDirectories(directory)
-            var source = findSource(directory)
-            val accountId = System.getenv("CONDUIT_MAXMIND_ACCOUNT_ID")
-            val licenseKey = System.getenv("CONDUIT_MAXMIND_LICENSE_KEY")
-            if (isExpired(source) && !accountId.isNullOrBlank() && !licenseKey.isNullOrBlank()) {
-                val downloaded = download(directory, accountId, licenseKey)
-                if (downloaded != null) source = DataSource.Zip(downloaded)
+            val currentMonth = YearMonth.now(ZoneOffset.UTC)
+            val current = directory.resolve(fileName(currentMonth))
+            var source = current.takeIf(Files::isRegularFile)
+            if (source == null && autoDownloadEnabled()) {
+                source = download(directory, currentMonth)
+            }
+            if (source == null) {
+                source = findNewestLocal(directory)
             }
             if (source == null) {
                 MCTraveler.LOGGER.warn(
-                    "No GeoLite2 Country CSV data found under $directory; " +
-                        "country join announcements disabled",
+                    "No DB-IP country data found under $directory; country join announcements disabled",
                 )
                 return
             }
-            val loaded = source.load(MCTraveler.LOGGER::info)
+            var loadedSource = source
+            val loaded = try {
+                DbIpCountry.load(source, MCTraveler.LOGGER::info)
+            } catch (failure: Exception) {
+                val fallback = findNewestLocal(directory, source)
+                if (fallback == null) throw failure
+                MCTraveler.LOGGER.warn(
+                    "Failed to load DB-IP country data from $source; trying $fallback",
+                    failure,
+                )
+                loadedSource = fallback
+                DbIpCountry.load(fallback, MCTraveler.LOGGER::info)
+            }
             if (executor !== pool || pool.isShutdown) return
             database = loaded
-            MCTraveler.LOGGER.info("GeoLite2 Country data loaded from {}", source.description)
+            MCTraveler.LOGGER.info("DB-IP country data loaded from {}", loadedSource)
         } catch (failure: Exception) {
             MCTraveler.LOGGER.warn(
-                "Failed to load GeoLite2 Country data; keeping any existing data",
+                "Failed to load DB-IP country data; keeping any existing data",
                 failure,
             )
         }
     }
 
-    private fun findSource(directory: Path): DataSource? {
+    private fun autoDownloadEnabled(): Boolean {
+        val value = System.getenv(AUTO_DOWNLOAD_ENV)?.trim() ?: return true
+        return !value.equals("false", ignoreCase = true) && value != "0"
+    }
+
+    private fun findNewestLocal(directory: Path, excluded: Path? = null): Path? {
         if (Files.notExists(directory)) return null
-        val extracted = HashMap<Path, ExtractedPaths>()
-        val zipPaths = ArrayList<Path>()
         Files.walk(directory).use { paths ->
-            paths.filter(Files::isRegularFile).forEach { path ->
-                when (path.fileName.toString()) {
-                    IPV4_NAME -> {
-                        extracted.getOrPut(path.parent) { ExtractedPaths() }.ipv4 = path
-                    }
-
-                    IPV6_NAME -> {
-                        extracted.getOrPut(path.parent) { ExtractedPaths() }.ipv6 = path
-                    }
-
-                    LOCATIONS_NAME -> {
-                        extracted.getOrPut(path.parent) { ExtractedPaths() }.locations = path
-                    }
-
-                    else -> if (
-                        path.fileName.toString().contains("Country-CSV", ignoreCase = true) &&
-                        path.fileName.toString().endsWith(".zip", ignoreCase = true)
-                    ) {
-                        zipPaths.add(path)
-                    }
-                }
-            }
+            return paths.iterator().asSequence()
+                .filter(Files::isRegularFile)
+                .filter { it != excluded }
+                .filter(::isDbIpFile)
+                .maxByOrNull { Files.getLastModifiedTime(it).toMillis() }
         }
-        val candidates = ArrayList<DataSource>()
-        extracted.values.mapNotNullTo(candidates) { paths ->
-            val ipv4 = paths.ipv4
-            val ipv6 = paths.ipv6
-            val locations = paths.locations
-            if (ipv4 != null && ipv6 != null && locations != null) {
-                DataSource.Extracted(ipv4, ipv6, locations)
-            } else {
-                null
-            }
-        }
-        zipPaths.mapTo(candidates, DataSource::Zip)
-        return candidates.maxByOrNull { it.modifiedAt() }
     }
 
-    private fun isExpired(source: DataSource?): Boolean {
-        val modifiedAt = source?.modifiedAt() ?: return true
-        return System.currentTimeMillis() - modifiedAt >= Duration.ofDays(MAX_AGE_DAYS).toMillis()
+    private fun isDbIpFile(path: Path): Boolean {
+        val name = path.fileName.toString().lowercase(Locale.ROOT)
+        return name.startsWith("dbip-country-lite-") &&
+            (name.endsWith(".csv") || name.endsWith(".csv.gz"))
     }
 
-    private fun download(directory: Path, accountId: String, licenseKey: String): Path? {
-        val target = directory.resolve(ZIP_NAME)
-        val temporary = Files.createTempFile(directory, "$ZIP_NAME.", ".tmp")
+    private fun fileName(month: YearMonth): String = "dbip-country-lite-${month.format(MONTH_FORMAT)}.csv.gz"
+
+    private fun download(directory: Path, currentMonth: YearMonth): Path? {
+        val client = HttpClient.newBuilder()
+            .followRedirects(HttpClient.Redirect.NORMAL)
+            .connectTimeout(Duration.ofSeconds(20))
+            .build()
+        val current = downloadMonth(client, directory, currentMonth)
+        if (current.path != null) return current.path
+        if (!current.notFound) return null
+        return downloadMonth(client, directory, currentMonth.minusMonths(1)).path
+    }
+
+    private fun downloadMonth(
+        client: HttpClient,
+        directory: Path,
+        month: YearMonth,
+    ): DownloadAttempt {
+        val target = directory.resolve(fileName(month))
+        val temporary = Files.createTempFile(directory, "${target.fileName}.", ".tmp")
         try {
-            val credentials = Base64.getEncoder()
-                .encodeToString("$accountId:$licenseKey".toByteArray(Charsets.UTF_8))
-            val client = HttpClient.newBuilder()
-                .followRedirects(HttpClient.Redirect.NEVER)
-                .connectTimeout(Duration.ofSeconds(20))
+            val request = HttpRequest.newBuilder(
+                URI.create(DOWNLOAD_URL.format(month.format(MONTH_FORMAT))),
+            )
+                .timeout(Duration.ofMinutes(2))
+                .GET()
                 .build()
-            var uri = URI.create(DOWNLOAD_URL)
-            var authorization = true
-            val visited = HashSet<URI>()
-            var downloaded = false
-            for (attempt in 0..2) {
-                if (!visited.add(uri)) {
-                    MCTraveler.LOGGER.warn("MaxMind GeoLite2 download returned a redirect loop")
-                    return null
-                }
-                val request = HttpRequest.newBuilder(uri)
-                    .timeout(Duration.ofMinutes(2))
-                    // The presigned redirect target does not expect MaxMind Basic Auth.
-                    .apply {
-                        if (authorization) header("Authorization", "Basic $credentials")
+            val response = client.send(request, HttpResponse.BodyHandlers.ofInputStream())
+            response.body().use { body ->
+                if (response.statusCode() !in 200..299) {
+                    if (response.statusCode() != 404) {
+                        MCTraveler.LOGGER.warn(
+                            "DB-IP country download for {} returned HTTP {}",
+                            month,
+                            response.statusCode(),
+                        )
                     }
-                    .GET()
-                    .build()
-                val response = client.send(request, HttpResponse.BodyHandlers.ofInputStream())
-                var redirect: URI? = null
-                response.body().use { body ->
-                    when {
-                        response.statusCode() in 300..399 -> {
-                            val location = response.headers().firstValue("Location").orElse(null)
-                            if (location.isNullOrBlank()) {
-                                MCTraveler.LOGGER.warn(
-                                    "MaxMind GeoLite2 download redirect has no Location header",
-                                )
-                                return null
-                            }
-                            redirect = uri.resolve(location)
-                        }
-
-                        response.statusCode() !in 200..299 -> {
-                            MCTraveler.LOGGER.warn(
-                                "MaxMind GeoLite2 download returned HTTP {}",
-                                response.statusCode(),
-                            )
-                            return null
-                        }
-
-                        else -> {
-                            BufferedInputStream(body).use { input ->
-                                Files.copy(input, temporary, StandardCopyOption.REPLACE_EXISTING)
-                            }
-                            downloaded = true
-                        }
-                    }
+                    return DownloadAttempt(null, response.statusCode() == 404)
                 }
-                if (downloaded) break
-                uri = redirect ?: return null
-                authorization = false
-            }
-            if (!downloaded) {
-                MCTraveler.LOGGER.warn("MaxMind GeoLite2 download followed too many redirects")
-                return null
+                body.use { input ->
+                    Files.copy(input, temporary, StandardCopyOption.REPLACE_EXISTING)
+                }
             }
             try {
                 Files.move(
@@ -231,58 +184,21 @@ object GeoIpFeature {
             } catch (_: AtomicMoveNotSupportedException) {
                 Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING)
             }
-            MCTraveler.LOGGER.info("Downloaded fresh GeoLite2 Country data")
-            return target
+            MCTraveler.LOGGER.info("Downloaded DB-IP country data for {}", month)
+            return DownloadAttempt(target, false)
         } catch (failure: Exception) {
             MCTraveler.LOGGER.warn(
-                "Failed to download GeoLite2 Country data; keeping any existing local data",
+                "Failed to download DB-IP country data for $month",
                 failure,
             )
-            return null
+            return DownloadAttempt(null, false)
         } finally {
             Files.deleteIfExists(temporary)
         }
     }
 
-    private sealed interface DataSource {
-        val description: String
-
-        fun load(log: (String) -> Unit): GeoLite2Country
-
-        fun modifiedAt(): Long
-
-        data class Extracted(
-            val ipv4: Path,
-            val ipv6: Path,
-            val locations: Path,
-        ) : DataSource {
-            override val description: String get() = ipv4.parent.toString()
-
-            override fun load(log: (String) -> Unit): GeoLite2Country =
-                Files.newBufferedReader(ipv4).use { ipv4Reader ->
-                    Files.newBufferedReader(ipv6).use { ipv6Reader ->
-                        Files.newBufferedReader(locations).use { locationsReader ->
-                            GeoLite2Country.load(ipv4Reader, ipv6Reader, locationsReader, log)
-                        }
-                    }
-                }
-
-            override fun modifiedAt(): Long = listOf(ipv4, ipv6, locations)
-                .maxOf { Files.getLastModifiedTime(it).toMillis() }
-        }
-
-        data class Zip(val path: Path) : DataSource {
-            override val description: String get() = path.toString()
-
-            override fun load(log: (String) -> Unit): GeoLite2Country = GeoLite2Country.loadZip(path, log)
-
-            override fun modifiedAt(): Long = Files.getLastModifiedTime(path).toMillis()
-        }
-    }
-
-    private data class ExtractedPaths(
-        var ipv4: Path? = null,
-        var ipv6: Path? = null,
-        var locations: Path? = null,
+    private data class DownloadAttempt(
+        val path: Path?,
+        val notFound: Boolean,
     )
 }

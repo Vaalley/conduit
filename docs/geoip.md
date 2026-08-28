@@ -1,24 +1,29 @@
 # GeoIP join countries
 
 MCTraveler can add the country a player joined from to the server's join
-announcement. It uses MaxMind's free GeoLite2 Country CSV database.
+announcement. It uses DB-IP's free IP-to-Country Lite database.
 
 ## Setup
 
-1. Create a [MaxMind account](https://www.maxmind.com/en/geolite2/signup).
-2. Create a license key in the account portal.
-3. Download the **GeoLite2 Country CSV** archive using that account.
-4. Put the archive, or its three CSV files, under
-   `mctraveler/geoip/` in the server directory. The extracted files may remain
-   in the dated directory created by the archive.
+No account or license key is required. The server automatically downloads the
+current month's compressed database when it has no local copy. If the current
+month is not published yet, it tries the previous month.
 
-The server can download and refresh the archive automatically when both
-`CONDUIT_MAXMIND_ACCOUNT_ID` and `CONDUIT_MAXMIND_LICENSE_KEY` are set in its
-environment. It downloads only when local data is absent or more than seven
-days old, and keeps the existing data if a refresh fails. The credentials are
-used only for the download and no MaxMind data is stored in this repository.
+To install a database manually, download the DB-IP IP-to-Country Lite CSV
+archive and place it under `mctraveler/geoip/` in the server directory. Keep
+the filename in this form:
 
-Join announcements omit the country while the database is loading, and for
-loopback or private network addresses.
+```text
+dbip-country-lite-YYYY-MM.csv.gz
+```
 
-This product includes GeoLite2 data created by MaxMind, available from https://www.maxmind.com.
+The server searches this directory recursively and falls back to the newest
+existing `.csv.gz` or `.csv` file if a refresh fails. Set
+`CONDUIT_GEOIP_AUTO_DOWNLOAD=false` (or `0`) to disable all automatic
+downloads and use only local data.
+
+Join announcements omit the country while the database is loading, when no
+database is available, and for loopback or private network addresses.
+Database files are not committed to this repository.
+
+[IP Geolocation by DB-IP](https://db-ip.com)
