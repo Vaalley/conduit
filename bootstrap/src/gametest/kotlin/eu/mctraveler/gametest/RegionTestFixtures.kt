@@ -4,6 +4,7 @@ import eu.mctraveler.region.Region
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.text.Paint
 import kotlin.math.floor
+import net.minecraft.core.Direction
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.network.chat.Component
 
@@ -29,6 +30,14 @@ fun createRegion(
     return checkNotNull(
         service.regionAt("world", floor(player.x).toInt(), 1, floor(player.z).toInt()),
     ) { "region creation for ${player.gameProfile.name} did not take" }
+}
+
+/** Points the player at a cardinal direction, so `/rg extend` reads their facing. */
+fun MessageCapturingPlayer.face(direction: Direction) {
+    val yaw = direction.toYRot()
+    setYRot(yaw)
+    yHeadRot = yaw
+    check(this.direction == direction) { "facing did not take: ${this.direction} != $direction" }
 }
 
 /** The Portal's one refusal, naming the region that turned the player away. */

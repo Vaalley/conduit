@@ -99,6 +99,13 @@ object RegionTracker {
         for (player in server.playerList.players) refresh(player)
     }
 
+    /**
+     * A region's footprint grew under everyone's feet (`/rg extend`): the same
+     * full recompute as a removal, so anyone the region now covers gets its
+     * sidebar and Adventure mode in the same breath rather than next tick.
+     */
+    fun afterBoundsChange(server: MinecraftServer) = afterRemoval(server)
+
     /** Forgets a player's region state and restores any mode transition we own. */
     fun forget(player: ServerPlayer) {
         restoreGameMode(player)

@@ -14,6 +14,7 @@ import kotlin.math.floor
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
 import net.minecraft.commands.SharedSuggestionProvider
+import net.minecraft.core.Direction
 import net.minecraft.network.chat.Component
 import net.minecraft.server.level.ServerPlayer
 
@@ -68,6 +69,7 @@ object RegionCommands {
         Paint.gray(" - "), Paint.white("/rg remove <player>"), "\n",
         Paint.gray(" - "), Paint.white("/rg delete"), "\n",
         Paint.gray(" - "), Paint.white("/rg start"), " ", Paint.gray("+ "), Paint.white("/rg end"), "\n",
+        Paint.gray(" - "), Paint.white("/rg extend <distance>"), "\n",
         Paint.gray(" - "), Paint.white("/rg flag [flag]"), "\n",
         Paint.gray(" - "), Paint.white("/rg locate <name>"),
     )
@@ -135,6 +137,16 @@ object RegionCommands {
             .then(Commands.literal("delete").executes { ctx -> reply(ctx) { delete(it) } })
             .then(Commands.literal("start").executes { ctx -> reply(ctx) { start(it) } })
             .then(Commands.literal("end").executes { ctx -> reply(ctx) { end(it) } })
+            .then(
+                Commands.literal("extend")
+                    .executes { ctx -> reply(ctx) { Paint.usage("/$alias extend <distance>") } }
+                    .then(
+                        Commands.argument("distance", IntegerArgumentType.integer())
+                            .executes { ctx ->
+                                reply(ctx) { extend(it, IntegerArgumentType.getInteger(ctx, "distance")) }
+                            },
+                    ),
+            )
             .then(
                 Commands.literal("flag")
                     .executes { ctx -> reply(ctx) { listFlags(it) } }
@@ -286,6 +298,71 @@ object RegionCommands {
         return Paint.success(
             "Region ", Paint.green(title),
             " created!\n\nYou can now rename the region:\n", Paint.green("/rg rename <name>"),
+        )
+    }
+
+    /**
+     * Grows the region the player stands in outward by [distance] blocks along
+     * the edge they are facing (their cardinal facing — N/S/E/W). Residents and
+     * admins may; the new footprint must stay within the Portal's [MAX_AREA]
+     * (admins excepted), inside the parent region if this is a sub-region, and
+     * clear of every other region.
+     */
+    private fun extend(player: ServerPlayer, distance: Int): Component {
+        val region = RegionTracker.regionOf(player)
+            ?: return Paint.error("You must stand in the region you want to extend")
+        if (!region.isResident(player.uuid) && !RegionsFeature.isAdmin(player)) {
+            return Paint.error("You are not a member of this region")
+        }
+        if (distance < 1) {
+            return Paint.usage("/rg extend <distance>")
+        }
+        if (Region.EMBASSY_FLAG in region.flags) {
+            return Paint.error("You cannot extend an embassy")
+        }
+
+        val facing = player.direction
+        var minX = region.minX
+        var maxX = region.maxX
+        var minZ = region.minZ
+        var maxZ = region.maxZ
+        when (facing) {
+            Direction.NORTH -> minZ -= distance
+            Direction.SOUTH -> maxZ += distance
+            Direction.WEST -> minX -= distance
+            Direction.EAST -> maxX += distance
+            else -> return Paint.usage("/rg extend <distance>")
+        }
+
+        val area = (maxX - minX + 1).toLong() * (maxZ - minZ + 1).toLong()
+        if (area > MAX_AREA && !RegionsFeature.isAdmin(player)) {
+            return Paint.error(
+                "Region too large ($area blocks). Limit is $MAX_AREA blocks. Ask an admin to extend it further.",
+            )
+        }
+
+        val parent = region.parent
+        if (parent != null &&
+            (minX < parent.minX || maxX > parent.maxX || minZ < parent.minZ || maxZ > parent.maxZ)
+        ) {
+            return Paint.error("You cannot extend a region outside ", Paint.red(parent.title))
+        }
+
+        val service = RegionsFeature.requireService()
+        service.firstOverlappingExtension(region, minX, maxX, minZ, maxZ)?.let {
+            return Paint.error("Overlapping region ", Paint.red(it.title), "!")
+        }
+
+        region.startX = minX
+        region.endX = maxX
+        region.startZ = minZ
+        region.endZ = maxZ
+        service.save()
+        RegionTracker.afterBoundsChange(player.level().server)
+
+        return Paint.success(
+            "Extended ", Paint.green(region.title),
+            " ", Paint.white(distance), " blocks ", Paint.white(facing.getName()),
         )
     }
 

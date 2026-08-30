@@ -109,6 +109,39 @@ class RegionService(private val file: Path) {
     }
 
     /**
+     * The first region that would overlap [region] if its x/z footprint grew
+     * to [minX]..[maxX] × [minZ]..[maxZ] — the `/rg extend` overlap check.
+     *
+     * Scans the whole tree in file order like [firstIntersecting], but skips
+     * [region] itself (and, by not recursing past it, its sub-regions, which
+     * lie inside it) and its ancestors (which contain it). A sibling or cousin
+     * the grown footprint now reaches is a real overlap and is returned.
+     */
+    fun firstOverlappingExtension(
+        region: Region,
+        minX: Int,
+        maxX: Int,
+        minZ: Int,
+        maxZ: Int,
+    ): Region? {
+        val ancestors = region.selfAndAncestors().toSet()
+
+        fun scan(regions: List<Region>): Region? {
+            for (candidate in regions) {
+                if (candidate === region) continue
+                if (candidate !in ancestors && candidate.world == region.world &&
+                    candidate.intersectsColumn(minX, maxX, minZ, maxZ)
+                ) {
+                    return candidate
+                }
+                scan(candidate.subRegions)?.let { return it }
+            }
+            return null
+        }
+        return scan(roots)
+    }
+
+    /**
      * Every region whose title or any member's name contains [query]
      * (case-insensitive), in depth-first file order — the `/rg locate` search.
      * [memberName] resolves a member uuid to a name, or null if unknown

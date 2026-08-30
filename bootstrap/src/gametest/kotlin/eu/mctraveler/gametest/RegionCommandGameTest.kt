@@ -4,6 +4,7 @@ import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.text.Paint
 import kotlin.math.floor
 import net.fabricmc.fabric.api.gametest.v1.GameTest
+import net.minecraft.core.Direction
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.network.chat.ClickEvent
 import net.minecraft.network.chat.Component
@@ -26,6 +27,7 @@ class RegionCommandGameTest {
         Paint.gray(" - "), Paint.white("/rg remove <player>"), "\n",
         Paint.gray(" - "), Paint.white("/rg delete"), "\n",
         Paint.gray(" - "), Paint.white("/rg start"), " ", Paint.gray("+ "), Paint.white("/rg end"), "\n",
+        Paint.gray(" - "), Paint.white("/rg extend <distance>"), "\n",
         Paint.gray(" - "), Paint.white("/rg flag [flag]"), "\n",
         Paint.gray(" - "), Paint.white("/rg locate <name>"),
     )
@@ -513,6 +515,207 @@ class RegionCommandGameTest {
             "the parent no longer answers where its sub-region was"
         }
         alice.leave()
+        helper.succeed()
+    }
+
+    // ---- /rg extend ----
+
+    @GameTest
+    fun bareRgExtendShowsUsage(helper: GameTestHelper) {
+        val player = MessageCapturingPlayer.join(helper, "T12ExtUse")
+        player.runCommand("rg extend")
+        helper.assertValueEqual(
+            player.messages.last(),
+            Paint.usage("/rg extend <distance>"),
+            "the bare /rg extend reply",
+        )
+        player.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun extendOutsideAnyRegionErrors(helper: GameTestHelper) {
+        val player = MessageCapturingPlayer.join(helper, "T12ExtOut")
+        player.standAt(helper, 0.0, 1.0, 0.0)
+        player.face(Direction.SOUTH)
+        player.runCommand("rg extend 3")
+        helper.assertValueEqual(
+            player.messages.last(),
+            Paint.error("You must stand in the region you want to extend"),
+            "the /rg extend outside-region reply",
+        )
+        player.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aNonMemberCannotExtend(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T12ExtNmA")
+        createRegion(helper, alice, 0.0 to 0.0, 7.0 to 3.0)
+
+        val bob = MessageCapturingPlayer.join(helper, "T12ExtNmB")
+        bob.standAt(helper, 3.0, 1.0, 1.0)
+        bob.face(Direction.SOUTH)
+        bob.runCommand("rg extend 2")
+        helper.assertValueEqual(
+            bob.messages.last(),
+            Paint.error("You are not a member of this region"),
+            "the non-member /rg extend reply",
+        )
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun extendRejectsZeroOrNegativeDistance(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T12ExtNeg")
+        createRegion(helper, alice, 0.0 to 0.0, 7.0 to 3.0)
+        alice.standAt(helper, 3.0, 1.0, 1.0)
+        alice.face(Direction.SOUTH)
+
+        val usage = Paint.usage("/rg extend <distance>")
+        alice.runCommand("rg extend 0")
+        helper.assertValueEqual(alice.messages.last(), usage, "the /rg extend 0 reply")
+        alice.runCommand("rg extend -4")
+        helper.assertValueEqual(alice.messages.last(), usage, "the /rg extend -4 reply")
+        alice.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aResidentExtendsTheEdgeTheyFace(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T12ExtMe")
+        val region = createRegion(helper, alice, 0.0 to 0.0, 7.0 to 1.0)
+        val southEdge = region.maxZ
+        val westEdge = region.minX
+
+        alice.standAt(helper, 3.0, 1.0, 0.0)
+        alice.face(Direction.SOUTH)
+        alice.runCommand("rg extend 3")
+        helper.assertValueEqual(
+            alice.messages.last(),
+            Paint.success(
+                "Extended ", Paint.green("T12ExtMe's Place"),
+                " ", Paint.white(3), " blocks ", Paint.white("south"),
+            ),
+            "the southward /rg extend reply",
+        )
+        helper.assertValueEqual(region.maxZ, southEdge + 3, "the region's south edge moved out 3")
+
+        alice.face(Direction.WEST)
+        alice.runCommand("rg extend 2")
+        helper.assertValueEqual(
+            alice.messages.last(),
+            Paint.success(
+                "Extended ", Paint.green("T12ExtMe's Place"),
+                " ", Paint.white(2), " blocks ", Paint.white("west"),
+            ),
+            "the westward /rg extend reply",
+        )
+        helper.assertValueEqual(region.minX, westEdge - 2, "the region's west edge moved out 2")
+
+        // The grown corner answers as the region now, live.
+        val service = RegionsFeature.requireService()
+        check(service.regionAt("world", region.minX, 1, region.maxZ) === region) {
+            "the extended corner is not the region"
+        }
+        alice.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun extendRefusesToOverlapAnotherRegion(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T12ExtOvA")
+        val region = createRegion(helper, alice, 0.0 to 0.0, 5.0 to 3.0)
+        val southEdge = region.maxZ
+
+        val bob = MessageCapturingPlayer.join(helper, "T12ExtOvB")
+        createRegion(helper, bob, 0.0 to 6.0, 5.0 to 9.0)
+
+        alice.standAt(helper, 2.0, 1.0, 1.0)
+        alice.face(Direction.SOUTH)
+        alice.runCommand("rg extend 10")
+        helper.assertValueEqual(
+            alice.messages.last(),
+            Paint.error("Overlapping region ", Paint.red("T12ExtOvB's Place"), "!"),
+            "the overlapping /rg extend reply",
+        )
+        helper.assertValueEqual(region.maxZ, southEdge, "the refused region kept its edge")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aSubRegionCannotExtendOutsideItsParent(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T12ExtSub")
+        val parent = createRegion(helper, alice, 0.0 to 0.0, 9.0 to 9.0)
+        alice.standAt(helper, 1.0, 1.0, 1.0)
+        alice.runCommand("rg start")
+        alice.standAt(helper, 4.0, 1.0, 4.0)
+        alice.runCommand("rg end")
+        val sub = parent.subRegions.single()
+        val southEdge = sub.maxZ
+
+        alice.standAt(helper, 2.0, 1.0, 2.0) // inside the sub-region
+        alice.face(Direction.SOUTH)
+        alice.runCommand("rg extend 20")
+        helper.assertValueEqual(
+            alice.messages.last(),
+            Paint.error("You cannot extend a region outside ", Paint.red("T12ExtSub's Place")),
+            "the sub-region past-parent /rg extend reply",
+        )
+        helper.assertValueEqual(sub.maxZ, southEdge, "the refused sub-region kept its edge")
+
+        // Within the parent it is allowed.
+        alice.runCommand("rg extend 3")
+        helper.assertValueEqual(sub.maxZ, southEdge + 3, "the sub-region extended inside its parent")
+        alice.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun extendRefusesToCrossTheSizeLimit(helper: GameTestHelper) {
+        val player = MessageCapturingPlayer.join(helper, "T12ExtCap")
+        // 99 × 50 = 4950 blocks: one small step from the limit. Far from every
+        // other test structure, like the oversized /rg end regions.
+        val region = createRegion(helper, player, 32000.0 to 0.0, 32098.0 to 49.0)
+        val southEdge = region.maxZ
+
+        player.standAt(helper, 32050.0, 1.0, 25.0)
+        player.face(Direction.SOUTH)
+        player.runCommand("rg extend 2") // 99 × 52 = 5148
+        helper.assertValueEqual(
+            player.messages.last(),
+            Paint.error("Region too large (5148 blocks). Limit is 5000 blocks. Ask an admin to extend it further."),
+            "the over-the-limit /rg extend reply",
+        )
+        helper.assertValueEqual(region.maxZ, southEdge, "the refused region kept its edge")
+        player.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun anAdminMayExtendPastTheSizeLimit(helper: GameTestHelper) {
+        val admin = MessageCapturingPlayer.join(helper, "T12ExtCapOp")
+        admin.makeAdmin()
+        val region = createRegion(helper, admin, 33000.0 to 0.0, 33098.0 to 49.0)
+        val southEdge = region.maxZ
+
+        admin.standAt(helper, 33050.0, 1.0, 25.0)
+        admin.face(Direction.SOUTH)
+        admin.runCommand("rg extend 100") // 99 × 150 = 14850
+        helper.assertValueEqual(
+            admin.messages.last(),
+            Paint.success(
+                "Extended ", Paint.green("T12ExtCapOp's Place"),
+                " ", Paint.white(100), " blocks ", Paint.white("south"),
+            ),
+            "the admin over-the-limit /rg extend reply",
+        )
+        helper.assertValueEqual(region.maxZ, southEdge + 100, "the admin region's edge moved out 100")
+        admin.leave()
         helper.succeed()
     }
 
