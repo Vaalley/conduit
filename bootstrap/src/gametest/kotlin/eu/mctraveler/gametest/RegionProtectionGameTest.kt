@@ -526,24 +526,160 @@ class RegionProtectionGameTest {
     }
 
     @GameTest
-    fun aStrangerCanPlaceAndTakeFlowersFromRegionPots(helper: GameTestHelper) {
+    fun aStrangerCannotPotOrUnpotFlowersInARegion(helper: GameTestHelper) {
+        // Issue #40: a flower pot changes what is in a region, so a non-member
+        // is refused at it — potting and un-potting alike.
         val alice = MessageCapturingPlayer.join(helper, "T14PotA")
         val bob = MessageCapturingPlayer.join(helper, "T14PotB")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
         helper.setBlock(FLOOR_AT, Blocks.STONE)
-        helper.setBlock(STONE_AT, Blocks.FLOWER_POT)
+        helper.setBlock(STONE_AT, Blocks.POTTED_POPPY)
         bob.standAt(helper, 2.0, 2.0, 1.0)
-        bob.setGameMode(GameType.ADVENTURE)
-        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.POPPY))
         bob.messages.clear()
 
-        helper.assertTrue(bob.usesHeldItemOn(helper, STONE_AT), "a stranger could not put a flower in a region pot")
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY)
+        helper.assertFalse(bob.usesHeldItemOn(helper, STONE_AT), "a stranger took a flower from a region pot")
         helper.assertBlockPresent(Blocks.POTTED_POPPY, STONE_AT)
+        helper.assertTrue(bob.wasRefusedBy("T14PotA's Place"), "un-potting emitted no refusal")
+
+        helper.setBlock(STONE_AT, Blocks.FLOWER_POT)
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.POPPY))
+        helper.assertFalse(bob.usesHeldItemOn(helper, STONE_AT), "a stranger potted a flower in a region")
+        helper.assertBlockPresent(Blocks.FLOWER_POT, STONE_AT)
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    // ---- issue #40: interaction classes ----
+
+    @GameTest
+    fun aNonMemberWorksAtAWorkstationWithoutAWord(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T40WorkA")
+        val bob = MessageCapturingPlayer.join(helper, "T40WorkB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(STONE_AT, Blocks.CRAFTING_TABLE)
+        bob.standAt(helper, 2.0, 2.0, 1.0)
+        bob.messages.clear()
 
         bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY)
-        helper.assertTrue(bob.usesHeldItemOn(helper, STONE_AT), "a stranger could not take a flower from a region pot")
-        helper.assertBlockPresent(Blocks.FLOWER_POT, STONE_AT)
-        helper.assertFalse(bob.wasRefusedBy("T14PotA's Place"), "the flower-pot interaction emitted a refusal")
+        helper.assertTrue(bob.usesHeldItemOn(helper, STONE_AT), "a non-member could not open a crafting table")
+
+        // Holding an unrelated item used to earn a refusal; now it does not.
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.DIAMOND_PICKAXE))
+        helper.assertTrue(bob.usesHeldItemOn(helper, STONE_AT), "holding a tool blocked the crafting table")
+        helper.assertTrue(bob.messages.isEmpty(), "opening a workstation emitted a message")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aNonMemberOpensAFurnaceToLookButCannotChangeIt(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T40FurnA")
+        val bob = MessageCapturingPlayer.join(helper, "T40FurnB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(STONE_AT, Blocks.FURNACE)
+        bob.standAt(helper, 2.0, 2.0, 1.0)
+        bob.messages.clear()
+
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.COAL))
+        helper.assertTrue(bob.usesHeldItemOn(helper, STONE_AT), "a non-member could not open a furnace to look")
+        helper.assertTrue(bob.messages.isEmpty(), "opening a furnace to view emitted a message")
+
+        bob.clicksFirstSlot()
+        helper.assertTrue(bob.wasRefusedBy("T40FurnA's Place"), "a furnace slot click was not refused")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aNonMemberIsRefusedAtARegionChangingBlock(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T40ChgA")
+        val bob = MessageCapturingPlayer.join(helper, "T40ChgB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        bob.standAt(helper, 2.0, 2.0, 1.0)
+
+        // Every one of these changes what is in the region, so the block's own
+        // right-click is cancelled for a non-member. (The refusal message is
+        // throttled per region, so only the first attempt in the batch carries
+        // it — every attempt is still stopped.)
+        for (block in listOf(Blocks.NOTE_BLOCK, Blocks.ANVIL, Blocks.JUKEBOX, Blocks.DECORATED_POT)) {
+            helper.setBlock(STONE_AT, block)
+            bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY)
+            helper.assertFalse(bob.usesHeldItemOn(helper, STONE_AT), "a non-member interacted with $block")
+        }
+        helper.assertTrue(bob.wasRefusedBy("T40ChgA's Place"), "no refusal for a region-changing block")
+
+        // A composter fill is an item-on-block, and refused with it too.
+        helper.setBlock(STONE_AT, Blocks.COMPOSTER)
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.BONE_MEAL))
+        helper.assertFalse(bob.usesHeldItemOn(helper, STONE_AT), "a non-member filled a region composter")
+        helper.assertBlockProperty(STONE_AT, net.minecraft.world.level.block.ComposterBlock.LEVEL, 0)
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aNonMemberMayCookOnACampfireButNotDouseIt(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T40FireA")
+        val bob = MessageCapturingPlayer.join(helper, "T40FireB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(STONE_AT, Blocks.CAMPFIRE)
+        bob.standAt(helper, 2.0, 2.0, 1.0)
+        bob.messages.clear()
+
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.PORKCHOP))
+        helper.assertTrue(bob.usesHeldItemOn(helper, STONE_AT), "a non-member could not set food on a campfire")
+        helper.assertTrue(bob.messages.isEmpty(), "cooking on a campfire emitted a message")
+
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.DIAMOND_SHOVEL))
+        helper.assertFalse(bob.usesHeldItemOn(helper, STONE_AT), "a non-member doused a region campfire")
+        helper.assertBlockProperty(STONE_AT, net.minecraft.world.level.block.CampfireBlock.LIT, true)
+        helper.assertTrue(bob.wasRefusedBy("T40FireA's Place"), "dousing a campfire emitted no refusal")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun boneMealIsInertForANonMemberAndFineForAResident(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T40BoneA")
+        val bob = MessageCapturingPlayer.join(helper, "T40BoneB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(FLOOR_AT, Blocks.GRASS_BLOCK)
+        bob.standAt(helper, 2.0, 2.0, 1.0)
+        bob.messages.clear()
+
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.BONE_MEAL))
+        helper.assertFalse(bob.usesHeldItemOn(helper, FLOOR_AT), "a non-member's bone meal worked in a region")
+        helper.assertTrue(bob.wasRefusedBy("T40BoneA's Place"), "bone meal emitted no refusal")
+
+        alice.standAt(helper, 2.0, 2.0, 1.0)
+        alice.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.BONE_MEAL))
+        alice.messages.clear()
+        alice.usesHeldItemOn(helper, FLOOR_AT)
+        helper.assertFalse(alice.wasRefusedBy("T40BoneA's Place"), "a resident's bone meal was refused")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun pokingABlockWithAnInertItemSaysNothing(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T40PokeA")
+        val bob = MessageCapturingPlayer.join(helper, "T40PokeB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(STONE_AT, Blocks.STONE)
+        bob.standAt(helper, 2.0, 2.0, 1.0)
+        bob.messages.clear()
+
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.DIAMOND_SWORD))
+        bob.usesHeldItemOn(helper, STONE_AT)
+        helper.assertFalse(bob.wasRefusedBy("T40PokeA's Place"), "a sword on stone earned a refusal")
+        helper.assertTrue(bob.messages.isEmpty(), "poking a block with a sword emitted a message")
         alice.leave()
         bob.leave()
         helper.succeed()

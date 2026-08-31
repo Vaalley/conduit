@@ -9,9 +9,9 @@ import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
 import net.fabricmc.fabric.api.event.player.AttackBlockCallback
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback
-import net.fabricmc.fabric.api.event.player.BlockEvents
 import net.fabricmc.fabric.api.event.player.ItemEvents
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents
+import net.fabricmc.fabric.api.event.player.UseBlockCallback
 import net.fabricmc.fabric.api.event.player.UseEntityCallback
 import net.fabricmc.fabric.api.event.player.UseItemCallback
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents
@@ -177,21 +177,20 @@ object RegionProtection {
         }
 
         // ---- building ----
-        // An item applied to a block: placing, tilling, striking a light. The
-        // block's own right-click behaviour (opening a chest, a door, a
-        // button) is a separate step in vanilla and is deliberately left
-        // alone — the container rule below governs what may then be taken, and
-        // DISABLE_GATES / DISABLE_PUBLIC_REDSTONE_TRIGGERS are the flags that
-        // close the rest.
+        // An item *acting on* a block: placing, tilling, striking a light,
+        // scooping with a bucket. This event fires only after the block itself
+        // declined the click, so its firing already means the item is about to
+        // change something — [RegionInteractables.isRegionModifyingItem] says
+        // which items those are, and every other item (a sword, a spyglass, a
+        // stick) passes with no message. The block's own right-click behaviour
+        // is [UseBlockCallback] below.
         ItemEvents.USE_ON.reloadable.register { context ->
             val player = context.player
-            // This event's "not my business" answer is null, not PASS. Air-use
-            // exemptions still need protection when their use-on path changes
-            // the clicked block (a water potion on dirt or an eye in a frame).
-            val needsBlockProtection =
-                !isItemUseExempt(context.itemInHand) || exemptUseChangesBlock(context)
+            val modifies =
+                RegionInteractables.isRegionModifyingItem(context.itemInHand) ||
+                    exemptUseChangesBlock(context)
             if (player is ServerPlayer &&
-                needsBlockProtection &&
+                modifies &&
                 !allowsBlockChange(player, context.level, context.clickedPos)
             ) {
                 InteractionResult.FAIL
@@ -201,16 +200,22 @@ object RegionProtection {
         }
 
         // ---- the block's own right-click behaviour ----
-        // Ticket 14 left this open on purpose (see the class docs on
-        // ItemEvents.USE_ON): these two flags are what a region owner turns on
-        // to close it, one for the doors and one for the switches.
-        BlockEvents.USE_WITHOUT_ITEM.reloadable.register { state, level, pos, player, _ ->
-            // Another event whose "not my business" answer is null, not PASS.
-            if (player is ServerPlayer && !allowsBlockUse(player, level, pos, state)) {
-                InteractionResult.FAIL
-            } else {
-                null
-            }
+        // Fires for every block right-click before vanilla decides whether the
+        // block or the item in hand handles it, so one hook covers the
+        // workstation that opens, the furnace a stranger may look inside, the
+        // composter that fills, the note block that retunes, and the door the
+        // DISABLE_ flags close. [allowsBlockInteract] sorts them (issue #40).
+        UseBlockCallback.EVENT.reloadable.register { player, level, hand, hit ->
+            allowedOrFail(
+                player !is ServerPlayer ||
+                    allowsBlockInteract(
+                        player,
+                        level,
+                        hit.blockPos,
+                        level.getBlockState(hit.blockPos),
+                        player.getItemInHand(hand),
+                    ),
+            )
         }
 
         // ---- fall damage ----
@@ -303,19 +308,55 @@ object RegionProtection {
     }
 
     /**
-     * Whether [player] may work the block at [pos] the way it is meant to be
-     * worked — open the door, press the button, pull the lever. Only two kinds
-     * of block can refuse, and only when their region asks them to:
-     * `DISABLE_GATES` closes the doors, gates and trapdoors,
-     * `DISABLE_PUBLIC_REDSTONE_TRIGGERS` the buttons and levers. Both are
-     * restrictions on non-members alone (residents, and anyone at all in a
-     * `PUBLIC` region, are unaffected), and a false answer always denies; its
-     * refusal message may be throttled.
+     * Whether [player] may right-click the block at [pos] the way [state]
+     * responds to it — open the workstation, ring the bell, fill the composter,
+     * retune the note block, open the door. [held] is the item in the acting
+     * hand, empty for the without-item path; it only matters at a campfire,
+     * where a non-member may set food to cook but not douse or relight it.
+     *
+     * Two things can refuse a non-member here:
+     *
+     * - the `DISABLE_GATES` / `DISABLE_PUBLIC_REDSTONE_TRIGGERS` flags, exactly
+     *   as before — the doors and the switches a region owner asks to be
+     *   closed;
+     * - the interaction class (issue #40): a block that changes the region's
+     *   contents (`REQUIRES_MEMBERSHIP`) is refused, a workstation or a
+     *   container a non-member may open to look inside (`FREE`,
+     *   `CONTAINER_VIEW`) is not — the container's slot clicks are still
+     *   refused by `RegionContainerClickMixin`.
+     *
+     * A false answer always denies; its refusal message may be throttled.
      */
-    private fun allowsBlockUse(player: ServerPlayer, level: Level, pos: BlockPos, state: BlockState): Boolean {
-        val flag = restrictingFlagFor(state) ?: return true
-        val region = regionRefusing(player, level, pos, flag) ?: return true
-        return refuse(player, region)
+    private fun allowsBlockInteract(
+        player: ServerPlayer,
+        level: Level,
+        pos: BlockPos,
+        state: BlockState,
+        held: ItemStack,
+    ): Boolean {
+        restrictingFlagFor(state)?.let { flag ->
+            regionRefusing(player, level, pos, flag)?.let { return refuse(player, it) }
+        }
+
+        val region = RegionsFeature.regionAt(level, pos) ?: return true
+        if (canModifyRegion(player, region)) return true
+
+        // A feature that owns its own right-click (the Teleportation Crystal)
+        // opens over any block; its handler runs after this one and would never
+        // be reached if the block under the cursor happened to be one this
+        // refuses.
+        if (isExemptItem(held)) return true
+
+        return when (RegionInteractables.classify(state)) {
+            RegionInteractables.BlockUse.FREE,
+            RegionInteractables.BlockUse.CONTAINER_VIEW,
+            -> true
+
+            RegionInteractables.BlockUse.REQUIRES_MEMBERSHIP -> refuse(player, region)
+
+            RegionInteractables.BlockUse.CAMPFIRE ->
+                if (RegionInteractables.changesCampfire(held)) refuse(player, region) else true
+        }
     }
 
     /**
