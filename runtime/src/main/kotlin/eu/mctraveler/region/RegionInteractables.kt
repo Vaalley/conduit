@@ -19,6 +19,14 @@ import net.minecraft.world.item.MobBucketItem
 import net.minecraft.world.item.ShearsItem
 import net.minecraft.world.item.ShovelItem
 import net.minecraft.world.item.SpawnEggItem
+import net.minecraft.world.inventory.AbstractContainerMenu
+import net.minecraft.world.inventory.CartographyTableMenu
+import net.minecraft.world.inventory.CraftingMenu
+import net.minecraft.world.inventory.EnchantmentMenu
+import net.minecraft.world.inventory.GrindstoneMenu
+import net.minecraft.world.inventory.LoomMenu
+import net.minecraft.world.inventory.SmithingMenu
+import net.minecraft.world.inventory.StonecutterMenu
 import net.minecraft.world.item.alchemy.PotionContents
 import net.minecraft.world.item.alchemy.Potions
 import net.minecraft.world.level.block.AbstractCauldronBlock
@@ -49,6 +57,7 @@ import net.minecraft.world.level.block.RespawnAnchorBlock
 import net.minecraft.world.level.block.ShelfBlock
 import net.minecraft.world.level.block.SignBlock
 import net.minecraft.world.level.block.SmithingTableBlock
+import net.minecraft.world.level.block.StonecutterBlock
 import net.minecraft.world.level.block.state.BlockState
 
 /**
@@ -89,7 +98,8 @@ object RegionInteractables {
      */
     fun classify(state: BlockState): BlockUse = when (state.block) {
         is CraftingTableBlock, is CartographyTableBlock, is SmithingTableBlock,
-        is GrindstoneBlock, is LoomBlock, is EnchantingTableBlock, is BellBlock,
+        is GrindstoneBlock, is LoomBlock, is EnchantingTableBlock,
+        is StonecutterBlock, is BellBlock,
         -> BlockUse.FREE
         // Lodestone has no block class of its own; compass-linking is the
         // compass's own use-on, which changes the compass, not the region, and
@@ -160,6 +170,24 @@ object RegionInteractables {
     /** Whether food set on a campfire to cook — the one campfire use a non-member keeps. */
     fun isCampfireFood(stack: ItemStack): Boolean =
         !stack.isEmpty && stack.has(DataComponents.FOOD)
+
+    /**
+     * Whether [menu] is a workstation whose contents belong to the player using
+     * it, not to the region it stands in — a crafting table, grindstone,
+     * smithing table, loom, stonecutter, cartography table or enchanting table.
+     * A non-member may work one of these to the full, so the container-session
+     * protection ([RegionProtection.allowsContainerUse]) sits it out. A chest,
+     * a furnace, a crafter — anything that holds a region's own items — is not
+     * one of these.
+     */
+    fun isWorkstationMenu(menu: AbstractContainerMenu): Boolean =
+        menu is CraftingMenu ||
+            menu is GrindstoneMenu ||
+            menu is SmithingMenu ||
+            menu is LoomMenu ||
+            menu is StonecutterMenu ||
+            menu is CartographyTableMenu ||
+            menu is EnchantmentMenu
 
     private fun isWaterPotion(stack: ItemStack): Boolean {
         if (!stack.`is`(Items.POTION) && !stack.`is`(Items.SPLASH_POTION) && !stack.`is`(Items.LINGERING_POTION)) {

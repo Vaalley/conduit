@@ -12,6 +12,7 @@ import eu.mctraveler.importer.OrphanedSaveClaimFeature
 import eu.mctraveler.motd.Motd
 import eu.mctraveler.notepad.NotepadFeature
 import eu.mctraveler.region.RegionEnvironment
+import eu.mctraveler.region.RegionInteractables
 import eu.mctraveler.region.RegionProtection
 import eu.mctraveler.tablist.SpectatorVisibility
 import eu.mctraveler.tablist.TabListFeature
@@ -89,6 +90,8 @@ object MixinHooksImpl : MixinHooks {
     override fun isModOwnedMenu(menu: AbstractContainerMenu): Boolean = RegionProtection.isModOwnedMenu(menu)
     override fun isPersonalEnderChestMenu(menu: AbstractContainerMenu): Boolean =
         RegionProtection.isPersonalEnderChestMenu(menu)
+    override fun isWorkstationMenu(menu: AbstractContainerMenu): Boolean =
+        RegionInteractables.isWorkstationMenu(menu)
 
     override fun allowsContainerUse(player: ServerPlayer): Boolean = RegionProtection.allowsContainerUse(player)
 

@@ -668,6 +668,56 @@ class RegionProtectionGameTest {
     }
 
     @GameTest
+    fun aNonMemberFullyUsesAWorkstation(helper: GameTestHelper) {
+        // A grindstone (loom, stonecutter, …) holds the player's own items, so
+        // a non-member may work it — the container-session protection sits out.
+        val alice = MessageCapturingPlayer.join(helper, "T40StnA")
+        val bob = MessageCapturingPlayer.join(helper, "T40StnB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(STONE_AT, Blocks.GRINDSTONE)
+        bob.standAt(helper, 2.0, 2.0, 1.0)
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY)
+        bob.getInventory().add(ItemStack(Items.DIAMOND_SWORD))
+        bob.messages.clear()
+
+        helper.assertTrue(bob.usesHeldItemOn(helper, STONE_AT), "a non-member could not open a grindstone")
+        helper.assertTrue(bob.containerMenu is net.minecraft.world.inventory.GrindstoneMenu, "the grindstone did not open")
+
+        // Move the sword from the inventory into the grindstone's first slot.
+        bob.containerMenu.clicked(bob.containerMenu.slots.indexOfFirst { it.hasItem() }, 0, ContainerInput.PICKUP, bob)
+        bob.containerMenu.clicked(0, 0, ContainerInput.PICKUP, bob)
+        helper.assertTrue(bob.containerMenu.getSlot(0).hasItem(), "a non-member's grindstone click was refused")
+        helper.assertFalse(bob.wasRefusedBy("T40StnA's Place"), "using a grindstone earned a refusal")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aNonMemberCannotToggleACrafterSlot(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T40CrfA")
+        val bob = MessageCapturingPlayer.join(helper, "T40CrfB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(STONE_AT, Blocks.CRAFTER)
+        val crafter = helper.level.getBlockEntity(helper.absolutePos(STONE_AT))
+            as net.minecraft.world.level.block.entity.CrafterBlockEntity
+        bob.standAt(helper, 2.0, 2.0, 1.0)
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY)
+
+        helper.assertTrue(bob.usesHeldItemOn(helper, STONE_AT), "a non-member could not open a crafter to view")
+        bob.connection.handleContainerSlotStateChanged(
+            net.minecraft.network.protocol.game.ServerboundContainerSlotStateChangedPacket(
+                0, bob.containerMenu.containerId, false,
+            ),
+        )
+        helper.assertFalse(crafter.isSlotDisabled(0), "a non-member disabled a crafter slot")
+        helper.assertTrue(bob.wasRefusedBy("T40CrfA's Place"), "the crafter-slot toggle emitted no refusal")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
     fun pokingABlockWithAnInertItemSaysNothing(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T40PokeA")
         val bob = MessageCapturingPlayer.join(helper, "T40PokeB")

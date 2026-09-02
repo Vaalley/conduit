@@ -32,6 +32,7 @@ public abstract class RegionContainerClickMixin {
         if (menu.containerId == 0
                 || Hooks.isModOwnedMenu(menu)
                 || Hooks.isPersonalEnderChestMenu(menu)
+                || Hooks.isWorkstationMenu(menu)
                 || !(player instanceof ServerPlayer clicker)) {
             return;
         }

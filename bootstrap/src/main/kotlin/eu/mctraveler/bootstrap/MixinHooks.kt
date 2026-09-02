@@ -72,6 +72,7 @@ interface MixinHooks {
     // Region protection
     fun isModOwnedMenu(menu: AbstractContainerMenu): Boolean
     fun isPersonalEnderChestMenu(menu: AbstractContainerMenu): Boolean
+    fun isWorkstationMenu(menu: AbstractContainerMenu): Boolean
     fun allowsContainerUse(player: ServerPlayer): Boolean
     fun containerOpened(player: ServerPlayer)
     fun containerClosed(player: ServerPlayer)
@@ -163,6 +164,7 @@ object Hooks {
     @JvmStatic fun isModOwnedMenu(menu: AbstractContainerMenu): Boolean = impl?.isModOwnedMenu(menu) ?: false
     @JvmStatic fun isPersonalEnderChestMenu(menu: AbstractContainerMenu): Boolean =
         impl?.isPersonalEnderChestMenu(menu) ?: false
+    @JvmStatic fun isWorkstationMenu(menu: AbstractContainerMenu): Boolean = impl?.isWorkstationMenu(menu) ?: false
 
     @JvmStatic fun allowsContainerUse(player: ServerPlayer): Boolean = impl?.allowsContainerUse(player) ?: true
 

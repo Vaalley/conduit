@@ -64,3 +64,29 @@ item-uses that change a region. See `../spec.md` "Block interaction classes",
 green; `:bootstrap:runGameTest` 347 tests, the new interaction tests pass, only
 the 6 world-merge gametests fail (unrelated — the mcaselector jar is absent on
 this machine).
+
+### Follow-up (live-test feedback)
+
+A dev-server pass surfaced three gaps the gametests missed:
+
+- **Workstations opened but could not be used.** A crafting table / grindstone /
+  loom / stonecutter / cartography table / enchanting table menu is an
+  `AbstractContainerMenu`, so `RegionContainerClickMixin` was refusing every
+  slot click in it — but its contents are the player's own, not the region's.
+  Added `RegionInteractables.isWorkstationMenu` + a `Hooks.isWorkstationMenu`
+  bridge method; both container mixins now sit these out. Stonecutter also added
+  to the FREE block classifier.
+- **The crafter slot toggle bypassed protection.** Enabling/disabling a crafter
+  input slot arrives as `ServerboundContainerSlotStateChangedPacket`, which the
+  `clicked` hook never sees. New `RegionCrafterSlotMixin` on
+  `handleContainerSlotStateChanged` (injected after the packet's thread hop)
+  cancels it for a non-member and resyncs the menu.
+- **Ghost items** on a refused pot-a-flower / bottle-the-honey — the client ran
+  the interaction locally and the server never corrected the inventory. Added
+  `RegionProtection.resyncInventory` (`containerMenu.sendAllDataToRemote()`),
+  called on every refused `UseBlockCallback` / `ItemEvents.USE_ON`.
+
+This second change touches `:bootstrap` (a new mixin, a `MixinHooks` bridge
+signature), so it needs a full restart in production — not a runtime hot-swap.
+New gametests: `aNonMemberFullyUsesAWorkstation`,
+`aNonMemberCannotToggleACrafterSlot`. Prod smoke green with the new mixin.

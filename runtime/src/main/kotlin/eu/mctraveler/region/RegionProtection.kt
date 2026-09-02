@@ -193,6 +193,7 @@ object RegionProtection {
                 modifies &&
                 !allowsBlockChange(player, context.level, context.clickedPos)
             ) {
+                resyncInventory(player)
                 InteractionResult.FAIL
             } else {
                 null
@@ -206,16 +207,20 @@ object RegionProtection {
         // composter that fills, the note block that retunes, and the door the
         // DISABLE_ flags close. [allowsBlockInteract] sorts them (issue #40).
         UseBlockCallback.EVENT.reloadable.register { player, level, hand, hit ->
-            allowedOrFail(
-                player !is ServerPlayer ||
-                    allowsBlockInteract(
-                        player,
-                        level,
-                        hit.blockPos,
-                        level.getBlockState(hit.blockPos),
-                        player.getItemInHand(hand),
-                    ),
-            )
+            if (player is ServerPlayer &&
+                !allowsBlockInteract(
+                    player,
+                    level,
+                    hit.blockPos,
+                    level.getBlockState(hit.blockPos),
+                    player.getItemInHand(hand),
+                )
+            ) {
+                resyncInventory(player)
+                InteractionResult.FAIL
+            } else {
+                InteractionResult.PASS
+            }
         }
 
         // ---- fall damage ----
@@ -514,6 +519,19 @@ object RegionProtection {
         if (canModifyRegion(player, region)) return null
         if (DISABLE_ANIMAL_PROTECTION in region.flags) return null
         return region
+    }
+
+    /**
+     * Re-sends the player's inventory after a refused right-click.
+     *
+     * The client runs the interaction locally before the server answers, so a
+     * refused pot-a-flower or bottle-the-honey leaves a ghost stack in the
+     * inventory — the item the client moved, that the server never did. Fabric
+     * resyncs the *block* after a cancelled interaction but not the inventory;
+     * this closes that gap.
+     */
+    private fun resyncInventory(player: ServerPlayer) {
+        player.containerMenu.sendAllDataToRemote()
     }
 
     /** Sends the Portal's refusal message when its cooldown permits, and always answers "not allowed". */

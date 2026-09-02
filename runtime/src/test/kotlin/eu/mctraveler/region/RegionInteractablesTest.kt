@@ -25,7 +25,8 @@ class RegionInteractablesTest {
     fun `workstations and read-only blocks are FREE`() {
         for (block in listOf(
             Blocks.CRAFTING_TABLE, Blocks.CARTOGRAPHY_TABLE, Blocks.SMITHING_TABLE,
-            Blocks.GRINDSTONE, Blocks.LOOM, Blocks.ENCHANTING_TABLE, Blocks.BELL,
+            Blocks.GRINDSTONE, Blocks.LOOM, Blocks.ENCHANTING_TABLE, Blocks.STONECUTTER,
+            Blocks.BELL,
         )) {
             assertEquals(BlockUse.FREE, classify(block), "$block should be FREE")
         }

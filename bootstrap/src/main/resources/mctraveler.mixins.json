@@ -18,6 +18,7 @@
     "RegionSignEditMixin",
     "RegionContainerSessionMixin",
     "RegionContainerClickMixin",
+    "RegionCrafterSlotMixin",
     "RegionEntityDamageMixin",
     "RegionExplosionMixin",
     "RegionFireMixin",
