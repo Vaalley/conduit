@@ -36,8 +36,7 @@ class RegionInteractablesTest {
     fun `furnace family and view-only containers are CONTAINER_VIEW`() {
         for (block in listOf(
             Blocks.FURNACE, Blocks.SMOKER, Blocks.BLAST_FURNACE, Blocks.DISPENSER,
-            Blocks.DROPPER, Blocks.BREWING_STAND, Blocks.CRAFTER, Blocks.BEACON,
-            Blocks.LECTERN,
+            Blocks.DROPPER, Blocks.BREWING_STAND, Blocks.BEACON, Blocks.LECTERN,
         )) {
             assertEquals(BlockUse.CONTAINER_VIEW, classify(block), "$block should be CONTAINER_VIEW")
         }
@@ -46,6 +45,7 @@ class RegionInteractablesTest {
     @Test
     fun `region-changing blocks require membership`() {
         for (block in listOf(
+            Blocks.CRAFTER,
             Blocks.COMPOSTER, Blocks.WATER_CAULDRON, Blocks.CAULDRON, Blocks.LAVA_CAULDRON,
             Blocks.CHISELED_BOOKSHELF, Blocks.DECORATED_POT, Blocks.JUKEBOX,
             Blocks.DAYLIGHT_DETECTOR, Blocks.NOTE_BLOCK, Blocks.ANVIL, Blocks.CHIPPED_ANVIL,

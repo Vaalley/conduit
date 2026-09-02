@@ -76,11 +76,13 @@ A dev-server pass surfaced three gaps the gametests missed:
   Added `RegionInteractables.isWorkstationMenu` + a `Hooks.isWorkstationMenu`
   bridge method; both container mixins now sit these out. Stonecutter also added
   to the FREE block classifier.
-- **The crafter slot toggle bypassed protection.** Enabling/disabling a crafter
-  input slot arrives as `ServerboundContainerSlotStateChangedPacket`, which the
-  `clicked` hook never sees. New `RegionCrafterSlotMixin` on
-  `handleContainerSlotStateChanged` (injected after the packet's thread hop)
-  cancels it for a non-member and resyncs the menu.
+- **The crafter is REQUIRES_MEMBERSHIP, not CONTAINER_VIEW.** Enabling/disabling
+  a crafter input slot rides `ServerboundContainerSlotStateChangedPacket`, a
+  path the container hooks do not cover, and an in-game test showed the toggle
+  still going through however the packet was intercepted. Rather than chase it,
+  the crafter is now refused at the block — a non-member never opens it — which
+  also matches what a crafter is (the region's own automation, not a chest a
+  stranger glances into). The short-lived `RegionCrafterSlotMixin` was removed.
 - **Ghost items** on a refused pot-a-flower / bottle-the-honey — the client ran
   the interaction locally and the server never corrected the inventory. Added
   `RegionProtection.resyncInventory` (`containerMenu.sendAllDataToRemote()`),

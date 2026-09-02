@@ -81,7 +81,6 @@ that.
 | Furnace / Smoker / Blast furnace | `AbstractFurnaceBlock` |
 | Dropper / Dispenser | `DispenserBlock` (Dropper extends it) |
 | Brewing stand | `BrewingStandBlock` |
-| Crafter | `CrafterBlock` |
 | Lectern | `LecternBlock` — reading turns pages; taking the book is a button, refused by the block-use hook |
 | Beacon | `BeaconBlock` — viewing the pyramid is fine; choosing an effect and paying is the modify, refused by the block-use hook |
 
@@ -89,6 +88,7 @@ that.
 
 | Block | Class match | What it would change |
 |---|---|---|
+| Crafter | `CrafterBlock` | its ingredients are the region's and its slot layout is part of the build; a non-member does not open it (the toggle-a-slot packet rides its own path the container hooks don't see, so "view only" is not enforceable here anyway) |
 | Composter | `ComposterBlock` | fill; a full composter cannot be emptied either |
 | Cauldron (all four) | `AbstractCauldronBlock` | fill / empty / dye / wash |
 | Chiselled bookshelf | `ChiseledBookShelfBlock` | insert / take a book |

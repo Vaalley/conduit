@@ -107,11 +107,15 @@ object RegionInteractables {
         // lodestone does nothing and falls through to the FREE default below.
 
         is AbstractFurnaceBlock, is DispenserBlock, is BrewingStandBlock,
-        is CrafterBlock, is BeaconBlock, is LecternBlock,
+        is BeaconBlock, is LecternBlock,
         -> BlockUse.CONTAINER_VIEW
 
         is CampfireBlock -> BlockUse.CAMPFIRE
 
+        // A crafter holds the region's own recipe ingredients and its layout is
+        // part of the build, so — unlike a furnace a stranger may glance into —
+        // a non-member does not open it at all.
+        is CrafterBlock,
         is ComposterBlock, is AbstractCauldronBlock, is ChiseledBookShelfBlock,
         is DecoratedPotBlock, is JukeboxBlock, is DaylightDetectorBlock,
         is NoteBlock, is AnvilBlock, is FlowerPotBlock, is BeehiveBlock,

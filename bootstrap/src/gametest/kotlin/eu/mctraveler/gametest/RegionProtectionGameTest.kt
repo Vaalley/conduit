@@ -694,24 +694,23 @@ class RegionProtectionGameTest {
     }
 
     @GameTest
-    fun aNonMemberCannotToggleACrafterSlot(helper: GameTestHelper) {
+    fun aNonMemberCannotOpenACrafter(helper: GameTestHelper) {
+        // A crafter is not a look-inside container — its ingredients are the
+        // region's and its slot layout is part of the build, so a non-member
+        // does not open it at all.
         val alice = MessageCapturingPlayer.join(helper, "T40CrfA")
         val bob = MessageCapturingPlayer.join(helper, "T40CrfB")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
         helper.setBlock(STONE_AT, Blocks.CRAFTER)
-        val crafter = helper.level.getBlockEntity(helper.absolutePos(STONE_AT))
-            as net.minecraft.world.level.block.entity.CrafterBlockEntity
         bob.standAt(helper, 2.0, 2.0, 1.0)
         bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY)
 
-        helper.assertTrue(bob.usesHeldItemOn(helper, STONE_AT), "a non-member could not open a crafter to view")
-        bob.connection.handleContainerSlotStateChanged(
-            net.minecraft.network.protocol.game.ServerboundContainerSlotStateChangedPacket(
-                0, bob.containerMenu.containerId, false,
-            ),
+        helper.assertFalse(bob.usesHeldItemOn(helper, STONE_AT), "a non-member opened a region's crafter")
+        helper.assertFalse(
+            bob.containerMenu is net.minecraft.world.inventory.CrafterMenu,
+            "the crafter GUI opened for a non-member",
         )
-        helper.assertFalse(crafter.isSlotDisabled(0), "a non-member disabled a crafter slot")
-        helper.assertTrue(bob.wasRefusedBy("T40CrfA's Place"), "the crafter-slot toggle emitted no refusal")
+        helper.assertTrue(bob.wasRefusedBy("T40CrfA's Place"), "opening a crafter emitted no refusal")
         alice.leave()
         bob.leave()
         helper.succeed()
