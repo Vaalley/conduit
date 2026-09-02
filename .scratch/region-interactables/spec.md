@@ -76,6 +76,11 @@ already refuses every slot click (that refusal carries the message). Today the
 open is *also* refused whenever the player holds an item — this class removes
 that.
 
+The container is judged by the region of **the block it is**, not the opener's
+feet, so reaching one from outside the region does not unlock it (ticket 01a).
+A non-member opening one sees the screen titled **Region protected** (grey,
+bold) — every container a non-member cannot modify, not only this class.
+
 | Block | Class match |
 |---|---|
 | Furnace / Smoker / Blast furnace | `AbstractFurnaceBlock` |

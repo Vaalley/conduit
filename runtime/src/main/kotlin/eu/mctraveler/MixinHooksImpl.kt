@@ -99,6 +99,12 @@ object MixinHooksImpl : MixinHooks {
 
     override fun containerClosed(player: ServerPlayer) = RegionProtection.containerClosed(player)
 
+    override fun containerTitleFor(
+        player: ServerPlayer,
+        menu: AbstractContainerMenu,
+        default: Component,
+    ): Component = RegionProtection.containerTitleFor(player, menu, default)
+
     override fun allowsPressurePlate(state: BlockState, level: Level, pos: BlockPos, entity: Entity): Boolean =
         RegionProtection.allowsPressurePlate(state, level, pos, entity)
 

@@ -15,9 +15,11 @@ import net.fabricmc.fabric.api.event.player.UseBlockCallback
 import net.fabricmc.fabric.api.event.player.UseEntityCallback
 import net.fabricmc.fabric.api.event.player.UseItemCallback
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents
+import net.minecraft.ChatFormatting
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.core.component.DataComponents
+import net.minecraft.network.chat.Component
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.damagesource.DamageSource
 import net.minecraft.tags.BlockTags
@@ -83,8 +85,17 @@ object RegionProtection {
     private const val DISABLE_GATES = "DISABLE_GATES"
     private const val REFUSAL_MESSAGE_COOLDOWN_TICKS = 20L
 
-    /** The region each player was standing in when they opened their container. */
+    /** The region a player's currently-open container is judged against. */
     private val containerRegions = HashMap<UUID, Region>()
+
+    /**
+     * The region under the block a player last right-clicked, and the tick they
+     * did it. A container that opens from a block is judged by *that block's*
+     * region, not the player's feet — so a stranger reaching a chest from
+     * outside the region is still refused (the Portal captured the feet region
+     * and so had this gap).
+     */
+    private val pendingContainerRegion = HashMap<UUID, Pair<Region, Long>>()
 
     /**
      * Last refusal-message tick per player and live region identity. Identity
@@ -207,19 +218,25 @@ object RegionProtection {
         // composter that fills, the note block that retunes, and the door the
         // DISABLE_ flags close. [allowsBlockInteract] sorts them (issue #40).
         UseBlockCallback.EVENT.reloadable.register { player, level, hand, hit ->
-            if (player is ServerPlayer &&
-                !allowsBlockInteract(
-                    player,
-                    level,
-                    hit.blockPos,
-                    level.getBlockState(hit.blockPos),
-                    player.getItemInHand(hand),
-                )
-            ) {
-                resyncInventory(player)
-                InteractionResult.FAIL
-            } else {
+            if (player !is ServerPlayer) {
                 InteractionResult.PASS
+            } else {
+                // A container that opens from this click is judged by the
+                // clicked block's region, wherever the player is standing.
+                rememberContainerBlock(player, level, hit.blockPos)
+                if (!allowsBlockInteract(
+                        player,
+                        level,
+                        hit.blockPos,
+                        level.getBlockState(hit.blockPos),
+                        player.getItemInHand(hand),
+                    )
+                ) {
+                    resyncInventory(player)
+                    InteractionResult.FAIL
+                } else {
+                    InteractionResult.PASS
+                }
             }
         }
 
@@ -252,14 +269,17 @@ object RegionProtection {
 
         ServerPlayerEvents.LEAVE.reloadable.register { player ->
             containerRegions.remove(player.uuid)
+            pendingContainerRegion.remove(player.uuid)
             refusalMessageTicks.remove(player.uuid)
         }
         ServerPlayConnectionEvents.DISCONNECT.reloadable.register { handler, _ ->
             containerRegions.remove(handler.player.uuid)
+            pendingContainerRegion.remove(handler.player.uuid)
             refusalMessageTicks.remove(handler.player.uuid)
         }
         ServerLifecycleEvents.SERVER_STOPPED.reloadable.register {
             containerRegions.clear()
+            pendingContainerRegion.clear()
             refusalMessageTicks.clear()
         }
 
@@ -278,14 +298,18 @@ object RegionProtection {
     }
 
     /**
-     * Remembers the region [player] was standing in as they opened a
-     * container. The Portal captured it at open time and let it govern the
-     * whole session, so stepping outside (or a region appearing) mid-session
-     * cannot change what the open chest allows.
+     * Remembers the region a container [player] just opened is judged against,
+     * and lets it govern the whole session — stepping outside, or a region
+     * appearing, mid-session cannot change what the open chest allows (the
+     * Portal captured the session at open time for the same reason).
+     *
+     * The region is the one under the *block the container is* when the open
+     * followed a block right-click ([rememberContainerBlock]); only a menu with
+     * no such block behind it (rare) falls back to the player's feet.
      */
     @JvmStatic
     fun containerOpened(player: ServerPlayer) {
-        val region = RegionTracker.regionOf(player)
+        val region = containerRegionFor(player)
         if (region == null) {
             containerRegions.remove(player.uuid)
         } else {
@@ -297,6 +321,49 @@ object RegionProtection {
     @JvmStatic
     fun containerClosed(player: ServerPlayer) {
         containerRegions.remove(player.uuid)
+    }
+
+    /**
+     * The title the client should show for a container [menu] [player] is
+     * opening: `Region protected` (grey, bold) when it is a container in a
+     * region they cannot modify, the [default] otherwise. Workstations and the
+     * mod's own menus keep their name — a non-member uses those freely.
+     */
+    @JvmStatic
+    fun containerTitleFor(player: ServerPlayer, menu: AbstractContainerMenu, default: Component): Component {
+        if (menu === player.inventoryMenu ||
+            isModOwnedMenu(menu) ||
+            isPersonalEnderChestMenu(menu) ||
+            RegionInteractables.isWorkstationMenu(menu)
+        ) {
+            return default
+        }
+        val region = containerRegionFor(player) ?: return default
+        if (canModifyRegion(player, region) || ENABLE_PUBLIC_CONTAINERS in region.flags) return default
+        return Component.literal("Region protected").withStyle(ChatFormatting.GRAY, ChatFormatting.BOLD)
+    }
+
+    /** Records the region under the block [player] just right-clicked. */
+    private fun rememberContainerBlock(player: ServerPlayer, level: Level, pos: BlockPos) {
+        val region = RegionsFeature.regionAt(level, pos)
+        if (region == null) {
+            pendingContainerRegion.remove(player.uuid)
+        } else {
+            pendingContainerRegion[player.uuid] = region to player.level().server.tickCount.toLong()
+        }
+    }
+
+    /**
+     * The region an opening container is judged against — the block behind it
+     * if the open just followed a right-click on that block this tick, else the
+     * region the player is standing in.
+     */
+    private fun containerRegionFor(player: ServerPlayer): Region? {
+        val pending = pendingContainerRegion[player.uuid]
+        if (pending != null && player.level().server.tickCount - pending.second <= 1L) {
+            return pending.first
+        }
+        return RegionTracker.regionOf(player)
     }
 
     /**

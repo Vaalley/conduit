@@ -76,6 +76,7 @@ interface MixinHooks {
     fun allowsContainerUse(player: ServerPlayer): Boolean
     fun containerOpened(player: ServerPlayer)
     fun containerClosed(player: ServerPlayer)
+    fun containerTitleFor(player: ServerPlayer, menu: AbstractContainerMenu, default: Component): Component
     fun allowsPressurePlate(state: BlockState, level: Level, pos: BlockPos, entity: Entity): Boolean
     fun allowsBlockChange(player: ServerPlayer, level: Level, pos: BlockPos): Boolean
     fun allowsEntityDamage(entity: Entity, source: DamageSource): Boolean
@@ -175,6 +176,9 @@ object Hooks {
     @JvmStatic fun containerClosed(player: ServerPlayer) {
         impl?.containerClosed(player)
     }
+
+    @JvmStatic fun containerTitleFor(player: ServerPlayer, menu: AbstractContainerMenu, default: Component): Component =
+        impl?.containerTitleFor(player, menu, default) ?: default
 
     @JvmStatic fun allowsPressurePlate(
         state: BlockState,

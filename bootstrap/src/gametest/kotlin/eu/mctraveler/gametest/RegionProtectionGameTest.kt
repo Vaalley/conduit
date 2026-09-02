@@ -7,6 +7,7 @@ import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.network.chat.Component
+import net.minecraft.network.protocol.game.ClientboundOpenScreenPacket
 import net.minecraft.network.protocol.game.ServerboundAttackPacket
 import net.minecraft.network.protocol.game.ServerboundInteractPacket
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket
@@ -688,6 +689,62 @@ class RegionProtectionGameTest {
         bob.containerMenu.clicked(0, 0, ContainerInput.PICKUP, bob)
         helper.assertTrue(bob.containerMenu.getSlot(0).hasItem(), "a non-member's grindstone click was refused")
         helper.assertFalse(bob.wasRefusedBy("T40StnA's Place"), "using a grindstone earned a refusal")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aContainerIsJudgedByItsBlockNotTheOpenersFeet(helper: GameTestHelper) {
+        // Reaching a chest from just outside the region does not unlock it —
+        // the container is judged by the block it is, not the opener's feet.
+        val alice = MessageCapturingPlayer.join(helper, "T40OutA")
+        val bob = MessageCapturingPlayer.join(helper, "T40OutB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        val chestAt = BlockPos(4, 2, 2)
+        helper.setBlock(chestAt, Blocks.CHEST)
+        (helper.level.getBlockEntity(helper.absolutePos(chestAt)) as ChestBlockEntity)
+            .setItem(0, ItemStack(Items.DIAMOND))
+        bob.standAt(helper, 5.3, 2.0, 2.0) // outside the region, reaching in
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY)
+        bob.messages.clear()
+
+        helper.assertTrue(bob.usesHeldItemOn(helper, chestAt), "a non-member could not reach the chest")
+        bob.clicksFirstSlot()
+        helper.assertTrue(
+            bob.containerMenu.carried.isEmpty,
+            "a chest reached from outside the region gave up its contents",
+        )
+        helper.assertTrue(bob.wasRefusedBy("T40OutA's Place"), "no refusal for a chest opened from outside")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aNonMemberSeesRegionProtectedAsTheContainerTitle(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T40TtlA")
+        val bob = MessageCapturingPlayer.join(helper, "T40TtlB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        val chestAt = BlockPos(4, 2, 2)
+        helper.setBlock(chestAt, Blocks.CHEST)
+
+        bob.standAt(helper, 5.3, 2.0, 2.0)
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY)
+        PacketCapture.drain(bob)
+        bob.usesHeldItemOn(helper, chestAt)
+        val bobScreen = PacketCapture.drainOf<ClientboundOpenScreenPacket>(bob).lastOrNull()
+        helper.assertTrue(bobScreen != null, "no screen opened for the non-member")
+        helper.assertValueEqual(bobScreen!!.title.string, "Region protected", "the container title was not rewritten")
+
+        alice.standAt(helper, 5.3, 2.0, 2.0)
+        PacketCapture.drain(alice)
+        alice.usesHeldItemOn(helper, chestAt)
+        val aliceScreen = PacketCapture.drainOf<ClientboundOpenScreenPacket>(alice).lastOrNull()
+        helper.assertFalse(
+            aliceScreen?.title?.string == "Region protected",
+            "a resident saw the protected title",
+        )
         alice.leave()
         bob.leave()
         helper.succeed()
