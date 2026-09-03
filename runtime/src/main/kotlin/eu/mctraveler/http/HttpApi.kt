@@ -1,6 +1,6 @@
 package eu.mctraveler.http
 
-import com.google.gson.Gson
+import com.google.gson.GsonBuilder
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import eu.mctraveler.MCTraveler
@@ -9,15 +9,20 @@ import eu.mctraveler.chat.ChatMessage
 import eu.mctraveler.reloadable
 import eu.mctraveler.tablist.TabListFeature
 import eu.mctraveler.text.Paint
+import java.lang.management.ManagementFactory
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.security.MessageDigest
+import java.util.UUID
 import java.util.concurrent.CancellationException
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents
+import net.fabricmc.loader.api.FabricLoader
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
 import net.minecraft.network.chat.Component
 import net.minecraft.server.MinecraftServer
@@ -34,7 +39,8 @@ object HttpApi {
     private const val MAX_BROADCAST_LENGTH = 256
     private const val MAX_SENDER_LENGTH = 32
 
-    private val gson = Gson()
+    private val gson = GsonBuilder().serializeNulls().create()
+    private val joinedAt = ConcurrentHashMap<UUID, Long>()
 
     @Volatile
     private var httpServer: HttpServer? = null
@@ -45,6 +51,12 @@ object HttpApi {
     private var executor: ExecutorService? = null
 
     fun register() {
+        ServerPlayConnectionEvents.JOIN.reloadable.register { handler, _, _ ->
+            joinedAt[handler.player.uuid] = System.currentTimeMillis()
+        }
+        ServerPlayConnectionEvents.DISCONNECT.reloadable.register { handler, _ ->
+            joinedAt.remove(handler.player.uuid)
+        }
         ServerLifecycleEvents.SERVER_STARTED.reloadable.register { server ->
             minecraftServer = server
             start()
@@ -122,7 +134,25 @@ object HttpApi {
             try {
                 val players = server.playerList.players.map { it.gameProfile.name }
                 val tps = TabListFeature.tps(server.averageTickTimeNanos)
-                val response = StatusResponse(players.size, players, tps)
+                val sessions = server.playerList.players.map { player ->
+                    PlayerSession(player.gameProfile.name, joinedAt[player.uuid])
+                }
+                val world = server.overworld()
+                val response = StatusResponse(
+                    online = players.size,
+                    players = players,
+                    tps = tps,
+                    sessions = sessions,
+                    startedAt = ManagementFactory.getRuntimeMXBean().startTime,
+                    minecraftVersion = server.serverVersion,
+                    modVersion = FabricLoader.getInstance()
+                        .getModContainer(MCTraveler.MOD_ID)
+                        .map { it.metadata.version.friendlyString }
+                        .orElse("unknown"),
+                    dayTime = world.getOverworldClockTime() % 24000,
+                    raining = world.isRaining,
+                    thundering = world.isThundering,
+                )
                 future.complete(gson.toJson(response))
             } catch (error: Throwable) {
                 future.completeExceptionally(error)
@@ -290,6 +320,18 @@ object HttpApi {
         val online: Int,
         val players: List<String>,
         val tps: Double,
+        val sessions: List<PlayerSession>,
+        val startedAt: Long,
+        val minecraftVersion: String,
+        val modVersion: String,
+        val dayTime: Long,
+        val raining: Boolean,
+        val thundering: Boolean,
+    )
+
+    private data class PlayerSession(
+        val name: String,
+        val joinedAt: Long?,
     )
 
     private data class BroadcastRequest(
