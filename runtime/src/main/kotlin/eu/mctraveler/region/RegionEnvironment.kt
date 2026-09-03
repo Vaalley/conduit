@@ -71,6 +71,23 @@ object RegionEnvironment {
     }
 
     /**
+     * Whether a fluid at [from] may spread into [to]. A fluid flows freely
+     * within one region and across unclaimed ground, but does not cross into a
+     * region from outside it — so water or lava a stranger pours just past the
+     * border stops at it (issue #49). Like the piston rule, there is no flag: a
+     * region owner cannot ask to be flooded.
+     *
+     * [to] carrying no region is always fine (a region's own water may flow out
+     * onto open ground); otherwise the fluid must already be inside that same
+     * region.
+     */
+    @JvmStatic
+    fun allowsFluidSpread(level: Level, from: BlockPos, to: BlockPos): Boolean {
+        val target = RegionsFeature.regionAt(level, to) ?: return true
+        return RegionsFeature.regionAt(level, from) === target
+    }
+
+    /**
      * Whether a piston may make the move it has worked out: true only while
      * every block it would take, land on or destroy belongs to the same region
      * as the piston itself.

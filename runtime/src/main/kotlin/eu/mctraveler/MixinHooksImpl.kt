@@ -123,6 +123,9 @@ object MixinHooksImpl : MixinHooks {
     override fun allowsFireDamage(level: Level, pos: BlockPos): Boolean =
         RegionEnvironment.allowsFireDamage(level, pos)
 
+    override fun allowsFluidSpread(level: Level, from: BlockPos, to: BlockPos): Boolean =
+        RegionEnvironment.allowsFluidSpread(level, from, to)
+
     override fun allowsPistonMove(
         level: Level,
         pistonPos: BlockPos,

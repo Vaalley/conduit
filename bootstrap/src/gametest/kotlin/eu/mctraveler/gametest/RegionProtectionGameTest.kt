@@ -609,6 +609,46 @@ class RegionProtectionGameTest {
         helper.succeed()
     }
 
+    @GameTest(maxTicks = 120)
+    fun waterDoesNotFlowIntoARegionFromOutside(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T49FlowA")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        // A one-wide trench along x at z=2, floored and walled, from inside the
+        // region out past its eastern border.
+        for (x in 0..7) {
+            helper.setBlock(BlockPos(x, 1, 2), Blocks.STONE)
+            helper.setBlock(BlockPos(x, 2, 1), Blocks.STONE)
+            helper.setBlock(BlockPos(x, 2, 3), Blocks.STONE)
+        }
+        helper.setBlock(BlockPos(6, 2, 2), Blocks.WATER) // source outside the region
+
+        helper.runAfterDelay(80) {
+            helper.assertBlockPresent(Blocks.WATER, BlockPos(5, 2, 2)) // reached the border from outside
+            helper.assertBlockNotPresent(Blocks.WATER, BlockPos(4, 2, 2)) // and stopped at it
+            helper.assertBlockNotPresent(Blocks.WATER, BlockPos(2, 2, 2))
+            alice.leave()
+            helper.succeed()
+        }
+    }
+
+    @GameTest(maxTicks = 120)
+    fun waterFlowsFreelyWithinARegion(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T49FlowB")
+        createRegion(helper, alice, 0.0 to 0.0, 6.0 to 6.0)
+        for (x in 0..5) {
+            helper.setBlock(BlockPos(x, 1, 2), Blocks.STONE)
+            helper.setBlock(BlockPos(x, 2, 1), Blocks.STONE)
+            helper.setBlock(BlockPos(x, 2, 3), Blocks.STONE)
+        }
+        helper.setBlock(BlockPos(0, 2, 2), Blocks.WATER) // source inside the region
+
+        helper.runAfterDelay(80) {
+            helper.assertBlockPresent(Blocks.WATER, BlockPos(4, 2, 2)) // flowed on within the region
+            alice.leave()
+            helper.succeed()
+        }
+    }
+
     // ---- issue #40: interaction classes ----
 
     @GameTest

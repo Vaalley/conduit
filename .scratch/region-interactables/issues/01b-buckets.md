@@ -1,7 +1,8 @@
-# 01b — Buckets reach past the player's feet
+# 01b — Buckets, and fluid flow across a region border
 
 **What to build:** Stop a non-member standing outside a region pouring water
-(or lava, or a fish) anywhere inside it, or bailing a pool out of it — issue
+(or lava, or a fish) anywhere inside it, or bailing a pool out of it — and stop
+a fluid *flowing* across the border from a source just outside — issue
 `https://github.com/Vaalley/conduit/issues/49`.
 
 **Blocked by:** 01.
@@ -14,10 +15,15 @@
       cannot modify.
 - [x] Residents (and `PUBLIC` regions) are unaffected — a resident may pour into
       their own region from outside it.
-- [x] Every refusal carries the one message.
+- [x] A flowing fluid does not cross into a region it is not already in — water
+      or lava poured just past the border stops at it. It flows freely within a
+      region and out onto unclaimed ground. No flag (like the piston rule).
+- [x] Every bucket refusal carries the one message; the flow rule is silent
+      (ambient, like fire and pistons).
 - [x] Gametests: `aNonMemberCannotPourWaterIntoARegionFromOutside`,
       `aResidentPoursWaterIntoTheirRegionFromOutside`,
-      `aNonMemberCannotBailWaterOutOfARegionFromOutside`.
+      `aNonMemberCannotBailWaterOutOfARegionFromOutside`,
+      `waterDoesNotFlowIntoARegionFromOutside`, `waterFlowsFreelyWithinARegion`.
 
 ## Notes
 
@@ -30,11 +36,16 @@
   `emptyContents`, so fish buckets are covered.
 - Dispensers pass a non-player `entity` and fall through untouched — a dispenser
   firing into a region is `RegionEnvironment` territory.
+- Fluid flow across the border is `RegionFluidSpreadMixin` on
+  `FlowingFluid.spreadTo`: `direction` points from the fluid to the block it is
+  about to fill, so the source is `pos.relative(direction.getOpposite())`. New
+  `RegionEnvironment.allowsFluidSpread(level, from, to)` — allow when `to` is
+  unclaimed or in the same region the fluid is already in. Covers water and
+  lava (both `FlowingFluid`).
 - **Not covered:** powder snow (`SolidBucketItem` is a `BlockItem`, guarded by
-  `ItemEvents.USE_ON` at the clicked position only), and water *flowing* across
-  a region border from a source legally placed just outside — that is ambient
-  spread, a `RegionEnvironment`-shaped problem, out of scope here.
-- `:bootstrap` change (new mixin) — needs a restart.
+  `ItemEvents.USE_ON` at the clicked position only).
+- `:bootstrap` change (two new mixins, a `MixinHooks` signature) — needs a
+  restart.
 
 ## Comments
 

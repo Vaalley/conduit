@@ -21,6 +21,7 @@
     "RegionEntityDamageMixin",
     "RegionExplosionMixin",
     "RegionFireMixin",
+    "RegionFluidSpreadMixin",
     "RegionPistonMixin",
     "RegionMobGriefingMixin",
     "RegionEndermanTakeMixin",
