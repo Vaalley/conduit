@@ -32,7 +32,7 @@ import net.minecraft.world.entity.animal.equine.AbstractChestedHorse
 import net.minecraft.world.entity.animal.equine.AbstractHorse
 import net.minecraft.world.entity.monster.Enemy
 import net.minecraft.world.entity.decoration.ArmorStand
-import net.minecraft.world.entity.decoration.ItemFrame
+import net.minecraft.world.entity.decoration.BlockAttachedEntity
 import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.inventory.ChestMenu
 import net.minecraft.world.inventory.PlayerEnderChestContainer
@@ -551,10 +551,27 @@ object RegionProtection {
      */
     @JvmStatic
     fun allowsEntityDamage(entity: Entity, source: DamageSource): Boolean {
+        if (isRegionDecoration(entity)) return allowsDecorationDamage(entity, source)
         val player = playerResponsibleFor(source) ?: return true
         val region = entityProtectionAround(player, entity) ?: return true
         if (isCullableHostile(entity)) return true
         return refuse(player, region)
+    }
+
+    /**
+     * An item frame, a painting, an armor stand — a placed decoration a region
+     * makes indestructible: nothing inside a region breaks one, not a creeper,
+     * not a skeleton's arrow, not a stranger, only a member removing it. There
+     * is no flag and no message; the hit is simply ignored.
+     */
+    private fun isRegionDecoration(entity: Entity): Boolean =
+        entity is BlockAttachedEntity || entity is ArmorStand
+
+    private fun allowsDecorationDamage(entity: Entity, source: DamageSource): Boolean {
+        val pos = (entity as? BlockAttachedEntity)?.getPos() ?: entity.blockPosition()
+        val region = RegionsFeature.regionAt(entity.level(), pos) ?: return true
+        val by = playerResponsibleFor(source)
+        return by != null && canModifyRegion(by, region)
     }
 
     private fun playerResponsibleFor(source: DamageSource): ServerPlayer? {
@@ -583,7 +600,7 @@ object RegionProtection {
     ): Boolean {
         val p = player ?: return true
         val region = entityProtectionAround(p, entity) ?: return true
-        if (entity is ItemFrame || entity is ArmorStand) return refuse(p, region)
+        if (entity != null && isRegionDecoration(entity)) return refuse(p, region)
 
         val emptyHand = p.getItemInHand(hand).isEmpty
         if (entity is AbstractChestedHorse && entity.hasChest()) {

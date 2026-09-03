@@ -19,6 +19,7 @@
     "RegionContainerSessionMixin",
     "RegionContainerClickMixin",
     "RegionEntityDamageMixin",
+    "RegionDecorationDamageMixin",
     "RegionExplosionMixin",
     "RegionFireMixin",
     "RegionFluidSpreadMixin",

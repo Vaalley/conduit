@@ -1114,6 +1114,42 @@ class RegionProtectionGameTest {
     }
 
     @GameTest
+    fun nothingButAMemberBreaksAnItemFrameInARegion(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T40FrameBoom")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        val frame = ItemFrame(helper.level, helper.absolutePos(BlockPos(2, 2, 2)), Direction.NORTH)
+        helper.level.addFreshEntity(frame)
+        frame.setItem(ItemStack(Items.DIAMOND))
+        val creeper = helper.spawnWithNoFreeWill(EntityTypes.CREEPER, BlockPos(2, 2, 4))
+
+        // A blast, a skeleton's arrow, a stray snowball — nothing without a
+        // member behind it may hurt the frame.
+        frame.hurtServer(helper.level, helper.level.damageSources().explosion(null, creeper), 200.0f)
+        frame.hurtServer(helper.level, helper.level.damageSources().mobAttack(creeper), 200.0f)
+
+        helper.assertFalse(frame.isRemoved, "a non-member force broke an item frame in a region")
+        helper.assertTrue(ItemStack.matches(frame.item, ItemStack(Items.DIAMOND)), "the framed item was knocked out")
+        alice.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aMemberBreaksTheirOwnItemFrame(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T40FrameMine")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        val frame = ItemFrame(helper.level, helper.absolutePos(BlockPos(2, 2, 2)), Direction.NORTH)
+        helper.level.addFreshEntity(frame) // left empty: one hit breaks it
+        alice.standAt(helper, 2.0, 2.0, 3.0)
+        alice.messages.clear()
+
+        alice.attacks(frame)
+        helper.assertTrue(frame.isRemoved, "a member could not break their own item frame")
+        helper.assertFalse(alice.wasRefusedBy("T40FrameMine's Place"), "a member was refused their own item frame")
+        alice.leave()
+        helper.succeed()
+    }
+
+    @GameTest
     fun anEmptyHandedStrangerCannotRemoveArmorStandEquipment(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T14ArmorA")
         val bob = MessageCapturingPlayer.join(helper, "T14ArmorB")
