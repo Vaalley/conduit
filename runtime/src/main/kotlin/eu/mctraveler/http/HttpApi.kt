@@ -132,7 +132,9 @@ object HttpApi {
         server.execute {
             if (future.isCancelled) return@execute
             try {
-                val players = server.playerList.players.map { it.gameProfile.name }
+                val players = server.playerList.players
+                    .filterNot(eu.mctraveler.vanish.VanishFeature::isVanished) // issue #47
+                    .map { it.gameProfile.name }
                 val tps = TabListFeature.tps(server.averageTickTimeNanos)
                 val sessions = server.playerList.players.map { player ->
                     PlayerSession(player.gameProfile.name, joinedAt[player.uuid])

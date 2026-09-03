@@ -54,6 +54,9 @@ interface MixinHooks {
     /** Null means "send the packet unmasked". */
     fun maskSpectators(viewer: ServerPlayer, packet: ClientboundPlayerInfoUpdatePacket): ClientboundPlayerInfoUpdatePacket?
 
+    /** Issue #47: whether [target]'s entity must be hidden from [viewer] right now (vanished). */
+    fun isVanishedFromViewer(target: ServerPlayer, viewer: ServerPlayer): Boolean
+
     // Embassies
     fun beforeTeleport(player: ServerPlayer, destination: ResourceKey<Level>)
 
@@ -138,6 +141,9 @@ object Hooks {
         viewer: ServerPlayer,
         packet: ClientboundPlayerInfoUpdatePacket,
     ): ClientboundPlayerInfoUpdatePacket? = impl?.maskSpectators(viewer, packet)
+
+    @JvmStatic fun isVanishedFromViewer(target: ServerPlayer, viewer: ServerPlayer): Boolean =
+        impl?.isVanishedFromViewer(target, viewer) ?: false
 
     @JvmStatic fun beforeTeleport(player: ServerPlayer, destination: ResourceKey<Level>) {
         impl?.beforeTeleport(player, destination)

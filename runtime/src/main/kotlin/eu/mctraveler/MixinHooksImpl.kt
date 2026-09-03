@@ -67,6 +67,9 @@ object MixinHooksImpl : MixinHooks {
         packet: ClientboundPlayerInfoUpdatePacket,
     ): ClientboundPlayerInfoUpdatePacket? = SpectatorVisibility.maskFor(viewer, packet)
 
+    override fun isVanishedFromViewer(target: ServerPlayer, viewer: ServerPlayer): Boolean =
+        eu.mctraveler.vanish.VanishFeature.isHiddenFrom(target, viewer)
+
     override fun beforeTeleport(player: ServerPlayer, destination: ResourceKey<Level>) =
         EmbassyOrigins.beforeTeleport(player, destination)
 

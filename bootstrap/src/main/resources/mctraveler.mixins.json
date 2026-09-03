@@ -14,6 +14,7 @@
     "CommandsMixin",
     "ServerGamePacketListenerImplMixin",
     "SpectatorVisibilityMixin",
+    "VanishTrackingMixin",
     "ClientboundPlayerInfoUpdatePacketAccessor",
     "RegionSignEditMixin",
     "RegionContainerSessionMixin",

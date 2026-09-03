@@ -43,7 +43,11 @@ object Motd {
      * and the hide-online-players setting (empty sample).
      */
     fun decorate(status: ServerStatus, server: MinecraftServer): ServerStatus =
-        decorate(status, roster(server))
+        decorate(
+            status,
+            roster(server),
+            server.playerList.players.count(eu.mctraveler.vanish.VanishFeature::isVanished), // issue #47
+        )
 
     /**
      * Decorates a vanilla-built [status]: the description becomes [description] and the
@@ -51,10 +55,12 @@ object Motd {
      * order, already anonymized where a player opts out of listing). The vanilla
      * max/online counts, version, favicon, and secure-chat advertisement are preserved.
      */
-    fun decorate(status: ServerStatus, roster: List<NameAndId>): ServerStatus =
+    fun decorate(status: ServerStatus, roster: List<NameAndId>, hidden: Int = 0): ServerStatus =
         ServerStatus(
             description(),
-            status.players().map { ServerStatus.Players(it.max(), it.online(), roster.take(SAMPLE_SIZE)) },
+            status.players().map {
+                ServerStatus.Players(it.max(), (it.online() - hidden).coerceAtLeast(0), roster.take(SAMPLE_SIZE))
+            },
             status.version(),
             status.favicon(),
             status.enforcesSecureChat(),
@@ -62,7 +68,9 @@ object Motd {
 
     private fun roster(server: MinecraftServer): List<NameAndId> =
         if (server.hidesOnlinePlayers()) emptyList()
-        else server.playerList.players.map { player ->
+        else server.playerList.players
+            .filterNot(eu.mctraveler.vanish.VanishFeature::isVanished) // issue #47
+            .map { player ->
             if (player.allowsListing()) player.nameAndId()
             else MinecraftServer.ANONYMOUS_PLAYER_PROFILE
         }

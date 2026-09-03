@@ -3,8 +3,10 @@ package eu.mctraveler.chat
 import com.mojang.brigadier.CommandDispatcher
 import eu.mctraveler.Conduit
 import eu.mctraveler.geo.GeoIpFeature
+import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.reloadable
 import eu.mctraveler.text.Paint
+import eu.mctraveler.vanish.VanishFeature
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.util.Optional
@@ -77,7 +79,16 @@ object ChatFeature {
         ServerPlayConnectionEvents.DISCONNECT.reloadable.register { handler, server ->
             pendingJoins.removeIf { it.uuid == handler.player.uuid }
             if (announced.remove(handler.player.uuid)) {
-                broadcast(server, leaveLine(handler.player.gameProfile.name))
+                val line = leaveLine(handler.player.gameProfile.name)
+                if (VanishFeature.isVanished(handler.player)) {
+                    // Non-admins already saw this player "leave" when they
+                    // vanished; only admins get the real disconnect line.
+                    server.playerList.players
+                        .filter { RegionsFeature.isAdmin(it) }
+                        .forEach { it.sendSystemMessage(line, false) }
+                } else {
+                    broadcast(server, line)
+                }
             }
         }
         ServerTickEvents.END_SERVER_TICK.reloadable.register(::flushPendingJoins)
@@ -161,9 +172,22 @@ object ChatFeature {
     )
 
     /** `[-] <name> left.` — the Portal's exact leave line (note the trailing period). */
-    private fun leaveLine(name: String): Component = Paint.gray(
+    internal fun leaveLine(name: String): Component = Paint.gray(
         Paint.darkGray("["), Paint.red("-"), Paint.darkGray("]"), " ", Paint.red(name), " left.",
     )
+
+    /**
+     * The join line [player] would produce if they were connecting right now,
+     * country and all — what `/vanish` sends to non-admins to fake a
+     * reconnection.
+     */
+    internal fun joinLineFor(player: ServerPlayer): Component {
+        val country = (player.connection.getRemoteAddress() as? InetSocketAddress)?.address
+            ?.takeUnless(::isPrivateAddress)
+            ?.let(GeoIpFeature::lookup)
+            ?.name
+        return joinLine(player.gameProfile.name, country)
+    }
 
     private fun isPrivateAddress(address: InetAddress): Boolean =
         address.isLoopbackAddress ||

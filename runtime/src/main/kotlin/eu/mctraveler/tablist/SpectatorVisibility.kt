@@ -2,6 +2,7 @@ package eu.mctraveler.tablist
 
 import eu.mctraveler.mixin.ClientboundPlayerInfoUpdatePacketAccessor
 import eu.mctraveler.region.RegionsFeature
+import eu.mctraveler.vanish.VanishFeature
 import net.minecraft.network.chat.Component
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket
 import net.minecraft.server.level.ServerPlayer
@@ -54,8 +55,16 @@ object SpectatorVisibility {
         val entries = packet.entries()
         if (entries.isEmpty()) return null
 
-        var changed = false
-        val maskedEntries = entries.map { entry ->
+        // A vanished player (issue #47) is simply not in a non-admin's list —
+        // drop the entry before any spectator masking runs on what is left.
+        val serverPlayers = viewer.level().server.playerList
+        val visible = entries.filter { entry ->
+            entry.profileId() == viewer.uuid ||
+                serverPlayers.getPlayer(entry.profileId())?.let { !VanishFeature.isVanished(it) } ?: true
+        }
+        var changed = visible.size != entries.size
+
+        val maskedEntries = visible.map { entry ->
             val maskGameMode = entry.gameMode() == GameType.SPECTATOR
             val maskHearts = entry.gameMode() == GameType.SPECTATOR || entry.gameMode() == GameType.CREATIVE
 
