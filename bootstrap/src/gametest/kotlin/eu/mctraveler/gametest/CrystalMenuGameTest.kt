@@ -285,12 +285,20 @@ class CrystalMenuGameTest {
         try {
             createRegion(helper, owner, 0.0 to 0.0, 4.0 to 4.0)
             guest.standAt(helper, 2.0, 1.0, 2.0)
+            val floor = BlockPos(2, 1, 2)
+            helper.setBlock(floor, Blocks.STONE)
             // Precondition: this really is ground the guest is refused on.
             guest.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.STONE))
-            guest.gameMode.useItem(guest, guest.level(), guest.mainHandItem, InteractionHand.MAIN_HAND)
+            guest.gameMode.useItemOn(
+                guest,
+                guest.level(),
+                guest.mainHandItem,
+                InteractionHand.MAIN_HAND,
+                BlockHitResult(Vec3.atCenterOf(helper.absolutePos(floor)), Direction.UP, helper.absolutePos(floor), false),
+            )
             helper.assertTrue(
                 guest.wasRefusedBy("TCLandlord's Place"),
-                "the guest was not refused an ordinary item use, so this proves nothing",
+                "the guest was not refused an ordinary block placement, so this proves nothing",
             )
 
             guest.messages.clear()
@@ -307,8 +315,6 @@ class CrystalMenuGameTest {
             // The block path is guarded by a different rule (allowsBlockChange,
             // which is what refuses building) and so needs its own exemption.
             guest.closeContainer()
-            val floor = BlockPos(2, 1, 2)
-            helper.setBlock(floor, Blocks.STONE)
             guest.messages.clear()
             guest.usesCrystalOn(helper, floor)
             helper.assertTrue(

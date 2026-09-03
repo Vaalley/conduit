@@ -497,15 +497,26 @@ class RegionProtectionGameTest {
     // ---- item use ----
 
     @GameTest
-    fun aNonMemberCannotUseAnItem(helper: GameTestHelper) {
+    fun aNonMemberMayUseAHarmlessItemInAForeignRegion(helper: GameTestHelper) {
+        // Issue #40: an item used in the air touches nothing, so it says
+        // nothing — the region only refuses a use that would change it.
         val alice = MessageCapturingPlayer.join(helper, "T14UseA")
         val bob = MessageCapturingPlayer.join(helper, "T14UseB")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
         bob.standAt(helper, 2.0, 1.0, 2.0)
-        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.STICK))
+        bob.messages.clear()
 
-        helper.assertFalse(bob.usesHeldItem(), "a stranger used an item inside a region")
-        helper.assertValueEqual(bob.messages.last(), protectedBy("T14UseA's Place"), "the item-use refusal")
+        for (item in listOf(Items.SPYGLASS, Items.GOAT_HORN, Items.MAP, Items.STICK)) {
+            bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(item))
+            bob.usesHeldItem()
+        }
+        helper.assertFalse(bob.wasRefusedBy("T14UseA's Place"), "a harmless item earned a refusal")
+        helper.assertTrue(bob.messages.isEmpty(), "a harmless item-use emitted a message")
+
+        // A bucket used at the feet still is — it would place a fluid.
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.WATER_BUCKET))
+        helper.assertFalse(bob.usesHeldItem(), "a stranger poured a bucket in a region")
+        helper.assertTrue(bob.wasRefusedBy("T14UseA's Place"), "the bucket use emitted no refusal")
         alice.leave()
         bob.leave()
         helper.succeed()

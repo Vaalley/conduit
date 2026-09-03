@@ -33,6 +33,7 @@ import net.minecraft.world.entity.decoration.ItemFrame
 import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.inventory.ChestMenu
 import net.minecraft.world.inventory.PlayerEnderChestContainer
+import net.minecraft.world.item.BucketItem
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 import net.minecraft.world.item.alchemy.PotionContents
@@ -483,33 +484,25 @@ object RegionProtection {
     }
 
     /**
-     * Whether [player] may use [stack] where they are standing. An empty hand
-     * uses no item (the Portal only saw this event holding something), and an
-     * exempt item is nobody's business but its own. A false answer always denies;
-     * its refusal message may be throttled.
+     * Whether [player] may use [stack] in the air where they stand (issue #40).
+     *
+     * Almost everything may. An item used through `Item.use` rather than on a
+     * block raises a spyglass, reads a map, sounds a goat horn, throws a pearl
+     * or a snowball, casts a line, boosts an elytra, eats — none of it touches
+     * the region, so none of it earns a refusal. The one exception is a bucket,
+     * whose use places or lifts a fluid: [RegionBucketMixin] judges that by the
+     * block the fluid reaches, and this refuses a non-member starting one while
+     * they stand on land they cannot modify.
+     *
+     * A false answer always denies; its refusal message may be throttled.
      */
     @JvmStatic
     fun allowsItemUse(player: ServerPlayer?, stack: ItemStack): Boolean {
-        if (isItemUseExempt(stack)) return true
+        if (stack.isEmpty || isExemptItem(stack) || stack.item !is BucketItem) return true
         val p = player ?: return true
         val region = RegionTracker.regionOf(p) ?: return true
         return canModifyRegion(p, region) || refuse(p, region)
     }
-
-    /** Items whose use is independent of the block or region being looked at. */
-    private fun isItemUseExempt(stack: ItemStack): Boolean =
-        stack.isEmpty ||
-            isExemptItem(stack) ||
-            stack.has(DataComponents.FOOD) ||
-            stack.has(DataComponents.POTION_CONTENTS) ||
-            stack.`is`(Items.POTION) ||
-            stack.`is`(Items.MILK_BUCKET) ||
-            stack.`is`(Items.HONEY_BOTTLE) ||
-            stack.`is`(Items.GOLDEN_APPLE) ||
-            stack.`is`(Items.ENCHANTED_GOLDEN_APPLE) ||
-            stack.`is`(Items.FIREWORK_ROCKET) ||
-            stack.`is`(Items.ENDER_PEARL) ||
-            stack.`is`(Items.ENDER_EYE)
 
     /** Block-changing use-on paths hidden inside otherwise safe air-use items. */
     private fun exemptUseChangesBlock(context: UseOnContext): Boolean {
