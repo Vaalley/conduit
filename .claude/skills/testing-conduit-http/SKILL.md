@@ -36,7 +36,7 @@ The first start downloads dependencies, accepts the EULA (`run/eula.txt`), and g
 ## Verifying the endpoints
 
 ```bash
-# Should return 200 JSON with online, players, tps
+# Should return 200 JSON with player status, sessions, uptime, versions, time, and weather
 curl -i -H "Authorization: Bearer dev-test-token" http://127.0.0.1:8080/status
 
 # Should return 204 and log `[Discord] <sender>: <content>` to the server console
@@ -67,4 +67,7 @@ pkill -f 'KnotServer'
 ## Common gotchas
 - `CONDUIT_HTTP_TOKEN` must be non-empty; otherwise `HttpApi` logs a warning and the interface is disabled.
 - `broadcastSystemMessage` logs the message to the server console, so the `[Discord] <sender>: <content>` line should appear in both `/tmp/conduit-server.log` and `run/logs/latest.log`.
-- The `/status` response maps 1:1 to the `StatusResponse` interface expected by Observer (`online: number`, `players: string[]`, `tps: number`).
+- The `/status` response maps 1:1 to the `StatusResponse` interface expected by Observer:
+  `online: number`, `players: string[]`, `tps: number`, `sessions: { name: string, joinedAt: number | null }[]`,
+  `startedAt: number`, `minecraftVersion: string`, `modVersion: string`, `dayTime: number`,
+  `raining: boolean`, and `thundering: boolean`.
