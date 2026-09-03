@@ -1113,24 +1113,32 @@ class RegionProtectionGameTest {
         helper.succeed()
     }
 
-    @GameTest
-    fun nothingButAMemberBreaksAnItemFrameInARegion(helper: GameTestHelper) {
+    @GameTest(maxTicks = 60)
+    fun aCreeperCannotBlowUpAnItemFrameInARegion(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T40FrameBoom")
-        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        val frame = ItemFrame(helper.level, helper.absolutePos(BlockPos(2, 2, 2)), Direction.NORTH)
+        createRegion(helper, alice, 0.0 to 0.0, 6.0 to 6.0)
+        helper.setBlock(BlockPos(3, 2, 4), Blocks.STONE) // the wall the frame hangs on
+        val frame = ItemFrame(helper.level, helper.absolutePos(BlockPos(3, 2, 3)), Direction.NORTH)
         helper.level.addFreshEntity(frame)
         frame.setItem(ItemStack(Items.DIAMOND))
-        val creeper = helper.spawnWithNoFreeWill(EntityTypes.CREEPER, BlockPos(2, 2, 4))
+        val creeper = helper.spawnWithNoFreeWill(EntityTypes.CREEPER, BlockPos(3, 2, 2))
+        val boom = helper.absolutePos(BlockPos(3, 2, 2))
 
-        // A blast, a skeleton's arrow, a stray snowball — nothing without a
-        // member behind it may hurt the frame.
+        // Direct hits — a blast, a mob's swipe — with no member behind them.
         frame.hurtServer(helper.level, helper.level.damageSources().explosion(null, creeper), 200.0f)
         frame.hurtServer(helper.level, helper.level.damageSources().mobAttack(creeper), 200.0f)
+        // And a real creeper-sized blast against the wall it hangs on — its
+        // damage refused, and its knockback (which normally shatters a frame
+        // on any shove) refused too.
+        helper.level.explode(creeper, boom.x + 0.5, boom.y + 0.5, boom.z + 0.5, 3.0f, net.minecraft.world.level.Level.ExplosionInteraction.MOB)
 
-        helper.assertFalse(frame.isRemoved, "a non-member force broke an item frame in a region")
-        helper.assertTrue(ItemStack.matches(frame.item, ItemStack(Items.DIAMOND)), "the framed item was knocked out")
-        alice.leave()
-        helper.succeed()
+        helper.runAfterDelay(10) {
+            helper.assertBlockPresent(Blocks.STONE, BlockPos(3, 2, 4))
+            helper.assertFalse(frame.isRemoved, "a creeper blew up an item frame in a region")
+            helper.assertTrue(ItemStack.matches(frame.item, ItemStack(Items.DIAMOND)), "the framed item was knocked out")
+            alice.leave()
+            helper.succeed()
+        }
     }
 
     @GameTest

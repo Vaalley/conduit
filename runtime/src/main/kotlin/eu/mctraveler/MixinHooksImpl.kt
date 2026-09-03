@@ -126,6 +126,9 @@ object MixinHooksImpl : MixinHooks {
     override fun allowsFluidSpread(level: Level, from: BlockPos, to: BlockPos): Boolean =
         RegionEnvironment.allowsFluidSpread(level, from, to)
 
+    override fun allowsDecorationMove(level: Level, pos: BlockPos): Boolean =
+        RegionEnvironment.allowsDecorationMove(level, pos)
+
     override fun allowsPistonMove(
         level: Level,
         pistonPos: BlockPos,

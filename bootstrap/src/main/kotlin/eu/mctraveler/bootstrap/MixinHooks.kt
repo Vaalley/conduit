@@ -86,6 +86,7 @@ interface MixinHooks {
     fun allowsExplosionDamage(level: Level, pos: BlockPos): Boolean
     fun allowsFireDamage(level: Level, pos: BlockPos): Boolean
     fun allowsFluidSpread(level: Level, from: BlockPos, to: BlockPos): Boolean
+    fun allowsDecorationMove(level: Level, pos: BlockPos): Boolean
     fun allowsPistonMove(
         level: Level,
         pistonPos: BlockPos,
@@ -205,6 +206,9 @@ object Hooks {
 
     @JvmStatic fun allowsFluidSpread(level: Level, from: BlockPos, to: BlockPos): Boolean =
         impl?.allowsFluidSpread(level, from, to) ?: true
+
+    @JvmStatic fun allowsDecorationMove(level: Level, pos: BlockPos): Boolean =
+        impl?.allowsDecorationMove(level, pos) ?: true
 
     @JvmStatic fun allowsPistonMove(
         level: Level,

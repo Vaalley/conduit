@@ -71,6 +71,16 @@ object RegionEnvironment {
     }
 
     /**
+     * Whether a placed decoration at [pos] may be shoved — by an explosion's
+     * knockback, a piston, a boat. False inside any region: a hanging entity
+     * breaks the instant it is moved, so "do not move it" is "do not break it".
+     * A member still removes their own by hitting it, which is a different path.
+     */
+    @JvmStatic
+    fun allowsDecorationMove(level: Level, pos: BlockPos): Boolean =
+        RegionsFeature.regionAt(level, pos) == null
+
+    /**
      * Whether a fluid at [from] may spread into [to]. A fluid flows freely
      * within one region and across unclaimed ground, but does not cross into a
      * region from outside it — so water or lava a stranger pours just past the

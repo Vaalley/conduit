@@ -30,6 +30,13 @@ skeleton's arrow, a stray snowball, a stranger's punch are all ignored.
   framed item out first. New `RegionDecorationDamageMixin` on
   `@Mixin({BlockAttachedEntity, ItemFrame})` — HEAD of `hurtServer` on both —
   routes the decision through `Hooks.allowsEntityDamage`.
+- **And that is not enough on its own.** `BlockAttachedEntity.move` / `push`
+  `kill()` the entity on *any* displacement — so an explosion whose damage was
+  refused still shatters the frame with its knockback (as would a piston or a
+  boat). The same mixin guards `move` and `push`: a decoration inside a region
+  cannot be shoved (`RegionEnvironment.allowsDecorationMove` —
+  `regionAt != null`, no member context because there is none). This also
+  hardens the frame against pistons and vehicles for free.
 - Armor stands are `LivingEntity`, so their explosion damage already reaches
   `allowsEntityDamage` through `ServerLivingEntityEvents.ALLOW_DAMAGE`; only the
   logic change was needed there.
