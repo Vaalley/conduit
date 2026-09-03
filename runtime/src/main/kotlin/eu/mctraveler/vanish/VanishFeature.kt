@@ -53,10 +53,15 @@ object VanishFeature {
     fun register() {
         CommandRegistrationCallback.EVENT.reloadable.register { dispatcher, _, _ ->
             dispatcher.register(
-                Commands.literal("vanish").executes { ctx ->
-                    toggle(ctx.source.playerOrException)
-                    Command.SINGLE_SUCCESS
-                },
+                Commands.literal("vanish")
+                    // Hidden from the command tree for non-admins — a stranger never
+                    // sees it in tab-completion or the command list, not just a
+                    // refusal on running it. Non-player sources (console) keep it.
+                    .requires { source -> source.player?.let(RegionsFeature::isAdmin) ?: true }
+                    .executes { ctx ->
+                        toggle(ctx.source.playerOrException)
+                        Command.SINGLE_SUCCESS
+                    },
             )
         }
         ServerPlayConnectionEvents.DISCONNECT.reloadable.register { handler, _ ->

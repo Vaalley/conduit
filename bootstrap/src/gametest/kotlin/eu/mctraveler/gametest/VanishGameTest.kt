@@ -40,6 +40,24 @@ class VanishGameTest {
     }
 
     @GameTest
+    fun vanishIsAbsentFromANonAdminsCommandTree(helper: GameTestHelper) {
+        val server = helper.level.server
+        val stranger = TestPlayer.join(server, "TreeStranger")
+        val admin = TestPlayer.join(server, "TreeAdmin").also { it.op() }
+
+        val node = server.commands.dispatcher.root.getChild("vanish")
+            ?: throw helper.assertionException("the /vanish command is not registered at all")
+        check(!node.requirement.test(stranger.player.createCommandSourceStack())) {
+            "/vanish is visible to a non-admin's command tree"
+        }
+        check(node.requirement.test(admin.player.createCommandSourceStack())) {
+            "/vanish is hidden from an admin's command tree"
+        }
+        cleanUp(admin, stranger)
+        helper.succeed()
+    }
+
+    @GameTest
     fun unvanishFakesAJoinForNonAdmins(helper: GameTestHelper) {
         val server = helper.level.server
         val stranger = TestPlayer.join(server, "BackStranger")
