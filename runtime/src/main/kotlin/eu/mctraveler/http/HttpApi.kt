@@ -54,7 +54,7 @@ object HttpApi {
         ServerPlayConnectionEvents.JOIN.reloadable.register { handler, _, _ ->
             joinedAt[handler.player.uuid] = System.currentTimeMillis()
         }
-        ServerPlayConnectionEvents.DISCONNECT.reloadable.register { handler, _, ->
+        ServerPlayConnectionEvents.DISCONNECT.reloadable.register { handler, _ ->
             joinedAt.remove(handler.player.uuid)
         }
         ServerLifecycleEvents.SERVER_STARTED.reloadable.register { server ->
