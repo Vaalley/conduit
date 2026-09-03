@@ -28,6 +28,9 @@ import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.OwnableEntity
+import net.minecraft.world.entity.animal.equine.AbstractChestedHorse
+import net.minecraft.world.entity.animal.equine.AbstractHorse
+import net.minecraft.world.entity.monster.Enemy
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.entity.decoration.ItemFrame
 import net.minecraft.world.inventory.AbstractContainerMenu
@@ -521,13 +524,23 @@ object RegionProtection {
         return contents.`is`(Potions.WATER)
     }
 
-    /** Hitting [entity] is refused in its deepest target region, for every entity type. */
+    /**
+     * Hitting [entity] is refused in its deepest target region — except an
+     * un-named hostile mob, which a non-member may cull (issue #40). A name tag
+     * makes even a hostile someone's, and so protected; item frames and armor
+     * stands are always protected.
+     */
     @JvmStatic
     fun allowsEntityAttack(player: ServerPlayer?, entity: Entity?): Boolean {
         val p = player ?: return true
         val region = entityProtectionAround(p, entity) ?: return true
+        if (isCullableHostile(entity)) return true
         return refuse(p, region)
     }
+
+    /** An unnamed hostile: killable by anyone, even inside a region. */
+    private fun isCullableHostile(entity: Entity?): Boolean =
+        entity is Enemy && entity !is ArmorStand && !entity.hasCustomName()
 
     /**
      * Whether [source] may damage [entity].
@@ -540,6 +553,7 @@ object RegionProtection {
     fun allowsEntityDamage(entity: Entity, source: DamageSource): Boolean {
         val player = playerResponsibleFor(source) ?: return true
         val region = entityProtectionAround(player, entity) ?: return true
+        if (isCullableHostile(entity)) return true
         return refuse(player, region)
     }
 
@@ -550,9 +564,16 @@ object RegionProtection {
 
     /**
      * Right-clicking [entity] is judged by the deepest region at that target's
-     * block position. Empty-hand interaction remains allowed for ordinary
-     * entities, while item frames and armor stands remain protected.
-     * `ENABLE_PUBLIC_VILLAGER_TRADING` opens held-item interaction too.
+     * block position (issue #40):
+     *
+     * - item frames and armor stands are always protected;
+     * - a chested donkey or mule opens its inventory to a crouch-click with an
+     *   empty hand — view-only, the container mixin refuses the slot clicks —
+     *   and refuses everything else (it is not ridden, its load not touched);
+     * - any other rideable equine may be mounted with an empty hand;
+     * - every other mob keeps the old rule: an empty-hand interaction that
+     *   changes nothing is allowed, a held-item one is refused unless the
+     *   region flies `ENABLE_PUBLIC_VILLAGER_TRADING`.
      */
     @JvmStatic
     fun allowsEntityInteract(
@@ -563,7 +584,18 @@ object RegionProtection {
         val p = player ?: return true
         val region = entityProtectionAround(p, entity) ?: return true
         if (entity is ItemFrame || entity is ArmorStand) return refuse(p, region)
-        if (p.getItemInHand(hand).isEmpty) return true
+
+        val emptyHand = p.getItemInHand(hand).isEmpty
+        if (entity is AbstractChestedHorse && entity.hasChest()) {
+            if (emptyHand && p.isShiftKeyDown) {
+                rememberContainerBlock(p, entity.level(), entity.blockPosition())
+                return true
+            }
+            return refuse(p, region)
+        }
+        if (entity is AbstractHorse && emptyHand && !p.isShiftKeyDown) return true
+
+        if (emptyHand) return true
         if (ENABLE_PUBLIC_VILLAGER_TRADING in region.flags) return true
         return refuse(p, region)
     }

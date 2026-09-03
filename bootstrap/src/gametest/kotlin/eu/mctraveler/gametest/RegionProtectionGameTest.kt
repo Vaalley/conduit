@@ -950,13 +950,12 @@ class RegionProtectionGameTest {
     }
 
     @GameTest
-    fun aNonMemberCannotAttackAnimalsHostilesOrPlayers(helper: GameTestHelper) {
+    fun aNonMemberCannotAttackAnimalsOrPlayers(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T14AttackA")
         val bob = MessageCapturingPlayer.join(helper, "T14AttackB")
         val charlie = MessageCapturingPlayer.join(helper, "T14AttackC")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
         val cow = helper.spawnWithNoFreeWill(EntityTypes.COW, BlockPos(2, 2, 2))
-        val zombie = helper.spawnWithNoFreeWill(EntityTypes.ZOMBIE, BlockPos(3, 2, 2))
         charlie.standAt(helper, 2.0, 2.0, 3.0)
         // The attacker is just beyond the region's eastern edge, but every
         // target remains close enough for the server's attack-range check.
@@ -964,16 +963,78 @@ class RegionProtectionGameTest {
         bob.messages.clear()
 
         bob.attacks(cow)
-        bob.attacks(zombie)
         bob.attacks(charlie)
 
         helper.assertValueEqual(cow.health, cow.maxHealth, "a stranger hurt a protected cow")
-        helper.assertValueEqual(zombie.health, zombie.maxHealth, "a stranger hurt a protected hostile")
         helper.assertValueEqual(charlie.health, charlie.maxHealth, "a stranger hurt a protected player")
         helper.assertTrue(bob.wasRefusedBy("T14AttackA's Place"), "no entity-attack refusal")
         alice.leave()
         bob.leave()
         charlie.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aNonMemberMayCullAnUnnamedHostileButNotANamedOne(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T40CullA")
+        val bob = MessageCapturingPlayer.join(helper, "T40CullB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        val zombie = helper.spawnWithNoFreeWill(EntityTypes.ZOMBIE, BlockPos(2, 2, 2))
+        val named = helper.spawnWithNoFreeWill(EntityTypes.ZOMBIE, BlockPos(3, 2, 2))
+        named.customName = net.minecraft.network.chat.Component.literal("Kevin")
+        bob.standAt(helper, 4.25, 2.0, 2.0)
+        bob.messages.clear()
+
+        bob.attacks(zombie)
+        helper.assertTrue(zombie.health < zombie.maxHealth, "a non-member could not cull an unnamed hostile")
+        helper.assertFalse(bob.wasRefusedBy("T40CullA's Place"), "culling an unnamed hostile drew a refusal")
+
+        bob.attacks(named)
+        helper.assertValueEqual(named.health, named.maxHealth, "a non-member hit a named hostile")
+        helper.assertTrue(bob.wasRefusedBy("T40CullA's Place"), "hitting a named hostile drew no refusal")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aNonMemberMayRideAHorseButNotAttackIt(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T40HorseA")
+        val bob = MessageCapturingPlayer.join(helper, "T40HorseB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        val horse = helper.spawnWithNoFreeWill(EntityTypes.HORSE, BlockPos(2, 2, 2))
+        horse.setTamed(true)
+        bob.standAt(helper, 2.0, 2.0, 2.0)
+        bob.messages.clear()
+
+        bob.interactsWith(horse) // empty hand, not crouching → mount
+        helper.assertFalse(bob.wasRefusedBy("T40HorseA's Place"), "a non-member could not mount a horse")
+
+        bob.stopRiding()
+        bob.attacks(horse)
+        helper.assertValueEqual(horse.health, horse.maxHealth, "a non-member hurt a horse")
+        helper.assertTrue(bob.wasRefusedBy("T40HorseA's Place"), "hitting a horse drew no refusal")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aChestedDonkeyIsNotRiddenByANonMember(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T40DonkA")
+        val bob = MessageCapturingPlayer.join(helper, "T40DonkB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        val donkey = helper.spawnWithNoFreeWill(EntityTypes.DONKEY, BlockPos(2, 2, 2))
+        donkey.setTamed(true)
+        donkey.setChest(true)
+        bob.standAt(helper, 2.0, 2.0, 2.0)
+        bob.messages.clear()
+
+        bob.interactsWith(donkey) // empty hand, not crouching → would mount
+        helper.assertFalse(bob.isPassenger, "a non-member rode a chested donkey")
+        helper.assertTrue(bob.wasRefusedBy("T40DonkA's Place"), "riding a chested donkey drew no refusal")
+        alice.leave()
+        bob.leave()
         helper.succeed()
     }
 
