@@ -552,6 +552,63 @@ class RegionProtectionGameTest {
         helper.succeed()
     }
 
+    // ---- issue #49: buckets reach past the player's feet ----
+
+    @GameTest
+    fun aNonMemberCannotPourWaterIntoARegionFromOutside(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T49PourA")
+        val bob = MessageCapturingPlayer.join(helper, "T49PourB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(BlockPos(3, 3, 2), Blocks.STONE) // aimed at, inside the region
+        bob.standAt(helper, 5.5, 2.0, 2.0) // outside, reaching in over the border
+        bob.face(Direction.WEST)
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.WATER_BUCKET))
+        bob.messages.clear()
+
+        bob.usesHeldItem()
+        helper.assertBlockNotPresent(Blocks.WATER, BlockPos(4, 3, 2))
+        helper.assertTrue(bob.mainHandItem.`is`(Items.WATER_BUCKET), "the water bucket was spent")
+        helper.assertTrue(bob.wasRefusedBy("T49PourA's Place"), "pouring water into the region emitted no refusal")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aResidentPoursWaterIntoTheirRegionFromOutside(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T49OwnPour")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(BlockPos(3, 3, 2), Blocks.STONE)
+        alice.standAt(helper, 5.5, 2.0, 2.0)
+        alice.face(Direction.WEST)
+        alice.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.WATER_BUCKET))
+
+        alice.usesHeldItem()
+        helper.assertBlockPresent(Blocks.WATER, BlockPos(4, 3, 2))
+        alice.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aNonMemberCannotBailWaterOutOfARegionFromOutside(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T49BailA")
+        val bob = MessageCapturingPlayer.join(helper, "T49BailB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(BlockPos(4, 3, 2), Blocks.WATER)
+        bob.standAt(helper, 6.0, 2.0, 2.0)
+        bob.face(Direction.WEST)
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.BUCKET))
+        bob.messages.clear()
+
+        bob.usesHeldItem()
+        helper.assertBlockPresent(Blocks.WATER, BlockPos(4, 3, 2))
+        helper.assertTrue(bob.mainHandItem.`is`(Items.BUCKET), "the bucket filled from the region")
+        helper.assertTrue(bob.wasRefusedBy("T49BailA's Place"), "bailing water from the region emitted no refusal")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
     // ---- issue #40: interaction classes ----
 
     @GameTest
