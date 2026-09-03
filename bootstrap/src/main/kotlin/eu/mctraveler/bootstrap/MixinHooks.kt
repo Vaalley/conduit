@@ -36,6 +36,9 @@ interface MixinHooks {
     // Away
     fun onPlayerCommand(player: ServerPlayer)
 
+    /** Issue #52: whether [player] is away and so excluded from the sleep-percentage maths. */
+    fun isAway(player: ServerPlayer): Boolean
+
     // MOTD
     fun decorateStatus(status: ServerStatus, server: MinecraftServer): ServerStatus
 
@@ -117,6 +120,8 @@ object Hooks {
     @JvmStatic fun onPlayerCommand(player: ServerPlayer) {
         impl?.onPlayerCommand(player)
     }
+
+    @JvmStatic fun isAway(player: ServerPlayer): Boolean = impl?.isAway(player) ?: false
 
     @JvmStatic fun decorateStatus(status: ServerStatus, server: MinecraftServer): ServerStatus =
         impl?.decorateStatus(status, server) ?: status

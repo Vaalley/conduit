@@ -48,6 +48,8 @@ object MixinHooksImpl : MixinHooks {
 
     override fun onPlayerCommand(player: ServerPlayer) = AwayFeature.onPlayerCommand(player)
 
+    override fun isAway(player: ServerPlayer): Boolean = AwayFeature.isAway(player)
+
     override fun decorateStatus(status: ServerStatus, server: MinecraftServer): ServerStatus =
         Motd.decorate(status, server)
 

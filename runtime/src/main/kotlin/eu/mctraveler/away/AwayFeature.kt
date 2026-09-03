@@ -54,6 +54,14 @@ object AwayFeature {
     private val states = HashMap<UUID, State>()
 
     /**
+     * Whether [player] is currently away (issue #52: away players are dropped from
+     * the sleep-percentage maths, so one AFK player can never hold the night). A
+     * player with no state yet — just joined, never idle — is not away.
+     */
+    @JvmStatic
+    fun isAway(player: ServerPlayer): Boolean = states[player.uuid]?.away == true
+
+    /**
      * Gametest affordance: ages [player]'s away clock by [ticks] server ticks, as if
      * that much time had passed without them interacting. Scoped to one player so
      * concurrently running tests cannot warp each other's timing.
