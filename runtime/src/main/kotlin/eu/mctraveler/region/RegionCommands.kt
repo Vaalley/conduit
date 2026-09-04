@@ -50,6 +50,7 @@ object RegionCommands {
         "DISABLE_PUBLIC_REDSTONE_TRIGGERS",
         "DISABLE_WEIGHTED_PRESSURE_PLATES",
         "DISABLE_ANIMAL_PROTECTION",
+        "DISABLE_PVP",
         "PUBLIC",
     )
 

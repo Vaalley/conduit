@@ -950,24 +950,70 @@ class RegionProtectionGameTest {
     }
 
     @GameTest
-    fun aNonMemberCannotAttackAnimalsOrPlayers(helper: GameTestHelper) {
+    fun aNonMemberCannotAttackAnimals(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T14AttackA")
         val bob = MessageCapturingPlayer.join(helper, "T14AttackB")
-        val charlie = MessageCapturingPlayer.join(helper, "T14AttackC")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
         val cow = helper.spawnWithNoFreeWill(EntityTypes.COW, BlockPos(2, 2, 2))
-        charlie.standAt(helper, 2.0, 2.0, 3.0)
-        // The attacker is just beyond the region's eastern edge, but every
+        // The attacker is just beyond the region's eastern edge, but the
         // target remains close enough for the server's attack-range check.
         bob.standAt(helper, 4.25, 2.0, 2.0)
         bob.messages.clear()
 
         bob.attacks(cow)
-        bob.attacks(charlie)
 
         helper.assertValueEqual(cow.health, cow.maxHealth, "a stranger hurt a protected cow")
-        helper.assertValueEqual(charlie.health, charlie.maxHealth, "a stranger hurt a protected player")
         helper.assertTrue(bob.wasRefusedBy("T14AttackA's Place"), "no entity-attack refusal")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun pvpIsAllowedInARegionByDefault(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T14PvpA")
+        val bob = MessageCapturingPlayer.join(helper, "T14PvpB")
+        val charlie = MessageCapturingPlayer.join(helper, "T14PvpC")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        charlie.standAt(helper, 2.0, 2.0, 2.0)
+        bob.standAt(helper, 2.0, 2.0, 3.0)
+        bob.messages.clear()
+
+        bob.attacks(charlie)
+
+        // Whether the hit actually lands is the vanilla combat/`pvp` property's
+        // call, not this mod's — the seam under test is the refusal itself.
+        helper.assertFalse(bob.wasRefusedBy("T14PvpA's Place"), "the default-allowed PVP hit drew a refusal")
+        alice.leave()
+        bob.leave()
+        charlie.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun disablePvpFlagProtectsEveryPlayerInTheRegion(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T14NoPvpA")
+        val bob = MessageCapturingPlayer.join(helper, "T14NoPvpB")
+        val charlie = MessageCapturingPlayer.join(helper, "T14NoPvpC")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        alice.makeAdmin()
+        alice.runCommand("rg flag DISABLE_PVP")
+        charlie.standAt(helper, 2.0, 2.0, 2.0)
+        bob.standAt(helper, 2.0, 2.0, 3.0)
+        bob.messages.clear()
+
+        bob.attacks(charlie)
+
+        helper.assertValueEqual(charlie.health, charlie.maxHealth, "DISABLE_PVP did not stop a stranger's hit")
+        helper.assertTrue(bob.wasRefusedBy("T14NoPvpA's Place"), "DISABLE_PVP's hit emitted no refusal")
+
+        // The flag protects everyone, membership included — a safe zone, not
+        // a members-only exemption.
+        alice.standAt(helper, 2.0, 2.0, 3.0)
+        alice.messages.clear()
+        alice.attacks(charlie)
+        helper.assertValueEqual(charlie.health, charlie.maxHealth, "DISABLE_PVP let a member hit another player")
+
         alice.leave()
         bob.leave()
         charlie.leave()

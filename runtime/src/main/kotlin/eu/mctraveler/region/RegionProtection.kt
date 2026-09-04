@@ -87,6 +87,7 @@ object RegionProtection {
     private const val DISABLE_PUBLIC_REDSTONE_TRIGGERS = "DISABLE_PUBLIC_REDSTONE_TRIGGERS"
     private const val DISABLE_WEIGHTED_PRESSURE_PLATES = "DISABLE_WEIGHTED_PRESSURE_PLATES"
     private const val DISABLE_GATES = "DISABLE_GATES"
+    private const val DISABLE_PVP = "DISABLE_PVP"
     private const val REFUSAL_MESSAGE_COOLDOWN_TICKS = 20L
 
     /** The region a player's currently-open container is judged against. */
@@ -533,6 +534,7 @@ object RegionProtection {
     @JvmStatic
     fun allowsEntityAttack(player: ServerPlayer?, entity: Entity?): Boolean {
         val p = player ?: return true
+        if (entity is ServerPlayer) return allowsPvp(p, entity)
         val region = entityProtectionAround(p, entity) ?: return true
         if (isCullableHostile(entity)) return true
         return refuse(p, region)
@@ -553,9 +555,23 @@ object RegionProtection {
     fun allowsEntityDamage(entity: Entity, source: DamageSource): Boolean {
         if (isRegionDecoration(entity)) return allowsDecorationDamage(entity, source)
         val player = playerResponsibleFor(source) ?: return true
+        if (entity is ServerPlayer) return allowsPvp(player, entity)
         val region = entityProtectionAround(player, entity) ?: return true
         if (isCullableHostile(entity)) return true
         return refuse(player, region)
+    }
+
+    /**
+     * PVP is allowed inside a region by default (issue request) — only
+     * `DISABLE_PVP` turns a region into a safe zone, and it does so for
+     * everyone standing in it, [victim]'s own membership included: the point
+     * of the flag is "no fighting here," not a members-only exemption.
+     */
+    private fun allowsPvp(attacker: ServerPlayer, victim: ServerPlayer): Boolean {
+        if (attacker === victim) return true
+        val region = RegionsFeature.regionAt(victim.level(), victim.blockPosition()) ?: return true
+        if (DISABLE_PVP !in region.flags) return true
+        return refuse(attacker, region)
     }
 
     /**
