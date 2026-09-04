@@ -81,6 +81,12 @@ class JsonPlayerStoreTest {
     }
 
     @Test
+    fun `reads first seen timestamp from legacy timestamps`() {
+        seedPortalFile()
+        assertEquals(1370044800000L, store().firstJoin(uuid))
+    }
+
+    @Test
     fun `modifying a live field preserves every other field byte-for-byte`() {
         val file = seedPortalFile()
         store().setLastWorld(uuid, "primary")

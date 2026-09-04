@@ -1,5 +1,6 @@
 package eu.mctraveler.persistence
 
+import eu.mctraveler.passport.PassportStore
 import java.nio.file.Path
 
 /**
@@ -25,4 +26,5 @@ class PersistenceService(val root: Path) {
 
     val players: PlayerStore = JsonPlayerStore(playersDir)
     val names: NameCache = NameCache(root.resolve("uuid-cache.json"))
+    val passports: PassportStore = PassportStore(root.resolve("passport"))
 }

@@ -61,6 +61,28 @@ class RegionService(private val file: Path) {
         save()
     }
 
+    /** Stable tree-path id used by the Lodeway markers and passport records. */
+    fun idOf(region: Region): String? {
+        fun find(regions: List<Region>, prefix: String): String? {
+            regions.forEachIndexed { index, candidate ->
+                val id = if (prefix.isEmpty()) "$index" else "$prefix.$index"
+                if (candidate === region) return id
+                find(candidate.subRegions, id)?.let { return it }
+            }
+            return null
+        }
+        return find(roots, "")
+    }
+
+    /** Resolves a stable tree-path id, or null for malformed/orphaned ids. */
+    fun byId(id: String): Region? {
+        val indexes = id.split('.').mapNotNull { it.toIntOrNull() }
+        if (indexes.size != id.count { it == '.' } + 1) return null
+        var current = roots.getOrNull(indexes.firstOrNull() ?: return null) ?: return null
+        for (index in indexes.drop(1)) current = current.subRegions.getOrNull(index) ?: return null
+        return current
+    }
+
     /**
      * The deepest region containing the block position in the given World
      * (legacy world string), or null — sub-regions win over their parents.
