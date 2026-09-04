@@ -69,6 +69,11 @@ object MixinHooksImpl : MixinHooks {
         packet: ClientboundPlayerInfoUpdatePacket,
     ): ClientboundPlayerInfoUpdatePacket? = SpectatorVisibility.maskFor(viewer, packet)
 
+    override fun maskHealthScore(
+        viewer: ServerPlayer,
+        packet: net.minecraft.network.protocol.game.ClientboundSetScorePacket,
+    ): net.minecraft.network.protocol.game.ClientboundSetScorePacket? = SpectatorVisibility.maskScore(viewer, packet)
+
     override fun isVanishedFromViewer(target: ServerPlayer, viewer: ServerPlayer): Boolean =
         eu.mctraveler.vanish.VanishFeature.isHiddenFrom(target, viewer)
 

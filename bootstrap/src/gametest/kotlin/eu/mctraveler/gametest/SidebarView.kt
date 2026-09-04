@@ -18,6 +18,15 @@ class SidebarView(private val player: ServerPlayer) {
 
     private class Entry(val display: Component?, val score: Int)
 
+    /**
+     * `RegionScoreboard`'s own objective name, stated independently rather than reached
+     * into (it is `private` there) — every scoreboard packet is filtered to it, since a
+     * player's client now also receives packets for the unrelated tab-list health
+     * objective (issue request), sharing no name with this one but otherwise
+     * indistinguishable at the packet level (both key by score-holder name).
+     */
+    private val objectiveName = "region"
+
     private val entries = LinkedHashMap<String, Entry>()
     private var objectiveTitle: Component = Component.empty()
     private var shownObjective: String? = null
@@ -40,7 +49,7 @@ class SidebarView(private val player: ServerPlayer) {
     fun refresh(): SidebarView {
         for (packet in PacketCapture.drain(player)) {
             when (packet) {
-                is ClientboundSetObjectivePacket -> when (packet.method) {
+                is ClientboundSetObjectivePacket -> if (packet.objectiveName == objectiveName) when (packet.method) {
                     ClientboundSetObjectivePacket.METHOD_REMOVE -> {
                         entries.clear()
                         objectiveTitle = Component.empty()
@@ -50,9 +59,12 @@ class SidebarView(private val player: ServerPlayer) {
                         objectiveTitle = packet.displayName
                     }
                 }
-                is ClientboundSetScorePacket ->
+                is ClientboundSetScorePacket -> if (packet.objectiveName() == objectiveName) {
                     entries[packet.owner()] = Entry(packet.display().orElse(null), packet.score())
-                is ClientboundResetScorePacket -> entries.remove(packet.owner())
+                }
+                is ClientboundResetScorePacket -> if (packet.objectiveName() == objectiveName) {
+                    entries.remove(packet.owner())
+                }
                 is ClientboundSetDisplayObjectivePacket ->
                     if (packet.slot == DisplaySlot.SIDEBAR) {
                         shownObjective = packet.objectiveName?.takeIf { it.isNotEmpty() }

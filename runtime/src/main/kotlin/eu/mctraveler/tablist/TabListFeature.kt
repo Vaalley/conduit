@@ -5,16 +5,19 @@ import eu.mctraveler.reloadable
 import eu.mctraveler.text.Paint
 import java.util.EnumSet
 import java.util.Locale
-import kotlin.math.ceil
 import kotlin.math.min
-import kotlin.math.roundToInt
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents
 import net.minecraft.network.chat.Component
+import net.minecraft.network.chat.numbers.BlankFormat
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket
 import net.minecraft.network.protocol.game.ClientboundTabListPacket
 import net.minecraft.server.MinecraftServer
 import net.minecraft.server.level.ServerPlayer
+import net.minecraft.world.scores.DisplaySlot
+import net.minecraft.world.scores.Objective
+import net.minecraft.world.scores.criteria.ObjectiveCriteria
 
 /**
  * The unified tab list (Portal: TabListFeature + TabListModule + PlayerInfoBitflagsModule).
@@ -28,7 +31,24 @@ object TabListFeature {
     /** Once a second, matching the Portal's 1 s TPS sampling cadence. */
     private const val REFRESH_INTERVAL_TICKS = 20
 
+    /**
+     * The real server [net.minecraft.world.scores.Scoreboard] objective that paints hearts in
+     * the tab list — same the standard vanilla `/scoreboard objectives add <name> health` +
+     * `setdisplay list <name>` incantation, not a hand-drawn glyph bar: the "health" criteria
+     * is one of vanilla's own auto-tracked scores (`ServerPlayer.doTick()` keeps it in sync
+     * every tick with no help from this mod), and `RenderType.HEARTS` in the `list` slot is exactly
+     * the real, textured, ten-heart row this feature request was asking for. A name of our own
+     * (rather than the bare `"health"` a server admin might reach for by hand) avoids fighting
+     * over an objective an admin created for something else.
+     */
+    const val HEALTH_OBJECTIVE = "mctraveler_health"
+
     fun register() {
+        ServerLifecycleEvents.SERVER_STARTED.reloadable.register(::ensureHealthObjective)
+        // The objective is server (world-save) state, so it survives a hot reload on its own;
+        // only the display slot needs reasserting in case something else changed it meanwhile.
+        Conduit.onHotActivate(::ensureHealthObjective)
+
         ServerPlayConnectionEvents.JOIN.reloadable.register { handler, _, server ->
             handler.send(headerFooterPacket(server))
         }
@@ -41,8 +61,9 @@ object TabListFeature {
             val players = server.playerList.players
             if (players.isEmpty()) return@register
             server.playerList.broadcastAll(headerFooterPacket(server))
-            // Re-sends every display name (built by ServerPlayerMixin from the live
-            // latency and health), keeping the bracketed ping and the hearts current.
+            // Re-sends every display name (built by ServerPlayerMixin from the live rank
+            // color, name padding and latency), keeping the bracketed ping current. Hearts
+            // are the health objective's own concern now — vanilla keeps those in sync.
             server.playerList.broadcastAll(
                 ClientboundPlayerInfoUpdatePacket(
                     EnumSet.of(ClientboundPlayerInfoUpdatePacket.Action.UPDATE_DISPLAY_NAME),
@@ -52,73 +73,45 @@ object TabListFeature {
         }
     }
 
-    /** One heart is worth two points of health, matching vanilla's own HUD. */
-    private const val HEALTH_PER_HEART = 2f
-
-    /** The glyph a heart is drawn with — arbitrary; the tab list has no real heart texture. */
-    private const val HEART = "❤"
-
-    /**
-     * A tab entry's display name: `<rank-colored name><padding> <darkGray [Nms]> <hearts>`
-     * (latency: Portal's PlayerInfoBitflagsModule; hearts: new, issue request; padding:
-     * issue request — right-pads every name to the longest currently online one, so the
-     * ping and hearts line up in a column instead of drifting with name length). Called by
-     * ServerPlayerMixin whenever vanilla builds a player-info packet.
-     */
-    @JvmStatic
-    fun tabDisplayName(player: ServerPlayer): Component =
-        displayNameWith(player, hearts(player.health, player.maxHealth, player.absorptionAmount))
+    /** Creates [HEALTH_OBJECTIVE] if it is not already on [server]'s scoreboard, and shows it. */
+    private fun ensureHealthObjective(server: MinecraftServer) {
+        val scoreboard = server.scoreboard
+        val objective: Objective = scoreboard.getObjective(HEALTH_OBJECTIVE) ?: scoreboard.addObjective(
+            HEALTH_OBJECTIVE,
+            ObjectiveCriteria.HEALTH,
+            Paint.red("❤"),
+            ObjectiveCriteria.RenderType.HEARTS,
+            false,
+            BlankFormat.INSTANCE,
+        )
+        scoreboard.setDisplayObjective(DisplaySlot.LIST, objective)
+    }
 
     /**
-     * The tab entry a non-admin viewer is shown for a Spectator/Creative [player] instead
-     * of [tabDisplayName]'s real one: full hearts, no Absorption — real health is exactly
-     * the kind of tell [SpectatorVisibility] exists to hide, and an
-     * admin's Creative/Spectator health carries no real gameplay meaning to a bystander
-     * anyway.
+     * A tab entry's display name: `<rank-colored name><padding> <darkGray [Nms]>` (latency:
+     * Portal's PlayerInfoBitflagsModule; padding: issue request — right-pads every name to
+     * the longest currently online one, so the ping and the hearts objective's own column
+     * line up instead of drifting with name length). Hearts themselves are
+     * [HEALTH_OBJECTIVE], drawn by the client immediately after this text, not part of it.
+     * Called by ServerPlayerMixin whenever vanilla builds a player-info packet.
      */
     @JvmStatic
-    fun displayNameWithFullHearts(player: ServerPlayer): Component =
-        displayNameWith(player, hearts(player.maxHealth, player.maxHealth, 0f))
-
-    private fun displayNameWith(player: ServerPlayer, heartsComponent: Component): Component = Paint(
+    fun tabDisplayName(player: ServerPlayer): Component = Paint(
         eu.mctraveler.rank.RankFeature.nameColor(player)(player.gameProfile.name),
         namePadding(player),
         " ",
         Paint.darkGray("[${player.connection?.latency() ?: 0}ms]"),
-        " ",
-        heartsComponent,
     )
 
     /**
      * Spaces enough to right-pad [player]'s name to the longest name among everyone
-     * currently online, so the ping/hearts column starts in the same place on every row.
-     * A monospace-perfect alignment would need per-glyph widths (vanilla's font is not
+     * currently online, so the ping column starts in the same place on every row. A
+     * monospace-perfect alignment would need per-glyph widths (vanilla's font is not
      * monospaced); character-count padding is the approximation available from plain text.
      */
     private fun namePadding(player: ServerPlayer): String {
         val longest = player.level().server.playerList.players.maxOfOrNull { it.gameProfile.name.length } ?: 0
         return " ".repeat((longest - player.gameProfile.name.length).coerceAtLeast(0))
-    }
-
-    /**
-     * A heart bar: [health] worth of hearts filled red up to [maxHealth]'s hearts (the rest
-     * hollow, dark gray), then [absorption]'s worth again on top in gold — the same
-     * red/gold split vanilla's own HUD draws for ordinary health versus Absorption.
-     */
-    fun hearts(health: Float, maxHealth: Float, absorption: Float): Component {
-        val maxHearts = ceil(maxHealth / HEALTH_PER_HEART).toInt().coerceAtLeast(0)
-        val filledHearts = (health / HEALTH_PER_HEART).roundToInt().coerceIn(0, maxHearts)
-        val emptyHearts = maxHearts - filledHearts
-        val goldHearts = (absorption / HEALTH_PER_HEART).roundToInt().coerceAtLeast(0)
-        // Paint only drops empty *string* content (Paint.kt's toPart) — an already-built
-        // Component, even an empty one, is kept as a sibling — so a zero-count color is
-        // left out of the argument list entirely rather than passed as `Paint.color("")`.
-        val segments = buildList {
-            if (filledHearts > 0) add(Paint.red(HEART.repeat(filledHearts)))
-            if (emptyHearts > 0) add(Paint.darkGray(HEART.repeat(emptyHearts)))
-            if (goldHearts > 0) add(Paint.gold(HEART.repeat(goldHearts)))
-        }
-        return Paint(*segments.toTypedArray())
     }
 
     /** Header: `             <green MCTraveler>             \n` (13 spaces each side). */

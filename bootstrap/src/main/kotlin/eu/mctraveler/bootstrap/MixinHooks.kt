@@ -7,6 +7,7 @@ import net.minecraft.core.Direction
 import net.minecraft.network.chat.Component
 import net.minecraft.network.protocol.Packet
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket
+import net.minecraft.network.protocol.game.ClientboundSetScorePacket
 import net.minecraft.network.protocol.status.ServerStatus
 import net.minecraft.resources.ResourceKey
 import net.minecraft.server.MinecraftServer
@@ -56,6 +57,9 @@ interface MixinHooks {
 
     /** Null means "send the packet unmasked". */
     fun maskSpectators(viewer: ServerPlayer, packet: ClientboundPlayerInfoUpdatePacket): ClientboundPlayerInfoUpdatePacket?
+
+    /** Null means "send the packet unmasked". */
+    fun maskHealthScore(viewer: ServerPlayer, packet: ClientboundSetScorePacket): ClientboundSetScorePacket?
 
     /** Issue #47: whether [target]'s entity must be hidden from [viewer] right now (vanished). */
     fun isVanishedFromViewer(target: ServerPlayer, viewer: ServerPlayer): Boolean
@@ -153,6 +157,11 @@ object Hooks {
         viewer: ServerPlayer,
         packet: ClientboundPlayerInfoUpdatePacket,
     ): ClientboundPlayerInfoUpdatePacket? = impl?.maskSpectators(viewer, packet)
+
+    @JvmStatic fun maskHealthScore(
+        viewer: ServerPlayer,
+        packet: ClientboundSetScorePacket,
+    ): ClientboundSetScorePacket? = impl?.maskHealthScore(viewer, packet)
 
     @JvmStatic fun isVanishedFromViewer(target: ServerPlayer, viewer: ServerPlayer): Boolean =
         impl?.isVanishedFromViewer(target, viewer) ?: false

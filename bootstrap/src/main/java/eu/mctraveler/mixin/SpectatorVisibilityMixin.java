@@ -3,6 +3,7 @@ package eu.mctraveler.mixin;
 import eu.mctraveler.bootstrap.Hooks;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
+import net.minecraft.network.protocol.game.ClientboundSetScorePacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerCommonPacketListenerImpl;
 import net.minecraft.server.network.ServerPlayerConnection;
@@ -43,9 +44,6 @@ public abstract class SpectatorVisibilityMixin {
         require = 0
     )
     private Packet<?> mctraveler$hideSpectatorFromNonAdmins(Packet<?> packet) {
-        if (!(packet instanceof ClientboundPlayerInfoUpdatePacket update)) {
-            return packet;
-        }
         if (!(this instanceof ServerPlayerConnection connection)) {
             return packet;
         }
@@ -53,7 +51,14 @@ public abstract class SpectatorVisibilityMixin {
         if (viewer == null) {
             return packet;
         }
-        ClientboundPlayerInfoUpdatePacket masked = Hooks.maskSpectators(viewer, update);
-        return masked != null ? masked : packet;
+        if (packet instanceof ClientboundPlayerInfoUpdatePacket update) {
+            ClientboundPlayerInfoUpdatePacket masked = Hooks.maskSpectators(viewer, update);
+            return masked != null ? masked : packet;
+        }
+        if (packet instanceof ClientboundSetScorePacket score) {
+            ClientboundSetScorePacket masked = Hooks.maskHealthScore(viewer, score);
+            return masked != null ? masked : packet;
+        }
+        return packet;
     }
 }

@@ -1,5 +1,7 @@
 package eu.mctraveler.gametest
 
+import eu.mctraveler.tablist.SpectatorVisibility
+import eu.mctraveler.tablist.TabListFeature
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.ChatFormatting
 import net.minecraft.gametest.framework.GameTestHelper
@@ -7,23 +9,25 @@ import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.TextColor
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket
+import net.minecraft.network.protocol.game.ClientboundSetScorePacket
 import net.minecraft.network.protocol.game.ClientboundTabListPacket
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.server.network.ServerCommonPacketListenerImpl
 import net.minecraft.world.level.GameType
 import net.minecraft.world.level.Level
+import net.minecraft.world.scores.DisplaySlot
+import net.minecraft.world.scores.criteria.ObjectiveCriteria
 
 /**
  * The unified tab list (spec stories 6-8): the Portal's exact header and footer with the
  * footer's TPS now the server's real TPS (deviation 4), entries carrying latency in the
- * display name, and every player in one list wherever they are standing.
+ * display name, and every player in one list wherever they are standing. Hearts are a real
+ * vanilla scoreboard objective ([TabListFeature.HEALTH_OBJECTIVE]) now, not drawn glyphs, so
+ * this suite asserts the objective's shape and the score vanilla keeps in sync — never a
+ * heart-bar Component, since none is built here any more.
  *
  * Expected texts are the inventory's literals (portal-feature-inventory.md §2.6/§2.18).
  */
-/** The glyph [TabListFeature.hearts] draws with — kept independent so this file never
- *  reaches into that `private` constant. */
-private const val HEART = "❤"
-
 class TabListGameTest {
 
     @GameTest
@@ -175,8 +179,6 @@ class TabListGameTest {
         staff.makeAdmin()
         listOf(subject, bystander, staff).forEach(PacketCapture::drain) // discard join bursts
 
-        // 5/10 hearts, so a masked (full) and a real (damaged) bar are distinguishable.
-        subject.health = 10.0f
         subject.setGameMode(GameType.SPECTATOR)
 
         val bystanderEntry = lastEntrySentFor(bystander, subject)
@@ -185,7 +187,6 @@ class TabListGameTest {
             GameType.SURVIVAL,
             "the gamemode a non-admin bystander is shown for a spectating admin",
         )
-        assertHearts(checkNotNull(bystanderEntry.displayName()), redCount = 10, grayCount = 0, goldCount = 0)
 
         val staffEntry = lastEntrySentFor(staff, subject)
         helper.assertValueEqual(
@@ -193,7 +194,6 @@ class TabListGameTest {
             GameType.SPECTATOR,
             "the gamemode a fellow admin is shown for a spectating admin",
         )
-        assertHearts(checkNotNull(staffEntry.displayName()), redCount = 5, grayCount = 5, goldCount = 0)
 
         val selfEntry = lastEntrySentFor(subject, subject)
         helper.assertValueEqual(
@@ -201,51 +201,81 @@ class TabListGameTest {
             GameType.SPECTATOR,
             "the gamemode the spectating admin's own client is shown",
         )
-        assertHearts(checkNotNull(selfEntry.displayName()), redCount = 5, grayCount = 5, goldCount = 0)
 
         removePlayers(helper, subject, bystander, staff)
         helper.succeed()
     }
 
     /**
-     * Creative has no gamemode tell to hide (only Spectator's tab-list italics do), but a
-     * bystander must still not see a Creative admin's real (possibly mid-combat) health.
+     * The tab list's real vanilla heart bar ([TabListFeature.HEALTH_OBJECTIVE]) has the same
+     * tell [SpectatorVisibility] already exists to remove: a bystander must not see a
+     * Spectator or Creative admin's real (possibly mid-combat) health, even though vanilla
+     * broadcasts that score identically to everyone.
+     *
+     * Nothing here can drive that real broadcast: the sync from health to score is
+     * `ServerPlayer.doTick()`'s own, called off the *connection's* own tick — which a
+     * gametest mock connection, wired up directly rather than accepted through the network,
+     * never receives (confirmed: `tickCount` advances but `Stats.PLAY_TIME`, also only
+     * awarded from `doTick()`, never does) — and the score cannot be set by hand either,
+     * since `HEALTH` is one of vanilla's own read-only criteria (`Scoreboard
+     * .getOrCreatePlayerScore(...).set(...)` throws exactly as `/scoreboard players set`
+     * would). So this builds the packet vanilla's sync *would* send by hand, and asserts
+     * purely on [SpectatorVisibility.maskScore] — the one seam this mod owns.
      */
-    @GameTest(maxTicks = 100)
-    fun creativeHidesRealHeartsFromNonAdminsButNotTheGameMode(helper: GameTestHelper) {
-        val subject = MessageCapturingPlayer.join(helper, "T20Creative")
+    @GameTest
+    fun spectatorAndCreativeHealthScoreIsMaskedFromNonAdmins(helper: GameTestHelper) {
+        val subject = MessageCapturingPlayer.join(helper, "T20Health")
         subject.makeAdmin()
-        val bystander = MessageCapturingPlayer.join(helper, "T20CreBystander")
-        listOf(subject, bystander).forEach(PacketCapture::drain)
+        val bystander = MessageCapturingPlayer.join(helper, "T20HealthBystander")
+        val staff = MessageCapturingPlayer.join(helper, "T20HealthStaff")
+        staff.makeAdmin()
 
-        subject.health = 10.0f
         subject.setGameMode(GameType.CREATIVE)
-
-        val bystanderEntry = lastEntrySentFor(bystander, subject)
-        helper.assertValueEqual(
-            bystanderEntry.gameMode(),
-            GameType.CREATIVE,
-            "the gamemode a non-admin bystander is shown for a Creative admin",
+        // Half of a 20-max bar, so real vs. masked are distinguishable.
+        val realPacket = ClientboundSetScorePacket(
+            subject.gameProfile.name,
+            TabListFeature.HEALTH_OBJECTIVE,
+            10,
+            java.util.Optional.empty(),
+            java.util.Optional.empty(),
         )
-        assertHearts(checkNotNull(bystanderEntry.displayName()), redCount = 10, grayCount = 0, goldCount = 0)
 
-        removePlayers(helper, subject, bystander)
+        val bystanderView = SpectatorVisibility.maskScore(bystander, realPacket)
+        helper.assertValueEqual(
+            checkNotNull(bystanderView) { "a non-admin bystander's score for a Creative admin was not masked" }.score(),
+            subject.maxHealth.toInt(),
+            "a non-admin bystander's score for a Creative admin",
+        )
+        helper.assertTrue(
+            SpectatorVisibility.maskScore(staff, realPacket) == null,
+            "a fellow admin's score for a Creative admin was masked",
+        )
+        helper.assertTrue(
+            SpectatorVisibility.maskScore(subject, realPacket) == null,
+            "the Creative admin's own score was masked",
+        )
+        removePlayers(helper, subject, bystander, staff)
         helper.succeed()
     }
 
-    /** The "fun" case the hearts exist for: an ordinary player's real health, for everybody. */
-    @GameTest(maxTicks = 100)
-    fun heartsReflectRealHealthForOrdinaryPlayers(helper: GameTestHelper) {
-        val viewer = MessageCapturingPlayer.join(helper, "T25Viewer")
-        val subject = MessageCapturingPlayer.join(helper, "T25Hurt")
-        PacketCapture.drain(viewer)
-
-        subject.health = 7.0f // 3.5 hearts, rounds up to 4
-        helper.runAfterDelay(30) {
-            assertHearts(displayNameSentFor(viewer, subject), redCount = 4, grayCount = 6, goldCount = 0)
-            removePlayers(helper, viewer, subject)
-            helper.succeed()
+    @GameTest
+    fun theHealthObjectiveIsShownInTheListSlotWithHearts(helper: GameTestHelper) {
+        val scoreboard = helper.level.server.scoreboard
+        val objective = checkNotNull(scoreboard.getObjective(TabListFeature.HEALTH_OBJECTIVE)) {
+            "the health objective was never created"
         }
+        helper.assertValueEqual(objective.criteria, ObjectiveCriteria.HEALTH, "the health objective's criteria")
+        helper.assertValueEqual(
+            objective.renderType,
+            ObjectiveCriteria.RenderType.HEARTS,
+            "the health objective's render type",
+        )
+        helper.assertValueEqual(
+            checkNotNull(scoreboard.getDisplayObjective(DisplaySlot.LIST)) { "no objective is shown in the list slot" },
+            objective,
+            "the objective shown in the tab-list slot",
+        )
+        helper.succeed()
     }
 
     /** The last tab entry sent to [viewer] for [subject], draining the packet queue once. */
@@ -314,10 +344,11 @@ class TabListGameTest {
 
     /**
      * The latency-carrying tab entry display name (inventory §2.18's literals below).
-     * Checked by prefix (the colored name) and by tail (`[Nms] <hearts>`) rather than as
-     * one exact sequence: a name-alignment padding run may sit between them, and its
-     * width depends on every player currently online — including ones this test knows
-     * nothing about, on the shared gametest server.
+     * Checked by prefix (the colored name) and by tail (`[Nms]`) rather than as one exact
+     * sequence: a name-alignment padding run may sit between them, and its width depends on
+     * every player currently online — including ones this test knows nothing about, on the
+     * shared gametest server. Hearts are no longer part of this text at all —
+     * [TabListFeature.HEALTH_OBJECTIVE] draws those.
      */
     private fun assertDisplayName(
         displayName: Component,
@@ -330,30 +361,10 @@ class TabListGameTest {
         check(actual.firstOrNull() == wantName) {
             "tab display name of ${player.uuid} does not start with the colored name: $actual"
         }
-        val wantTail = listOf(
-            "[${latencyMs}ms]" to TextColor.fromLegacyFormat(ChatFormatting.DARK_GRAY),
-            " " to null,
-            HEART.repeat(10) to TextColor.fromLegacyFormat(ChatFormatting.RED),
-        )
+        val wantTail = listOf("[${latencyMs}ms]" to TextColor.fromLegacyFormat(ChatFormatting.DARK_GRAY))
         check(actual.takeLast(wantTail.size) == wantTail) {
             "tab display name of ${player.uuid} rendered as $actual, wanted it to end with $wantTail"
         }
-    }
-
-    /**
-     * Asserts the hearts segment at the tail of [displayName]: [redCount] filled (red),
-     * [grayCount] hollow (dark gray), then [goldCount] Absorption (gold) — a zero-count
-     * color's run is absent, since Paint drops empty segments.
-     */
-    private fun assertHearts(displayName: Component, redCount: Int, grayCount: Int, goldCount: Int) {
-        val expected = listOf(
-            HEART.repeat(redCount) to ChatFormatting.RED,
-            HEART.repeat(grayCount) to ChatFormatting.DARK_GRAY,
-            HEART.repeat(goldCount) to ChatFormatting.GOLD,
-        ).filter { (text, _) -> text.isNotEmpty() }
-        val actual = flatten(displayName).takeLast(expected.size).map { (text, color) -> text to color }
-        val want = expected.map { (text, formatting) -> text to TextColor.fromLegacyFormat(formatting) }
-        check(actual == want) { "hearts rendered as $actual, expected $want" }
     }
 
     /** The display name most recently sent to [viewer] for [subject]'s tab entry. */
