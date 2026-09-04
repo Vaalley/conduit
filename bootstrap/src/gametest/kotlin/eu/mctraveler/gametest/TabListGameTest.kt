@@ -87,6 +87,35 @@ class TabListGameTest {
     }
 
     /**
+     * Issue request: the ping/hearts should line up in a column instead of drifting with
+     * name length, so a short and a long name must right-pad to the same total width
+     * before the `[Nms]` bracket — whatever that width is, since it depends on every
+     * player online (including ones this test does not control, on the shared gametest
+     * server), not a value this test can predict.
+     */
+    @GameTest
+    fun namesArePaddedToLineUpTheColumn(helper: GameTestHelper) {
+        val short = MessageCapturingPlayer.join(helper, "T22Short")
+        val long = MessageCapturingPlayer.join(helper, "T22MuchLongerName")
+
+        val shortWidth = widthBeforeLatencyBracket(eu.mctraveler.tablist.TabListFeature.tabDisplayName(short))
+        val longWidth = widthBeforeLatencyBracket(eu.mctraveler.tablist.TabListFeature.tabDisplayName(long))
+        helper.assertValueEqual(shortWidth, longWidth, "the padded column width before [Nms]")
+
+        short.leave()
+        long.leave()
+        helper.succeed()
+    }
+
+    /** The combined character length of every run before the `[Nms]` bracket run. */
+    private fun widthBeforeLatencyBracket(displayName: Component): Int {
+        val runs = flatten(displayName)
+        val bracketIndex = runs.indexOfFirst { (text, _) -> text.startsWith("[") && text.endsWith("ms]") }
+        check(bracketIndex >= 0) { "no [Nms] bracket found in $runs" }
+        return runs.take(bracketIndex).sumOf { (text, _) -> text.length }
+    }
+
+    /**
      * One list for everybody, wherever they are standing.
      *
      * This case used to send the traveler into Secondary's overworld, because
@@ -283,24 +312,32 @@ class TabListGameTest {
     private fun flatten(component: Component): List<Pair<String, TextColor?>> =
         component.toFlatList(component.style).map { it.string to it.style.color }
 
-    /** The latency-carrying tab entry display name (inventory §2.18's literals below). */
+    /**
+     * The latency-carrying tab entry display name (inventory §2.18's literals below).
+     * Checked by prefix (the colored name) and by tail (`[Nms] <hearts>`) rather than as
+     * one exact sequence: a name-alignment padding run may sit between them, and its
+     * width depends on every player currently online — including ones this test knows
+     * nothing about, on the shared gametest server.
+     */
     private fun assertDisplayName(
         displayName: Component,
         player: ServerPlayer,
         latencyMs: Int,
         nameColor: ChatFormatting = ChatFormatting.GREEN,
     ) {
-        assertRendered(
-            "tab display name of ${player.uuid}",
-            displayName,
-            listOf(
-                player.gameProfile.name to nameColor,
-                " " to null,
-                "[${latencyMs}ms]" to ChatFormatting.DARK_GRAY,
-                " " to null,
-                HEART.repeat(10) to ChatFormatting.RED,
-            ),
+        val actual = flatten(displayName)
+        val wantName = player.gameProfile.name to TextColor.fromLegacyFormat(nameColor)
+        check(actual.firstOrNull() == wantName) {
+            "tab display name of ${player.uuid} does not start with the colored name: $actual"
+        }
+        val wantTail = listOf(
+            "[${latencyMs}ms]" to TextColor.fromLegacyFormat(ChatFormatting.DARK_GRAY),
+            " " to null,
+            HEART.repeat(10) to TextColor.fromLegacyFormat(ChatFormatting.RED),
         )
+        check(actual.takeLast(wantTail.size) == wantTail) {
+            "tab display name of ${player.uuid} rendered as $actual, wanted it to end with $wantTail"
+        }
     }
 
     /**
