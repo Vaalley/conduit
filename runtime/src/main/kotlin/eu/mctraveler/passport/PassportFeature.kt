@@ -5,6 +5,7 @@ import eu.mctraveler.MCTraveler
 import eu.mctraveler.reloadable
 import eu.mctraveler.region.RegionTracker
 import eu.mctraveler.region.RegionsFeature
+import eu.mctraveler.text.Paint
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
@@ -20,6 +21,7 @@ object PassportFeature {
     private const val FLUSH_INTERVAL_TICKS = 1200L
     private const val SAMPLE_INTERVAL_TICKS = 20L
     private const val MAX_TICK_DISTANCE = 100.0
+    private const val OVERWORLD_BIOME_TOTAL_UNAVAILABLE = 0
 
     private class State(player: ServerPlayer) {
         var lastPos: Vec3 = player.position()
@@ -27,6 +29,7 @@ object PassportFeature {
     }
 
     private val states = HashMap<UUID, State>()
+    private var overworldBiomeTotal = OVERWORLD_BIOME_TOTAL_UNAVAILABLE
 
     fun register() {
         ServerPlayerEvents.JOIN.reloadable.register(::onJoin)
@@ -49,7 +52,20 @@ object PassportFeature {
             MCTraveler.persistence?.passports?.flushDirty()
         }
         ServerLifecycleEvents.SERVER_STOPPED.reloadable.register { states.clear() }
+        ServerLifecycleEvents.SERVER_STARTED.reloadable.register { server ->
+            overworldBiomeTotal = try {
+                server.overworld().chunkSource.generator.biomeSource.possibleBiomes().size
+            } catch (_: Exception) {
+                OVERWORLD_BIOME_TOTAL_UNAVAILABLE
+            }
+        }
+        ServerLifecycleEvents.SERVER_STOPPED.reloadable.register {
+            overworldBiomeTotal = OVERWORLD_BIOME_TOTAL_UNAVAILABLE
+            PassportEvents.clear()
+            PostcardCommand.clear()
+        }
         PassportCommand.register()
+        PostcardCommand.register()
         Conduit.onHotActivate { server ->
             server.playerList.players.forEach(::onJoin)
         }
@@ -57,10 +73,11 @@ object PassportFeature {
 
     private fun onJoin(player: ServerPlayer) {
         val persistence = MCTraveler.persistence ?: return
-        persistence.passports.getOrCreate(
+        val passport = persistence.passports.getOrCreate(
             player.uuid,
             persistence.players.firstJoin(player.uuid) ?: System.currentTimeMillis(),
         )
+        unlockStamps(player, passport)
         states[player.uuid] = State(player)
     }
 
@@ -101,9 +118,7 @@ object PassportFeature {
 
             if (tick % SAMPLE_INTERVAL_TICKS == 0L) {
                 var changed = passport.dimensions.putIfAbsent(dimension, System.currentTimeMillis()) == null
-                val biome = player.level().getBiome(player.blockPosition()).unwrapKey()
-                    .map { it.identifier().toString() }
-                    .orElse(null)
+                val biome = biomeOf(player)
                 if (biome != null && passport.biomes.putIfAbsent(biome, System.currentTimeMillis()) == null) {
                     changed = true
                 }
@@ -116,14 +131,62 @@ object PassportFeature {
                 ) {
                     changed = true
                 }
+                unlockStamps(player, passport)
                 if (changed) persistence.passports.markDirty(player.uuid)
             }
         }
         if (tick % FLUSH_INTERVAL_TICKS == 0L) persistence.passports.flushDirty()
     }
 
-    private fun dimensionOf(player: ServerPlayer): String =
+    internal fun dimensionOf(player: ServerPlayer): String =
         player.level().dimension().identifier().toString()
+
+    internal fun biomeOf(player: ServerPlayer): String? =
+        player.level().getBiome(player.blockPosition()).unwrapKey()
+            .map { it.identifier().toString() }
+            .orElse(null)
+
+    internal fun overworldBiomeTotal(): Int = overworldBiomeTotal
+
+    fun unlockStamps(player: ServerPlayer, passport: Passport) {
+        val now = System.currentTimeMillis()
+        val unlocked = Stamps.evaluate(
+            StampContext(
+                passport = passport,
+                embassies = PassportJson.embassyCount(passport, RegionsFeature.requireService()),
+                overworldBiomeTotal = overworldBiomeTotal,
+                now = now,
+            ),
+        )
+        for (stamp in unlocked) {
+            player.sendSystemMessage(
+                Paint.info(
+                    "Stamp unlocked: ",
+                    Paint.gold("${stamp.icon} ${stamp.title}"),
+                    Paint.gray(" — ${stamp.description}"),
+                ),
+            )
+            PassportEvents.record(
+                StampEvent(
+                    at = now,
+                    player = player.gameProfile.name,
+                    stamp = StampRef(stamp.id, stamp.title, stamp.description, stamp.icon),
+                ),
+            )
+        }
+        if (unlocked.isNotEmpty()) MCTraveler.persistence?.passports?.markDirty(player.uuid)
+    }
+
+    fun recordCrystalTrip(player: ServerPlayer) {
+        val persistence = MCTraveler.persistence ?: return
+        val passport = persistence.passports.getOrCreate(
+            player.uuid,
+            persistence.players.firstJoin(player.uuid) ?: System.currentTimeMillis(),
+        )
+        passport.crystalTrips++
+        persistence.passports.markDirty(player.uuid)
+        unlockStamps(player, passport)
+    }
 
     internal fun stampRegions(
         passport: Passport,

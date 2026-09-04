@@ -1,18 +1,24 @@
 package eu.mctraveler.http
 
 import com.google.gson.GsonBuilder
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import eu.mctraveler.MCTraveler
 import eu.mctraveler.chat.ChatBridge
 import eu.mctraveler.chat.ChatMessage
 import eu.mctraveler.passport.Passport
+import eu.mctraveler.passport.PassportEvents
+import eu.mctraveler.passport.PassportFeature
 import eu.mctraveler.passport.PassportJson
 import eu.mctraveler.passport.PassportJson.Rank
 import eu.mctraveler.reloadable
+import eu.mctraveler.region.RegionService
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.tablist.TabListFeature
 import eu.mctraveler.text.Paint
+import eu.mctraveler.text.Sanitize
 import java.lang.management.ManagementFactory
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -93,6 +99,7 @@ object HttpApi {
             server.createContext("/chat") { exchange -> handleChat(exchange, token) }
             server.createContext("/passport") { exchange -> handlePassport(exchange, token) }
             server.createContext("/passports/top") { exchange -> handleTop(exchange, token) }
+            server.createContext("/events") { exchange -> handleEvents(exchange, token) }
             server.executor = pool
             server.start()
             httpServer = server
@@ -258,8 +265,8 @@ object HttpApi {
     }
 
     private fun broadcastMessage(request: BroadcastRequest): Component {
-        val content = sanitize(checkNotNull(request.content), MAX_BROADCAST_LENGTH)
-        val sender = request.sender?.let { sanitize(it, MAX_SENDER_LENGTH) }?.takeIf(String::isNotBlank)
+        val content = Sanitize.line(checkNotNull(request.content), MAX_BROADCAST_LENGTH)
+        val sender = request.sender?.let { Sanitize.line(it, MAX_SENDER_LENGTH) }?.takeIf(String::isNotBlank)
         if (sender == null) {
             return Component.literal(content)
         }
@@ -269,14 +276,6 @@ object HttpApi {
             ": ",
             Paint.white(content),
         )
-    }
-
-    private fun sanitize(text: String, maxLength: Int): String {
-        return text
-            .replace(Regex("[\r\n]"), " ")
-            .replace("§", "")
-            .take(maxLength)
-            .trim()
     }
 
     private fun authenticate(exchange: HttpExchange, token: String): Boolean {
@@ -362,6 +361,7 @@ object HttpApi {
                     passport,
                     regionService,
                     persistence.names::usernameFor,
+                    PassportFeature.overworldBiomeTotal(),
                     rank,
                 )
                 future.complete(gson.toJson(summary))
@@ -385,7 +385,7 @@ object HttpApi {
             sendResponse(exchange, 400, "Missing 'by'")
             return
         }
-        if (by !in setOf("distance", "biomes", "embassies")) {
+        if (by !in setOf("distance", "biomes", "embassies", "stamps")) {
             sendResponse(exchange, 400, "Bad 'by'")
             return
         }
@@ -406,6 +406,7 @@ object HttpApi {
                         val value = when (by) {
                             "distance" -> passport.distance.total.roundToLong()
                             "biomes" -> passport.biomes.size.toLong()
+                            "stamps" -> passport.stamps.size.toLong()
                             else -> PassportJson.embassyCount(passport, regionService).toLong()
                         }
                         name to value
@@ -419,6 +420,24 @@ object HttpApi {
             }
         }
         awaitJson(exchange, future, "HTTP /passports/top failed")
+    }
+
+    private fun handleEvents(exchange: HttpExchange, token: String) {
+        if (exchange.requestMethod != "GET") {
+            sendResponse(exchange, 405, "Method not allowed")
+            return
+        }
+        if (!authenticate(exchange, token)) {
+            sendResponse(exchange, 401, "Unauthorized")
+            return
+        }
+        val since = queryParameter(exchange.requestURI.query, "since")?.toLongOrNull() ?: 0L
+        val events = JsonArray()
+        PassportEvents.poll(since).forEach { events.add(gson.toJsonTree(it)) }
+        val response = JsonObject()
+        response.add("events", events)
+        response.addProperty("now", System.currentTimeMillis())
+        sendResponse(exchange, 200, gson.toJson(response), "application/json; charset=UTF-8")
     }
 
     private fun awaitJson(exchange: HttpExchange, future: CompletableFuture<String?>, label: String) {
@@ -437,15 +456,16 @@ object HttpApi {
         }
     }
 
-    private fun rankFor(uuid: UUID, regions: eu.mctraveler.region.RegionService): Rank {
+    private fun rankFor(uuid: UUID, regions: RegionService): Rank {
         val passports = MCTraveler.persistence?.passports?.all().orEmpty()
-        val target = passports.firstOrNull { it.first == uuid }?.second ?: return Rank(1, 1, 1)
+        val target = passports.firstOrNull { it.first == uuid }?.second ?: return Rank(1, 1, 1, 1)
         fun rank(value: (Passport) -> Long): Int =
             1 + passports.count { value(it.second) > value(target) }
         return Rank(
             distance = rank { it.distance.total.roundToLong() },
             biomes = rank { it.biomes.size.toLong() },
             embassies = rank { PassportJson.embassyCount(it, regions).toLong() },
+            stamps = rank { it.stamps.size.toLong() },
         )
     }
 

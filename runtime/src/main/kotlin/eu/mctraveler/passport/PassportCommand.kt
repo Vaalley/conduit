@@ -82,6 +82,25 @@ object PassportCommand {
             false,
         )
         context.source.sendSuccess({ Paint.gray("Deaths: ", Paint.green(passport.deaths)) }, false)
+        val recentStamps = passport.stamps.entries
+            .sortedByDescending { it.value }
+            .take(3)
+            .map { (id, _) ->
+                Stamps.byId(id)?.let { "${it.icon} ${it.title}" } ?: id
+            }
+            .joinToString(", ")
+            .ifEmpty { "none" }
+        context.source.sendSuccess(
+            {
+                Paint.gray(
+                    "Stamps: ",
+                    Paint.green("${passport.stamps.size}/${Stamps.ALL.size}"),
+                    " · last: 🏅 ",
+                    Paint.green(recentStamps),
+                )
+            },
+            false,
+        )
         return Command.SINGLE_SUCCESS
     }
 }

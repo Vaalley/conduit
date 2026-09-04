@@ -11,10 +11,14 @@ object PassportJson {
         val firstJoin: Long,
         val biomes: List<String>,
         val biomeCount: Int,
+        val biomeTotal: Int,
         val dimensions: List<String>,
         val regions: List<RegionSummary>,
         val distance: DistanceSummary,
+        val crystalTrips: Int,
         val deaths: Int,
+        val postcards: Int,
+        val stamps: List<StampSummary>,
         val rank: Rank,
     )
 
@@ -34,10 +38,19 @@ object PassportJson {
         val total: Long,
     )
 
+    data class StampSummary(
+        val id: String,
+        val title: String,
+        val description: String,
+        val icon: String,
+        val at: Long,
+    )
+
     data class Rank(
         val distance: Int,
         val biomes: Int,
         val embassies: Int,
+        val stamps: Int,
     )
 
     /**
@@ -50,7 +63,8 @@ object PassportJson {
         passport: Passport,
         regions: RegionService,
         nameFor: (UUID) -> String?,
-        rank: Rank = Rank(0, 0, 0),
+        biomeTotal: Int = 0,
+        rank: Rank = Rank(0, 0, 0, 0),
     ): Summary {
         val visited = passport.regions.mapNotNull { (id, at) ->
             val region = regions.byStableId(id) ?: return@mapNotNull null
@@ -71,6 +85,7 @@ object PassportJson {
             firstJoin = passport.firstJoin,
             biomes = passport.biomes.keys.toList(),
             biomeCount = passport.biomes.size,
+            biomeTotal = biomeTotal,
             dimensions = passport.dimensions.keys.toList(),
             regions = visited,
             distance = DistanceSummary(
@@ -80,7 +95,14 @@ object PassportJson {
                 swim = passport.distance.swim.roundToLong(),
                 total = passport.distance.total.roundToLong(),
             ),
+            crystalTrips = passport.crystalTrips,
             deaths = passport.deaths,
+            postcards = passport.postcards,
+            stamps = passport.stamps.mapNotNull { (id, at) ->
+                Stamps.byId(id)?.let { stamp ->
+                    StampSummary(stamp.id, stamp.title, stamp.description, stamp.icon, at)
+                }
+            },
             rank = rank,
         )
     }

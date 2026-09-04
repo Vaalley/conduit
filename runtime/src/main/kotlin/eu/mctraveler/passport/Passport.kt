@@ -3,8 +3,8 @@ package eu.mctraveler.passport
 /**
  * Persistent travel record for one player.
  *
- * Region ids are tree paths rather than titles, so a renamed region keeps its
- * visit while a deleted region becomes an orphan that readers can ignore.
+ * Region ids are stable metadata ids rather than titles, so a renamed region keeps
+ * its visit while a deleted region becomes an orphan that readers can ignore.
  */
 data class Passport(
     var firstJoin: Long,
@@ -12,8 +12,13 @@ data class Passport(
     val dimensions: LinkedHashMap<String, Long> = LinkedHashMap(),
     val regions: LinkedHashMap<String, Long> = LinkedHashMap(),
     val distance: Distance = Distance(),
+    var crystalTrips: Int = 0,
     var deaths: Int = 0,
-)
+    var postcards: Int = 0,
+    val stamps: LinkedHashMap<String, Long> = LinkedHashMap(),
+) {
+    constructor() : this(0L)
+}
 
 data class Distance(
     var walk: Double = 0.0,

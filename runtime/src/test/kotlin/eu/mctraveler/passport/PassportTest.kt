@@ -1,5 +1,6 @@
 package eu.mctraveler.passport
 
+import com.google.gson.Gson
 import eu.mctraveler.region.Region
 import eu.mctraveler.region.RegionService
 import java.nio.file.Files
@@ -35,6 +36,18 @@ class PassportTest {
 
         val loaded = PassportStore(dir).get(uuid)
         assertEquals(passport, loaded)
+    }
+
+    @Test
+    fun `legacy passport json uses new field defaults`() {
+        val passport = Gson().fromJson(
+            """{"firstJoin":1234,"biomes":{},"dimensions":{},"regions":{},"distance":{},"deaths":2}""",
+            Passport::class.java,
+        )
+
+        assertEquals(0, passport.crystalTrips)
+        assertEquals(0, passport.postcards)
+        assertTrue(passport.stamps.isEmpty())
     }
 
     @Test
@@ -114,5 +127,95 @@ class PassportTest {
     fun `distance formatting uses meters below one kilometer`() {
         assertEquals("999 m", PassportFormatting.formatDistance(999.0))
         assertEquals("12.4 km", PassportFormatting.formatDistance(12400.0))
+    }
+
+    @Test
+    fun `stamps unlock thresholds and are idempotent`() {
+        val passport = Passport(0L)
+        passport.distance.walk = 999.0
+        val before = StampContext(passport, 0, 0, 1000L)
+        assertTrue(Stamps.evaluate(before).isEmpty())
+
+        passport.distance.walk = 1000.0
+        val unlocked = Stamps.evaluate(StampContext(passport, 0, 0, 1000L))
+        assertEquals(listOf("first_steps"), unlocked.map { it.id })
+        assertTrue(Stamps.evaluate(StampContext(passport, 0, 0, 1001L)).isEmpty())
+    }
+
+    @Test
+    fun `stamps unlock three worlds and veteran`() {
+        val passport = Passport(0L)
+        passport.dimensions.putAll(
+            mapOf(
+                "minecraft:overworld" to 1L,
+                "minecraft:the_nether" to 2L,
+                "minecraft:the_end" to 3L,
+            ),
+        )
+        val context = StampContext(
+            passport,
+            embassies = 0,
+            overworldBiomeTotal = 0,
+            now = 365L * 24 * 60 * 60 * 1000,
+        )
+
+        assertEquals(
+            setOf("three_worlds", "veteran"),
+            Stamps.evaluate(context).map { it.id }.toSet(),
+        )
+    }
+
+    @Test
+    fun `passport events filter and cap`() {
+        PassportEvents.clear()
+        val now = System.currentTimeMillis()
+        repeat(101) { index ->
+            PassportEvents.record(
+                StampEvent(
+                    at = now + index,
+                    player = "Player",
+                    stamp = StampRef("id$index", "Title", "Description", "🏅"),
+                ),
+            )
+        }
+
+        val events = PassportEvents.poll(0)
+        assertEquals(100, events.size)
+        assertEquals(now + 1, (events.first() as StampEvent).at)
+        assertTrue(PassportEvents.poll(now + 100).isEmpty())
+        PassportEvents.clear()
+    }
+
+    @Test
+    fun `passport events serialize their runtime fields`() {
+        val gson = Gson()
+        val stampJson = gson.toJson(
+            StampEvent(
+                at = 1L,
+                player = "Player",
+                stamp = StampRef("first_steps", "First Steps", "Travelled 1 km", "👣"),
+            ),
+        )
+        val postcardJson = gson.toJson(
+            PostcardEvent(
+                at = 1L,
+                player = "Player",
+                dimension = "minecraft:overworld",
+                biome = "minecraft:plains",
+                region = null,
+                x = 0,
+                y = 0,
+                z = 0,
+                dayTime = 0,
+                raining = false,
+                thundering = false,
+                caption = null,
+            ),
+        )
+
+        assertTrue(stampJson.contains(""""type":"stamp""""))
+        assertTrue(stampJson.contains(""""title":"First Steps""""))
+        assertTrue(postcardJson.contains(""""type":"postcard""""))
+        assertTrue(postcardJson.contains(""""biome":"minecraft:plains""""))
     }
 }

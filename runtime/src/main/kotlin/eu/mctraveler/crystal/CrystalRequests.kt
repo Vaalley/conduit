@@ -1,6 +1,7 @@
 package eu.mctraveler.crystal
 
 import eu.mctraveler.text.Paint
+import eu.mctraveler.passport.PassportFeature
 import eu.mctraveler.worlds.Landing
 import java.util.UUID
 import net.minecraft.network.chat.ClickEvent
@@ -129,6 +130,7 @@ object CrystalRequests {
             return
         }
         if (!Landing.of(acceptor).send(requester)) return
+        PassportFeature.recordCrystalTrip(requester)
         CrystalEnergy.modify(requester, -1)
         requester.sendSystemMessage(
             Paint.info(
