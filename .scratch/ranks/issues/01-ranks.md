@@ -5,7 +5,7 @@
 **Status:** done
 
 - [x] `Rank` enum (label, chat color, region-area cap) and `PlayerStore`
-      `rank`/`setRank`/`hasRecord`/`deathMessage`/`setDeathMessage`.
+      `rank`/`setRank`/`hasRecord`.
 - [x] `RankFeature`: first-join welcome + Newbie assignment, existing-record
       grandfathering to Traveler, hour-of-playtime promotion + click-to-run
       message, `nameColor` (crash-safe) feeding chat/tab-list.
@@ -13,14 +13,16 @@
       `start`/`end`/`extend` is now per-rank instead of the flat 5000.
 - [x] `RankCommands` — `/rank set <player> <rank>`, admin-only, tab-completes
       the rank, resolves an offline player by name.
-- [x] `Markdown` (`%` → real formatting) + `DonatorSignMarkdownMixin` +
-      `DeathMessageFeature`/`/deathmessage` + `CustomDeathMessageMixin`.
+- [x] `Markdown` (`%` → real formatting) + `DonatorSignMarkdownMixin`.
 - [x] Gametests: `RankGameTest` (welcome/grandfathering/region
-      gating/promotion/`/rank set`/sign markdown/death message).
+      gating/promotion/`/rank set`/sign markdown).
+- [x] Custom death message (`/deathmessage`, `CustomDeathMessageMixin`) was
+      built, then removed at the user's request — see `../spec.md`'s "Not
+      covered".
 
 ## Notes
 
-- `:bootstrap` change (two new mixins + two new `Hooks` methods) — needs a
+- `:bootstrap` change (one new mixin + one new `Hooks` method) — needs a
   full restart.
 - Region-test and chat-test player factories (`MessageCapturingPlayer.join`,
   `TestPlayer.join`/`joinAs`) now default fresh test players to Traveler —

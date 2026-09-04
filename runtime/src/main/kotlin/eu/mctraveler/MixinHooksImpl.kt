@@ -79,9 +79,6 @@ object MixinHooksImpl : MixinHooks {
             null
         }
 
-    override fun customDeathMessage(player: ServerPlayer): Component? =
-        eu.mctraveler.rank.DeathMessageFeature.customMessageFor(player)
-
     override fun beforeTeleport(player: ServerPlayer, destination: ResourceKey<Level>) =
         EmbassyOrigins.beforeTeleport(player, destination)
 

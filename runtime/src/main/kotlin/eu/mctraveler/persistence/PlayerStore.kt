@@ -74,13 +74,4 @@ interface PlayerStore {
     fun rank(uuid: UUID): String?
 
     fun setRank(uuid: UUID, rank: String)
-
-    /**
-     * The Donator's custom death-message text (`/deathmessage`, markdown
-     * un-translated), or null if never set.
-     */
-    fun deathMessage(uuid: UUID): String?
-
-    /** Sets, or with a null [message] clears, the custom death message. */
-    fun setDeathMessage(uuid: UUID, message: String?)
 }

@@ -19,7 +19,7 @@ import net.minecraft.world.level.block.entity.SignBlockEntity
  * The rank ladder: a brand-new account is welcomed and starts a Newbie
  * (cannot create regions); an hour of play time promotes them to Traveler
  * (the mod's long-standing default); `/rank set` (admin-only) grants Donator,
- * whose perks are a bigger region cap, sign/death-message markdown.
+ * whose perks are a bigger region cap and sign markdown.
  */
 class RankGameTest {
 
@@ -224,33 +224,6 @@ class RankGameTest {
         )
         traveler.leave()
         helper.succeed()
-    }
-
-    @GameTest(maxTicks = 100)
-    fun aDonatorsCustomDeathMessageReplacesTheBroadcast(helper: GameTestHelper) {
-        val server = helper.level.server
-        val observer = TestPlayer.join(server, "RankDeathObs")
-        RankFeature.setRank(observer.player, Rank.TRAVELER)
-        val victim = TestPlayer.join(server, "RankDeathVictim")
-        RankFeature.setRank(victim.player, Rank.DONATOR)
-        victim.runCommand("deathmessage %cRankDeathVictim got wrecked")
-
-        helper.runAfterDelay(2) {
-            victim.player.hurtServer(
-                server.overworld(),
-                server.overworld().damageSources().genericKill(),
-                Float.MAX_VALUE,
-            )
-        }
-        helper.runAfterDelay(10) {
-            val match = observer.systemMessages().firstOrNull { it.string == "RankDeathVictim got wrecked" }
-                ?: throw helper.assertionException(
-                    "the custom death message never reached the observer: " +
-                        observer.systemMessages().map { it.string },
-                )
-            helper.assertValueEqual(runsOf(match), listOf(Run("RankDeathVictim got wrecked", "red")), "the death line's style")
-            helper.succeed()
-        }
     }
 
     private fun welcomeLine(name: String): Component =

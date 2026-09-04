@@ -18,7 +18,6 @@
     "ClientboundPlayerInfoUpdatePacketAccessor",
     "RegionSignEditMixin",
     "DonatorSignMarkdownMixin",
-    "CustomDeathMessageMixin",
     "RegionContainerSessionMixin",
     "RegionContainerClickMixin",
     "RegionEntityDamageMixin",

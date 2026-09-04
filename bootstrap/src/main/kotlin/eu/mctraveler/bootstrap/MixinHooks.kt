@@ -67,9 +67,6 @@ interface MixinHooks {
      */
     fun markdownLineFor(editor: ServerPlayer, raw: String): Component?
 
-    /** [player]'s custom death message (`/deathmessage`), or null for none set. */
-    fun customDeathMessage(player: ServerPlayer): Component?
-
     // Embassies
     fun beforeTeleport(player: ServerPlayer, destination: ResourceKey<Level>)
 
@@ -162,8 +159,6 @@ object Hooks {
 
     @JvmStatic fun markdownLineFor(editor: ServerPlayer, raw: String): Component? =
         impl?.markdownLineFor(editor, raw)
-
-    @JvmStatic fun customDeathMessage(player: ServerPlayer): Component? = impl?.customDeathMessage(player)
 
     @JvmStatic fun beforeTeleport(player: ServerPlayer, destination: ResourceKey<Level>) {
         impl?.beforeTeleport(player, destination)

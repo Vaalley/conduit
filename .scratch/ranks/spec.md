@@ -44,10 +44,6 @@ create regions up to the default cap.
   every code `ChatFormatting.getByCode` recognizes) are parsed into real
   styled text when a Donator edits a sign. A non-Donator's `%` codes are left
   as literal text — no parsing at all for them.
-- `/deathmessage <message>` — replaces the player's own death broadcast
-  (both the death screen and the chat line — the single seam,
-  `CombatTracker.getDeathMessage()`, both use), markdown permitted. Losing
-  Donator retires the perk silently rather than leaving a stale message live.
 
 ## `/rank set <player> <rank>`
 
@@ -59,9 +55,9 @@ so an admin can grant Donator to someone who isn't online right now.
 ## Markdown (`eu.mctraveler.text.Markdown`)
 
 A small, generic `%`-prefix legacy-formatting parser (`Style.applyFormat`'s
-own semantics: colors reset decorations, `%r` resets everything). Shared by
-sign editing and `/deathmessage`; gated to Donators at each call site, not
-inside `Markdown` itself.
+own semantics: colors reset decorations, `%r` resets everything). Used by
+sign editing; gated to Donators at the call site, not inside `Markdown`
+itself.
 
 ## Seams
 
@@ -70,10 +66,6 @@ inside `Markdown` itself.
   sign text itself, so this substitutes the already-built `SignText`'s
   `Component`s after vanilla's own update+broadcast, rather than trying to
   inject styling earlier in the pipeline).
-- `Hooks.customDeathMessage(player)` — `CustomDeathMessageMixin` on
-  `CombatTracker.getDeathMessage()` (RETURN, cancellable): the one place
-  vanilla builds a death message, reused for both the death screen and the
-  chat broadcast (team-visibility rules included).
 - `RankFeature.nameColor(player)` feeds `ChatFeature.chatBound` and
   `TabListFeature.displayNameWith`, replacing both call sites' hardcoded
   green. Wrapped in try/catch: this runs on vanilla's own tab-list refresh
@@ -86,4 +78,7 @@ inside `Markdown` itself.
 - No persistence of a "grandfathered" rank write — an existing player with
   no rank field stays that way until something (promotion, `/rank set`)
   actually writes one.
-- No help-panel entry for `/rank` or `/deathmessage` (not requested).
+- No help-panel entry for `/rank` (not requested).
+- No custom death message. This existed briefly (`/deathmessage`, a
+  `CombatTracker.getDeathMessage()` mixin) and was removed at the user's
+  request; `PlayerStore` never grew a `deathMessage` field for it.

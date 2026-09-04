@@ -55,7 +55,6 @@ object RankFeature {
         CommandRegistrationCallback.EVENT.reloadable.register { dispatcher, _, _ ->
             RankCommands.register(dispatcher)
         }
-        DeathMessageFeature.register()
     }
 
     // -- store-shaped: the behaviour --
