@@ -88,31 +88,17 @@ object TabListFeature {
     }
 
     /**
-     * A tab entry's display name: `<rank-colored name><padding> <darkGray [Nms]>` (latency:
-     * Portal's PlayerInfoBitflagsModule; padding: issue request — right-pads every name to
-     * the longest currently online one, so the ping and the hearts objective's own column
-     * line up instead of drifting with name length). Hearts themselves are
-     * [HEALTH_OBJECTIVE], drawn by the client immediately after this text, not part of it.
-     * Called by ServerPlayerMixin whenever vanilla builds a player-info packet.
+     * A tab entry's display name: `<rank-colored name> <darkGray [Nms]>` (latency: Portal's
+     * PlayerInfoBitflagsModule). Hearts are [HEALTH_OBJECTIVE], drawn by the client
+     * immediately after this text, not part of it. Called by ServerPlayerMixin whenever
+     * vanilla builds a player-info packet.
      */
     @JvmStatic
     fun tabDisplayName(player: ServerPlayer): Component = Paint(
         eu.mctraveler.rank.RankFeature.nameColor(player)(player.gameProfile.name),
-        namePadding(player),
         " ",
         Paint.darkGray("[${player.connection?.latency() ?: 0}ms]"),
     )
-
-    /**
-     * Spaces enough to right-pad [player]'s name to the longest name among everyone
-     * currently online, so the ping column starts in the same place on every row. A
-     * monospace-perfect alignment would need per-glyph widths (vanilla's font is not
-     * monospaced); character-count padding is the approximation available from plain text.
-     */
-    private fun namePadding(player: ServerPlayer): String {
-        val longest = player.level().server.playerList.players.maxOfOrNull { it.gameProfile.name.length } ?: 0
-        return " ".repeat((longest - player.gameProfile.name.length).coerceAtLeast(0))
-    }
 
     /** Header: `             <green MCTraveler>             \n` (13 spaces each side). */
     fun header(): Component =

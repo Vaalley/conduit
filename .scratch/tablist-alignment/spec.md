@@ -1,9 +1,17 @@
 # Tab list: align hearts to a column
 
-A tab entry's display name is `<name><padding> [<N>ms] <hearts>`. `padding`
-right-pads the name to the length of the longest name among everyone
-currently online, so the `[Nms]` + hearts block starts in the same place on
-every row instead of drifting with name length.
+**Reverted by request** ("forget the alignment, put the ping next to the
+name with only one space in between") once real vanilla hearts
+(`.scratch/tablist-real-hearts/`) made the padding this describes far less
+load-bearing than it was against the old hand-drawn glyph bar — vanilla's
+own `list`-slot column is already aligned on its own. `tabDisplayName` is
+back to the plain `<name> [<N>ms]`, one space, no padding. Left the rest of
+this note for the record of what was tried and why.
+
+A tab entry's display name **was** `<name><padding> [<N>ms] <hearts>`.
+`padding` right-padded the name to the length of the longest name among
+everyone currently online, so the `[Nms]` + hearts block started in the
+same place on every row instead of drifting with name length.
 
 ## Ping icon
 

@@ -2,7 +2,7 @@
 
 **What to build:** see `../spec.md`.
 
-**Status:** done
+**Status:** reverted — see `02-revert.md`.
 
 - [x] `TabListFeature.namePadding(player)`: right-pads to the longest
       currently-online name; wired into `displayNameWith` between the
