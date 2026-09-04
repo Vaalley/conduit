@@ -6,7 +6,9 @@ import com.sun.net.httpserver.HttpServer
 import eu.mctraveler.MCTraveler
 import eu.mctraveler.chat.ChatBridge
 import eu.mctraveler.chat.ChatMessage
+import eu.mctraveler.passport.Passport
 import eu.mctraveler.passport.PassportJson
+import eu.mctraveler.passport.PassportJson.Rank
 import eu.mctraveler.reloadable
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.tablist.TabListFeature
@@ -340,7 +342,7 @@ object HttpApi {
             sendResponse(exchange, 503, "Server not ready")
             return
         }
-        val future = CompletableFuture<String>()
+        val future = CompletableFuture<String?>()
         server.execute {
             if (future.isCancelled) return@execute
             try {
@@ -348,7 +350,7 @@ object HttpApi {
                 val uuid = server.playerList.getPlayerByName(name)?.uuid ?: persistence.names.uuidFor(name)
                 val passport = uuid?.let(persistence.passports::get)
                 if (uuid == null || passport == null) {
-                    future.complete("__NOT_FOUND__")
+                    future.complete(null)
                     return@execute
                 }
                 val regionService = RegionsFeature.requireService()
@@ -392,7 +394,7 @@ object HttpApi {
             sendResponse(exchange, 503, "Server not ready")
             return
         }
-        val future = CompletableFuture<String>()
+        val future = CompletableFuture<String?>()
         server.execute {
             if (future.isCancelled) return@execute
             try {
@@ -419,10 +421,10 @@ object HttpApi {
         awaitJson(exchange, future, "HTTP /passports/top failed")
     }
 
-    private fun awaitJson(exchange: HttpExchange, future: CompletableFuture<String>, label: String) {
+    private fun awaitJson(exchange: HttpExchange, future: CompletableFuture<String?>, label: String) {
         try {
             val json = future.get(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            if (json == "__NOT_FOUND__") sendResponse(exchange, 404, "Unknown player")
+            if (json == null) sendResponse(exchange, 404, "Unknown player")
             else sendResponse(exchange, 200, json, "application/json; charset=UTF-8")
         } catch (_: TimeoutException) {
             future.cancel(false)
@@ -435,12 +437,12 @@ object HttpApi {
         }
     }
 
-    private fun rankFor(uuid: UUID, regions: eu.mctraveler.region.RegionService): PassportJson.Rank {
+    private fun rankFor(uuid: UUID, regions: eu.mctraveler.region.RegionService): Rank {
         val passports = MCTraveler.persistence?.passports?.all().orEmpty()
-        val target = passports.firstOrNull { it.first == uuid }?.second ?: return PassportJson.Rank(1, 1, 1)
-        fun rank(value: (eu.mctraveler.passport.Passport) -> Long): Int =
+        val target = passports.firstOrNull { it.first == uuid }?.second ?: return Rank(1, 1, 1)
+        fun rank(value: (Passport) -> Long): Int =
             1 + passports.count { value(it.second) > value(target) }
-        return PassportJson.Rank(
+        return Rank(
             distance = rank { it.distance.total.roundToLong() },
             biomes = rank { it.biomes.size.toLong() },
             embassies = rank { PassportJson.embassyCount(it, regions).toLong() },

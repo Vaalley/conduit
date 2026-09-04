@@ -82,40 +82,41 @@ object PassportFeature {
                 continue
             }
 
+            val pos = player.position()
             val dimension = dimensionOf(player)
-            val delta = distanceDelta(
-                if (dimension == state.lastDimension) player.position().distanceTo(state.lastPos) else 0.0,
-                dimension == state.lastDimension,
-            )
-            if (dimension != state.lastDimension || delta == 0.0 &&
-                player.position().distanceTo(state.lastPos) > MAX_TICK_DISTANCE
-            ) {
-                state.lastPos = player.position()
-                state.lastDimension = dimension
-            } else {
-                if (delta > 0.0) {
-                    passport.distance.add(
-                        Distance.bucketFor(
-                            player.isFallFlying || player.abilities.flying,
-                            player.vehicle != null,
-                            player.isSwimming || player.isInWater,
-                        ),
-                        delta,
-                    )
-                    persistence.passports.markDirty(player.uuid)
-                }
-                state.lastPos = player.position()
-                state.lastDimension = dimension
+            val delta = if (dimension == state.lastDimension) pos.distanceTo(state.lastPos) else Double.NaN
+            if (delta > 0.0 && delta <= MAX_TICK_DISTANCE) {
+                passport.distance.add(
+                    Distance.bucketFor(
+                        player.isFallFlying || player.abilities.flying,
+                        player.vehicle != null,
+                        player.isSwimming || player.isInWater,
+                    ),
+                    delta,
+                )
+                persistence.passports.markDirty(player.uuid)
             }
+            state.lastPos = pos
+            state.lastDimension = dimension
 
             if (tick % SAMPLE_INTERVAL_TICKS == 0L) {
-                passport.dimensions.putIfAbsent(dimension, System.currentTimeMillis())
+                var changed = passport.dimensions.putIfAbsent(dimension, System.currentTimeMillis()) == null
                 val biome = player.level().getBiome(player.blockPosition()).unwrapKey()
                     .map { it.identifier().toString() }
                     .orElse(null)
-                if (biome != null) passport.biomes.putIfAbsent(biome, System.currentTimeMillis())
-                stampRegions(passport, RegionTracker.regionOf(player), RegionsFeature.requireService(), System.currentTimeMillis())
-                persistence.passports.markDirty(player.uuid)
+                if (biome != null && passport.biomes.putIfAbsent(biome, System.currentTimeMillis()) == null) {
+                    changed = true
+                }
+                if (stampRegions(
+                        passport,
+                        RegionTracker.regionOf(player),
+                        RegionsFeature.requireService(),
+                        System.currentTimeMillis(),
+                    )
+                ) {
+                    changed = true
+                }
+                if (changed) persistence.passports.markDirty(player.uuid)
             }
         }
         if (tick % FLUSH_INTERVAL_TICKS == 0L) persistence.passports.flushDirty()
@@ -129,12 +130,12 @@ object PassportFeature {
         region: eu.mctraveler.region.Region?,
         service: eu.mctraveler.region.RegionService,
         at: Long,
-    ) {
+    ): Boolean {
+        var changed = false
         region?.selfAndAncestors()?.forEach {
-            service.idOf(it)?.let { id -> passport.regions.putIfAbsent(id, at) }
+            val id = service.stableIdOf(it)
+            if (passport.regions.putIfAbsent(id, at) == null) changed = true
         }
+        return changed
     }
-
-    fun distanceDelta(delta: Double, sameDimension: Boolean = true): Double =
-        if (!sameDimension || delta > MAX_TICK_DISTANCE) 0.0 else delta.coerceAtLeast(0.0)
 }

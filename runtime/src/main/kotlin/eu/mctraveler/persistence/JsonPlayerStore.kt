@@ -59,7 +59,11 @@ class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
     override fun setRank(uuid: UUID, rank: String) = write(uuid, RANK, PortalJson.encodeString(rank))
 
     override fun firstJoin(uuid: UUID): Long? {
-        val timestamps = read(uuid)["timestamps"]?.rawValue ?: return null
+        val timestamps = try {
+            read(uuid)["timestamps"]?.rawValue ?: return null
+        } catch (_: Exception) {
+            return null
+        }
         return try {
             PortalJson.parse(timestamps)["firstSeen"]?.rawValue?.toLongOrNull()
         } catch (_: Exception) {

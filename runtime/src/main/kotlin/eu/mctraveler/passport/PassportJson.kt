@@ -53,7 +53,7 @@ object PassportJson {
         rank: Rank = Rank(0, 0, 0),
     ): Summary {
         val visited = passport.regions.mapNotNull { (id, at) ->
-            val region = regions.byId(id) ?: return@mapNotNull null
+            val region = regions.byStableId(id) ?: return@mapNotNull null
             RegionSummary(
                 id = id,
                 title = region.title,
@@ -87,6 +87,6 @@ object PassportJson {
 
     fun embassyCount(passport: Passport, regions: RegionService): Int =
         passport.regions.keys.count { id ->
-            regions.byId(id)?.let { Region.EMBASSY_FLAG in it.flags } == true
+            regions.byStableId(id)?.let { Region.EMBASSY_FLAG in it.flags } == true
         }
 }

@@ -32,15 +32,20 @@ class PassportGameTest {
         val player = MessageCapturingPlayer.join(helper, "PassportRegion")
         player.standAt(helper, 2.0, 1.0, 2.0)
         val region = Region("Passport Region", "world", 0, 0, 4, 4)
+        val otherRoot = Region("Other Region", "world", 20, 20, 24, 24)
         val service = RegionsFeature.requireService()
         service.add(region, null)
+        service.add(otherRoot, null)
         helper.runAfterDelay(25) {
             val passport = checkNotNull(MCTraveler.persistence?.passports?.get(player.uuid))
-            val at = passport.regions["${service.idOf(region)}"]
+            val id = service.stableIdOf(region)
+            val at = passport.regions[id]
             helper.assertTrue(at != null, "region was not stamped")
+            service.remove(otherRoot)
             helper.runAfterDelay(25) {
                 helper.assertTrue(
-                    passport.regions["${service.idOf(region)}"] == at,
+                    service.byStableId(id) === region &&
+                        passport.regions[id] == at,
                     "region visit timestamp changed",
                 )
                 service.remove(region)

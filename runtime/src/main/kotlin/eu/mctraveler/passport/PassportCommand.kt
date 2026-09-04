@@ -56,7 +56,7 @@ object PassportCommand {
         }
         val name = persistence.names.usernameFor(uuid) ?: requested
         val regionService = RegionsFeature.requireService()
-        val liveRegions = passport.regions.keys.count { regionService.byId(it) != null }
+        val liveRegions = passport.regions.keys.count { regionService.byStableId(it) != null }
         val embassyCount = PassportJson.embassyCount(passport, regionService)
         context.source.sendSuccess(
             {

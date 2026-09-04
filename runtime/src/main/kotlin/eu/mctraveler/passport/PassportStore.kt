@@ -1,6 +1,7 @@
 package eu.mctraveler.passport
 
 import com.google.gson.GsonBuilder
+import eu.mctraveler.MCTraveler
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
@@ -18,8 +19,12 @@ class PassportStore(private val directory: Path) {
         if (Files.exists(directory)) {
             Files.list(directory).use { files ->
                 files.filter { it.fileName.toString().endsWith(".json") }.forEach { file ->
-                    val uuid = UUID.fromString(file.fileName.toString().removeSuffix(".json"))
-                    passports[uuid] = gson.fromJson(Files.readString(file), Passport::class.java)
+                    try {
+                        val uuid = UUID.fromString(file.fileName.toString().removeSuffix(".json"))
+                        passports[uuid] = requireNotNull(gson.fromJson(Files.readString(file), Passport::class.java))
+                    } catch (failure: Exception) {
+                        MCTraveler.LOGGER.warn("Skipping corrupt passport file {}", file, failure)
+                    }
                 }
             }
         }
