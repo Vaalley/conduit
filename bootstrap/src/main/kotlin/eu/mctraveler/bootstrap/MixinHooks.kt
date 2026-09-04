@@ -60,6 +60,16 @@ interface MixinHooks {
     /** Issue #47: whether [target]'s entity must be hidden from [viewer] right now (vanished). */
     fun isVanishedFromViewer(target: ServerPlayer, viewer: ServerPlayer): Boolean
 
+    // Ranks
+    /**
+     * The markdown-parsed styled line for [raw], or null when [editor]'s rank
+     * carries no markdown perk — meaning leave the vanilla-built line alone.
+     */
+    fun markdownLineFor(editor: ServerPlayer, raw: String): Component?
+
+    /** [player]'s custom death message (`/deathmessage`), or null for none set. */
+    fun customDeathMessage(player: ServerPlayer): Component?
+
     // Embassies
     fun beforeTeleport(player: ServerPlayer, destination: ResourceKey<Level>)
 
@@ -149,6 +159,11 @@ object Hooks {
 
     @JvmStatic fun isVanishedFromViewer(target: ServerPlayer, viewer: ServerPlayer): Boolean =
         impl?.isVanishedFromViewer(target, viewer) ?: false
+
+    @JvmStatic fun markdownLineFor(editor: ServerPlayer, raw: String): Component? =
+        impl?.markdownLineFor(editor, raw)
+
+    @JvmStatic fun customDeathMessage(player: ServerPlayer): Component? = impl?.customDeathMessage(player)
 
     @JvmStatic fun beforeTeleport(player: ServerPlayer, destination: ResourceKey<Level>) {
         impl?.beforeTeleport(player, destination)

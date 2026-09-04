@@ -72,6 +72,16 @@ object MixinHooksImpl : MixinHooks {
     override fun isVanishedFromViewer(target: ServerPlayer, viewer: ServerPlayer): Boolean =
         eu.mctraveler.vanish.VanishFeature.isHiddenFrom(target, viewer)
 
+    override fun markdownLineFor(editor: ServerPlayer, raw: String): Component? =
+        if (eu.mctraveler.rank.RankFeature.rankOf(editor) == eu.mctraveler.rank.Rank.DONATOR) {
+            eu.mctraveler.text.Markdown.parse(raw)
+        } else {
+            null
+        }
+
+    override fun customDeathMessage(player: ServerPlayer): Component? =
+        eu.mctraveler.rank.DeathMessageFeature.customMessageFor(player)
+
     override fun beforeTeleport(player: ServerPlayer, destination: ResourceKey<Level>) =
         EmbassyOrigins.beforeTeleport(player, destination)
 

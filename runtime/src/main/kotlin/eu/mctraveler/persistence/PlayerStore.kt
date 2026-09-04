@@ -56,4 +56,31 @@ interface PlayerStore {
 
     /** Sets, or with a null [playTimeTicks] clears, the pending recharge. */
     fun setCrystalNextRegenAt(uuid: UUID, playTimeTicks: Int?)
+
+    /**
+     * Whether [uuid] has a record at all — the "has this account ever been
+     * seen before" signal, independent of any one field. [eu.mctraveler.rank.RankFeature]
+     * uses it to tell a genuinely brand-new player (welcomed as a Newbie) apart
+     * from an existing player whose record simply predates ranks (grandfathered
+     * in as a Traveler, never retroactively restricted).
+     */
+    fun hasRecord(uuid: UUID): Boolean
+
+    /**
+     * The player's rank (`"NEWBIE"`, `"TRAVELER"`, `"DONATOR"`), or null if
+     * never recorded — read by [eu.mctraveler.rank.RankFeature], which owns
+     * the default for that case.
+     */
+    fun rank(uuid: UUID): String?
+
+    fun setRank(uuid: UUID, rank: String)
+
+    /**
+     * The Donator's custom death-message text (`/deathmessage`, markdown
+     * un-translated), or null if never set.
+     */
+    fun deathMessage(uuid: UUID): String?
+
+    /** Sets, or with a null [message] clears, the custom death message. */
+    fun setDeathMessage(uuid: UUID, message: String?)
 }

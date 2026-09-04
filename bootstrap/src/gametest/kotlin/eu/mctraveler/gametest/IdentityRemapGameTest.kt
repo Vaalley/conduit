@@ -101,6 +101,9 @@ class IdentityRemapGameTest {
         val server = helper.level.server
         val observer = TestPlayer.join(server, "RemapObserver")
         val aliased = TestPlayer.joinAs(server, GameProfile(ALIAS_UUID, "iElmo"))
+        // A fresh login is a Newbie (ranks feature) and dark-aqua in chat;
+        // this test is about the aliasing/signing mechanics, not rank color.
+        eu.mctraveler.rank.RankFeature.setRank(aliased.player, eu.mctraveler.rank.Rank.TRAVELER)
         val ordinary = TestPlayer.join(server, "RemapOrdinary")
 
         helper.runAfterDelay(2) {

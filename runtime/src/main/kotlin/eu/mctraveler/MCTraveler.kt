@@ -50,6 +50,7 @@ object MCTraveler {
         GeoIpFeature.register()
         ChatBridge.register()
         AwayFeature.register()
+        eu.mctraveler.rank.RankFeature.register()
         NoRain.register()
 
 

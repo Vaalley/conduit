@@ -69,6 +69,11 @@ class MessageCapturingPlayer(
             // creative, which quietly changes what items and blocks do (nothing
             // is consumed, buckets are not filled, every block breaks at once).
             player.setGameMode(GameType.SURVIVAL)
+            // A brand-new account is a Newbie (ranks feature) and cannot create
+            // regions; the region suite is about region behaviour, not the rank
+            // ladder, so every test player starts as the mod's long-standing
+            // default, same as an existing real player would.
+            eu.mctraveler.rank.RankFeature.setRank(player, eu.mctraveler.rank.Rank.TRAVELER)
             return player
         }
     }

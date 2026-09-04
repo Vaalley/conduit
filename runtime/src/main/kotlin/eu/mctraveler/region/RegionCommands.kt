@@ -55,7 +55,6 @@ object RegionCommands {
 
     private val NAME_REGEX = Regex("^[a-zA-Z0-9!_'?()#:,.+&@*\\- ]{3,30}$")
 
-    private const val MAX_AREA = 5000
     private const val MAX_MEMBERS = 99
     private const val MIN_Y = -64
     private const val MAX_Y = 320
@@ -201,6 +200,10 @@ object RegionCommands {
     // ---- lifecycle commands ----
 
     private fun start(player: ServerPlayer): Component {
+        val rank = eu.mctraveler.rank.RankFeature.rankOf(player)
+        if (rank == eu.mctraveler.rank.Rank.NEWBIE && !RegionsFeature.isAdmin(player)) {
+            return Paint.error("Newbies cannot create regions yet. Keep playing to become a Traveler!")
+        }
         // The Portal captured the last move-packet position and errored with
         // "Position not available yet, please move first" before the first
         // packet; the server-side position always exists, so that error is
@@ -237,10 +240,11 @@ object RegionCommands {
         if (area <= 9) {
             return Paint.error("Region too small")
         }
-        if (area > MAX_AREA && !RegionsFeature.isAdmin(player)) {
+        val areaCap = eu.mctraveler.rank.RankFeature.rankOf(player).regionAreaCap
+        if (area > areaCap && !RegionsFeature.isAdmin(player)) {
             return Paint.error(
                 "Region too large (${floor(area).toInt()} blocks). " +
-                    "Limit is $MAX_AREA blocks. Ask an admin to create it.",
+                    "Limit is $areaCap blocks. Ask an admin to create it.",
             )
         }
 
@@ -304,9 +308,10 @@ object RegionCommands {
     /**
      * Grows the region the player stands in outward by [distance] blocks along
      * the edge they are facing (their cardinal facing — N/S/E/W). Residents and
-     * admins may; the new footprint must stay within the Portal's [MAX_AREA]
-     * (admins excepted), inside the parent region if this is a sub-region, and
-     * clear of every other region.
+     * admins may; the new footprint must stay within the player's rank's area
+     * cap ([eu.mctraveler.rank.Rank.regionAreaCap], admins excepted), inside
+     * the parent region if this is a sub-region, and clear of every other
+     * region.
      */
     private fun extend(player: ServerPlayer, distance: Int): Component {
         val region = RegionTracker.regionOf(player)
@@ -335,9 +340,10 @@ object RegionCommands {
         }
 
         val area = (maxX - minX + 1).toLong() * (maxZ - minZ + 1).toLong()
-        if (area > MAX_AREA && !RegionsFeature.isAdmin(player)) {
+        val areaCap = eu.mctraveler.rank.RankFeature.rankOf(player).regionAreaCap
+        if (area > areaCap && !RegionsFeature.isAdmin(player)) {
             return Paint.error(
-                "Region too large ($area blocks). Limit is $MAX_AREA blocks. Ask an admin to extend it further.",
+                "Region too large ($area blocks). Limit is $areaCap blocks. Ask an admin to extend it further.",
             )
         }
 

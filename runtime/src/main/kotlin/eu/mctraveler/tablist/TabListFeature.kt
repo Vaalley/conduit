@@ -79,7 +79,7 @@ object TabListFeature {
         displayNameWith(player, hearts(player.maxHealth, player.maxHealth, 0f))
 
     private fun displayNameWith(player: ServerPlayer, heartsComponent: Component): Component = Paint(
-        Paint.green(player.gameProfile.name),
+        eu.mctraveler.rank.RankFeature.nameColor(player)(player.gameProfile.name),
         " ",
         Paint.darkGray("[${player.connection?.latency() ?: 0}ms]"),
         " ",

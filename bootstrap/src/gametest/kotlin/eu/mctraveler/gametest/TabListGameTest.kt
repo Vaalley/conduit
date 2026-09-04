@@ -64,10 +64,19 @@ class TabListGameTest {
         PacketCapture.drain(viewer)
         val joiner = helper.makeMockServerPlayerInLevel()
 
-        // The join broadcast the viewer receives already carries `<name> [<N>ms]`.
-        assertDisplayName(displayNameSentFor(viewer, joiner), joiner, latencyMs = 0)
+        // The join broadcast the viewer receives already carries `<name> [<N>ms]` —
+        // still Newbie-colored (ranks feature): the account is brand new, and the
+        // promotion below only takes effect on the tab list's next refresh.
+        assertDisplayName(
+            displayNameSentFor(viewer, joiner),
+            joiner,
+            latencyMs = 0,
+            nameColor = ChatFormatting.DARK_AQUA,
+        )
+        eu.mctraveler.rank.RankFeature.setRank(joiner, eu.mctraveler.rank.Rank.TRAVELER)
 
-        // Once a latency measurement lands, the refresh updates the bracketed number.
+        // Once a latency measurement lands, the refresh updates the bracketed number
+        // (and, by now, the rank color too).
         setLatency(joiner, 123)
         PacketCapture.drain(viewer)
         helper.runAfterDelay(30) {
@@ -275,12 +284,17 @@ class TabListGameTest {
         component.toFlatList(component.style).map { it.string to it.style.color }
 
     /** The latency-carrying tab entry display name (inventory §2.18's literals below). */
-    private fun assertDisplayName(displayName: Component, player: ServerPlayer, latencyMs: Int) {
+    private fun assertDisplayName(
+        displayName: Component,
+        player: ServerPlayer,
+        latencyMs: Int,
+        nameColor: ChatFormatting = ChatFormatting.GREEN,
+    ) {
         assertRendered(
             "tab display name of ${player.uuid}",
             displayName,
             listOf(
-                player.gameProfile.name to ChatFormatting.GREEN,
+                player.gameProfile.name to nameColor,
                 " " to null,
                 "[${latencyMs}ms]" to ChatFormatting.DARK_GRAY,
                 " " to null,

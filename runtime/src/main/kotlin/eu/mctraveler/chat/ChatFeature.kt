@@ -135,10 +135,11 @@ object ChatFeature {
         return false
     }
 
-    /** [CHAT_TYPE] bound with [player]'s plain username in green as the sender. */
+    /** [CHAT_TYPE] bound with [player]'s username, in their rank's color, as the sender. */
     private fun chatBound(player: ServerPlayer): ChatType.Bound {
         val holder = player.level().registryAccess().lookupOrThrow(Registries.CHAT_TYPE).getOrThrow(CHAT_TYPE)
-        return ChatType.Bound(holder, Paint.green(player.gameProfile.name), Optional.empty())
+        val name = eu.mctraveler.rank.RankFeature.nameColor(player)(player.gameProfile.name)
+        return ChatType.Bound(holder, name, Optional.empty())
     }
 
     private fun isVanillaPresenceMessage(message: Component): Boolean {

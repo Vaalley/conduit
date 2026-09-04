@@ -45,6 +45,9 @@ class ChatGameTest {
     fun chatIsGreenNameFormattedSignedAndCrossesDimensions(helper: GameTestHelper) {
         val server = helper.level.server
         val speaker = TestPlayer.join(server, "ChatAlice")
+        // A fresh login is a Newbie (ranks feature) and dark-aqua in chat;
+        // this test is about the chat mechanism, not rank color.
+        eu.mctraveler.rank.RankFeature.setRank(speaker.player, eu.mctraveler.rank.Rank.TRAVELER)
         val listener = TestPlayer.join(server, "ChatBob")
         listener.moveTo(server.getLevel(Level.NETHER)!!, 0.0, 100.0, 0.0)
         helper.runAfterDelay(2) { speaker.chat("hello across worlds") }
@@ -140,6 +143,7 @@ class ChatGameTest {
     fun shrugAndTableflipSendTheEmoticonAsTheChatLine(helper: GameTestHelper) {
         val server = helper.level.server
         val speaker = TestPlayer.join(server, "EmoteIvan")
+        eu.mctraveler.rank.RankFeature.setRank(speaker.player, eu.mctraveler.rank.Rank.TRAVELER)
         val listener = TestPlayer.join(server, "EmoteJudy")
         listener.moveTo(server.getLevel(Level.NETHER)!!, 0.0, 100.0, 0.0)
         helper.runAfterDelay(2) {

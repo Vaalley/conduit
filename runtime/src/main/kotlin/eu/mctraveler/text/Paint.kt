@@ -40,6 +40,9 @@ class Paint private constructor(private val style: Style) {
     val aqua: Paint get() = Paint(style.withColor(ChatFormatting.AQUA))
     val gold: Paint get() = Paint(style.withColor(ChatFormatting.GOLD))
 
+    /** The Newbie rank's color (ranks feature). */
+    val darkAqua: Paint get() = Paint(style.withColor(ChatFormatting.DARK_AQUA))
+
     /** No explicit color: the text inherits its surroundings' (default white at top level). */
     val reset: Paint get() = Paint(style.withColor(null as TextColor?))
 
@@ -92,6 +95,7 @@ class Paint private constructor(private val style: Style) {
         val darkGray: Paint get() = plain.darkGray
         val aqua: Paint get() = plain.aqua
         val gold: Paint get() = plain.gold
+        val darkAqua: Paint get() = plain.darkAqua
         val reset: Paint get() = plain.reset
         val bold: Paint get() = plain.bold
         val italic: Paint get() = plain.italic

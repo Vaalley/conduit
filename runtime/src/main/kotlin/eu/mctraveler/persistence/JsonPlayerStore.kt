@@ -52,6 +52,20 @@ class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
         else write(uuid, CRYSTAL_NEXT_REGEN_AT, playTimeTicks.toString())
     }
 
+    override fun hasRecord(uuid: UUID): Boolean = Files.exists(fileFor(uuid))
+
+    override fun rank(uuid: UUID): String? = read(uuid)[RANK]?.let { PortalJson.decodeString(it.rawValue) }
+
+    override fun setRank(uuid: UUID, rank: String) = write(uuid, RANK, PortalJson.encodeString(rank))
+
+    override fun deathMessage(uuid: UUID): String? =
+        read(uuid)[DEATH_MESSAGE]?.let { PortalJson.decodeString(it.rawValue) }
+
+    override fun setDeathMessage(uuid: UUID, message: String?) {
+        if (message == null) remove(uuid, DEATH_MESSAGE)
+        else write(uuid, DEATH_MESSAGE, PortalJson.encodeString(message))
+    }
+
     private fun readInt(uuid: UUID, key: String): Int? =
         read(uuid)[key]?.let { field ->
             field.rawValue.toIntOrNull()
@@ -91,5 +105,9 @@ class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
         // Teleportation Crystal energy, shared by all a player's crystals.
         const val CRYSTAL_ENERGY = "crystalEnergy"
         const val CRYSTAL_NEXT_REGEN_AT = "crystalNextRegenAt"
+
+        // Ranks: Newbie/Traveler/Donator.
+        const val RANK = "rank"
+        const val DEATH_MESSAGE = "deathMessage"
     }
 }
