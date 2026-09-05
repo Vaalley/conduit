@@ -615,6 +615,100 @@ class RegionEnvironmentGameTest {
         alice.leave()
         helper.succeed()
     }
+
+    // ---- creeper vs. villagers / friendly mobs (gated by PUBLIC) ----
+
+    @GameTest
+    fun aCreeperCannotHurtAVillagerByDefaultButAPublicRegionLetsItAndPlayersAlwaysTakeIt(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T2CreepVillA")
+        val bob = MessageCapturingPlayer.join(helper, "T2CreepVillB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        val creeper = helper.spawnWithNoFreeWill(EntityTypes.CREEPER, BlockPos(2, 2, 2))
+        val villager = helper.spawnWithNoFreeWill(EntityTypes.VILLAGER, BlockPos(2, 2, 2))
+        bob.standAt(helper, 2.0, 2.0, 2.0)
+
+        helper.assertFalse(
+            RegionEnvironment.allowsExplosionEntityEffect(helper.level, creeper, villager),
+            "a creeper could hurt a villager by default",
+        )
+        helper.assertTrue(
+            RegionEnvironment.allowsExplosionEntityEffect(helper.level, creeper, bob),
+            "a creeper could not hurt a player inside a region",
+        )
+
+        alice.setFlag("PUBLIC", on = true)
+        helper.assertTrue(
+            RegionEnvironment.allowsExplosionEntityEffect(helper.level, creeper, villager),
+            "PUBLIC did not open the villager up to the creeper",
+        )
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    // ---- boats and minecarts vs. every explosion (gated by EXPLOSIONS) ----
+
+    @GameTest
+    fun explosionsCannotTouchVehiclesInARegionUnlessExplosionsAreEnabled(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T9VehBoomA")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        val creeper = helper.spawnWithNoFreeWill(EntityTypes.CREEPER, BlockPos(2, 2, 2))
+        val boat = helper.spawn(EntityTypes.OAK_BOAT, BlockPos(2, 2, 2))
+        val minecart = helper.spawn(EntityTypes.MINECART, BlockPos(2, 2, 2))
+
+        helper.assertFalse(
+            RegionEnvironment.allowsExplosionEntityEffect(helper.level, creeper, boat),
+            "a creeper's blast could reach a boat in a region",
+        )
+        helper.assertFalse(
+            RegionEnvironment.allowsExplosionEntityEffect(helper.level, null, minecart),
+            "a TNT blast could reach a minecart in a region",
+        )
+
+        alice.setFlag("EXPLOSIONS", on = true)
+        helper.assertTrue(
+            RegionEnvironment.allowsExplosionEntityEffect(helper.level, creeper, boat),
+            "EXPLOSIONS did not put the boat back in the blast's way",
+        )
+        alice.leave()
+        helper.succeed()
+    }
+
+    // ---- TNT primed by a flame arrow (a real vanilla mechanic; TntBlock.onProjectileHit) ----
+
+    @GameTest
+    fun aNonMembersFlameArrowCannotPrimeRegionTnt(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T7TntArrowA")
+        val bob = MessageCapturingPlayer.join(helper, "T7TntArrowB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(TARGET_AT, Blocks.TNT)
+        val arrow = helper.spawn(EntityTypes.ARROW, BlockPos(2, 3, 2))
+        arrow.owner = bob
+        arrow.igniteForTicks(1000)
+
+        helper.popChorusFlowerAt(TARGET_AT, arrow)
+
+        helper.assertBlockPresent(Blocks.TNT, TARGET_AT)
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aMembersFlameArrowPrimesTheirOwnTnt(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T7TntArrowOkA")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(TARGET_AT, Blocks.TNT)
+        val arrow = helper.spawn(EntityTypes.ARROW, BlockPos(2, 3, 2))
+        arrow.owner = alice
+        arrow.igniteForTicks(1000)
+
+        helper.popChorusFlowerAt(TARGET_AT, arrow)
+
+        helper.assertBlockNotPresent(Blocks.TNT, TARGET_AT)
+        alice.leave()
+        helper.succeed()
+    }
 }
 
 /** The block every environment test works on, inside the test region. */

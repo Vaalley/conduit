@@ -25,6 +25,7 @@
     "RegionExplosionMixin",
     "RegionExplosionEntityMixin",
     "RegionChorusFlowerMixin",
+    "RegionTntProjectileMixin",
     "RegionPotionSplashMixin",
     "RegionPotionCloudMixin",
     "RegionFireMixin",

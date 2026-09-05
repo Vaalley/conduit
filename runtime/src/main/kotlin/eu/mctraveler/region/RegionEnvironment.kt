@@ -10,6 +10,7 @@ import net.minecraft.world.entity.monster.Creeper
 import net.minecraft.world.entity.monster.Enemy
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.entity.projectile.Projectile
+import net.minecraft.world.entity.vehicle.VehicleEntity
 import net.minecraft.world.level.Level
 
 /**
@@ -93,9 +94,15 @@ object RegionEnvironment {
      */
     @JvmStatic
     fun allowsExplosionEntityEffect(level: Level, source: Entity?, target: Entity): Boolean {
+        val region = RegionsFeature.regionAt(level, target.blockPosition()) ?: return true
+
+        // Every boat and every minecart inside a region is shielded from every
+        // explosion — TNT, creeper, anything — unless the region opted into
+        // explosions, exactly as its blocks are.
+        if (target is VehicleEntity) return EXPLOSIONS in region.flags
+
         if (source == null) return true
         val living = target as? LivingEntity ?: return true
-        val region = RegionsFeature.regionAt(level, living.blockPosition()) ?: return true
 
         if (isWindCharge(source)) {
             if (living is Enemy) return true
@@ -104,7 +111,10 @@ object RegionEnvironment {
             return WIND_CHARGES in region.flags
         }
 
-        if (source is Creeper && living is Enemy && living.hasCustomName()) {
+        // A creeper's blast leaves villagers, animals, golems and name-tagged
+        // hostiles alone unless the region is PUBLIC — only players and plain
+        // (un-named) hostiles still take creeper damage inside a region.
+        if (source is Creeper && living !is Player && (living !is Enemy || living.hasCustomName())) {
             return PUBLIC in region.flags
         }
 

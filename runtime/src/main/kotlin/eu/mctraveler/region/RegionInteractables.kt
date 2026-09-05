@@ -58,6 +58,7 @@ import net.minecraft.world.level.block.ShelfBlock
 import net.minecraft.world.level.block.SignBlock
 import net.minecraft.world.level.block.SmithingTableBlock
 import net.minecraft.world.level.block.StonecutterBlock
+import net.minecraft.world.level.block.TntBlock
 import net.minecraft.world.level.block.state.BlockState
 
 /**
@@ -120,6 +121,11 @@ object RegionInteractables {
         is DecoratedPotBlock, is JukeboxBlock, is DaylightDetectorBlock,
         is NoteBlock, is AnvilBlock, is FlowerPotBlock, is BeehiveBlock,
         is ShelfBlock, is DragonEggBlock, is RespawnAnchorBlock, is SignBlock,
+        // TnT: its own useItemOn returns SUCCESS for flint&steel / fire charge
+        // and primes the charge, so Fabric's ItemEvents.USE_ON never fires for
+        // it — refusing the block's own right-click is what keeps a non-member
+        // from lighting it by hand.
+        is TntBlock,
         -> BlockUse.REQUIRES_MEMBERSHIP
 
         else -> BlockUse.FREE
