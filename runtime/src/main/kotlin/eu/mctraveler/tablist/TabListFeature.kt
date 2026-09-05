@@ -88,13 +88,16 @@ object TabListFeature {
     }
 
     /**
-     * A tab entry's display name: `<rank-colored name> <darkGray [Nms]>` (latency: Portal's
-     * PlayerInfoBitflagsModule). Hearts are [HEALTH_OBJECTIVE], drawn by the client
-     * immediately after this text, not part of it. Called by ServerPlayerMixin whenever
-     * vanilla builds a player-info packet.
+     * A tab entry's display name: `<gray [Away]?> <rank-colored name> <darkGray [Nms]>`
+     * (latency: Portal's PlayerInfoBitflagsModule; the `[Away]` prefix shows while the
+     * player is away — [eu.mctraveler.away.AwayFeature]). Hearts are [HEALTH_OBJECTIVE],
+     * drawn by the client immediately after this text, not part of it. Called by
+     * ServerPlayerMixin whenever vanilla builds a player-info packet, and re-sent for
+     * every player once a second, so an away transition lands within a tick or two.
      */
     @JvmStatic
     fun tabDisplayName(player: ServerPlayer): Component = Paint(
+        if (eu.mctraveler.away.AwayFeature.isAway(player)) Paint.gray("[Away] ") else null,
         eu.mctraveler.rank.RankFeature.nameColor(player)(player.gameProfile.name),
         " ",
         Paint.darkGray("[${player.connection?.latency() ?: 0}ms]"),

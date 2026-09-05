@@ -90,6 +90,30 @@ class TabListGameTest {
         }
     }
 
+    @GameTest(maxTicks = 100)
+    fun anAwayPlayerCarriesTheAwayPrefix(helper: GameTestHelper) {
+        val viewer = helper.makeMockServerPlayerInLevel()
+        val joiner = helper.makeMockServerPlayerInLevel()
+        eu.mctraveler.rank.RankFeature.setRank(joiner, eu.mctraveler.rank.Rank.TRAVELER)
+        helper.level.server.commands.performPrefixedCommand(joiner.createCommandSourceStack(), "away")
+        PacketCapture.drain(viewer)
+
+        helper.runAfterDelay(30) {
+            assertRendered(
+                "away tab display name of ${joiner.uuid}",
+                displayNameSentFor(viewer, joiner),
+                listOf(
+                    "[Away] " to ChatFormatting.GRAY,
+                    joiner.gameProfile.name to ChatFormatting.GREEN,
+                    " " to null,
+                    "[0ms]" to ChatFormatting.DARK_GRAY,
+                ),
+            )
+            removePlayers(helper, viewer, joiner)
+            helper.succeed()
+        }
+    }
+
     /**
      * One list for everybody, wherever they are standing.
      *

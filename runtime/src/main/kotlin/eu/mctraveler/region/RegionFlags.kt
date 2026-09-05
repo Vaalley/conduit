@@ -190,7 +190,7 @@ object RegionFlags {
             icon = Items.FEATHER,
             defaultAllowed = true,
             label = "Fall damage",
-            description = listOf("Protects players standing in this region from fall damage"),
+            description = listOf("Whether a fall can hurt players in this region"),
             statusStyle = StatusStyle.TRUE_FALSE,
             adminOnly = true,
         ),
@@ -256,14 +256,14 @@ object RegionFlags {
             flags.add("TRAPDOORS")
         }
 
-        // DISABLE_PLAYER_FALL_DAMAGE present ("no fall damage") -> FALL_DAMAGE
-        // present ("protected from fall damage"): both mean the same outcome.
+        // FALL_DAMAGE now means "a fall can hurt here", on by default. The old
+        // DISABLE_PLAYER_FALL_DAMAGE was the opposite marker: present -> keep the
+        // region fall-safe -> FALL_DAMAGE absent; absent -> fall damage on.
         if (flags.remove("DISABLE_PLAYER_FALL_DAMAGE")) {
+            flags.remove("FALL_DAMAGE")
+        } else {
             flags.add("FALL_DAMAGE")
         }
-        // else: leave FALL_DAMAGE absent from migration; the seeded-baseline
-        // pass below adds it, since a region without the old flag always let
-        // fall damage through under the new default-true baseline too.
 
         // DISABLE_PUBLIC_REDSTONE_TRIGGERS present -> PUBLIC_REDSTONE absent;
         // absent -> PUBLIC_REDSTONE was seeded (present).
@@ -310,7 +310,7 @@ object RegionFlags {
     /** Flags whose presence/absence is always fully decided by [migrateLegacy] above. */
     private val DERIVED_FROM_LEGACY = setOf(
         "SCOREBOARD", "GATES", "DOORS", "TRAPDOORS", "PUBLIC_REDSTONE",
-        "WEIGHTED_PRESSURE_PLATES", "ANIMAL_PROTECTION", "PVP",
+        "WEIGHTED_PRESSURE_PLATES", "ANIMAL_PROTECTION", "PVP", "FALL_DAMAGE",
     )
 
     private fun remapRenamed(flags: MutableSet<String>, old: String, new: String) {

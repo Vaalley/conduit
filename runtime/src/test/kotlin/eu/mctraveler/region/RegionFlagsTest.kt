@@ -133,18 +133,22 @@ class RegionFlagsTest {
     }
 
     // ---- migrateLegacy: DISABLE_PLAYER_FALL_DAMAGE -> FALL_DAMAGE (flip) ----
+    //
+    // FALL_DAMAGE now means "a fall hurts here", on by default. The old
+    // DISABLE_PLAYER_FALL_DAMAGE was the opposite marker.
 
     @Test
-    fun `DISABLE_PLAYER_FALL_DAMAGE present adds FALL_DAMAGE`() {
+    fun `DISABLE_PLAYER_FALL_DAMAGE present keeps the region fall-safe`() {
         val region = region("DISABLE_PLAYER_FALL_DAMAGE")
         RegionFlags.migrateLegacy(region.flags)
-        assertTrue("FALL_DAMAGE" in region.flags)
+        assertFalse("FALL_DAMAGE" in region.flags)
+        assertFalse("DISABLE_PLAYER_FALL_DAMAGE" in region.flags)
     }
 
     @Test
-    fun `DISABLE_PLAYER_FALL_DAMAGE absent also ends up with FALL_DAMAGE present`() {
+    fun `DISABLE_PLAYER_FALL_DAMAGE absent ends up with FALL_DAMAGE on`() {
         // Old absence meant "fall damage applies normally", which is exactly
-        // what the new default-true FALL_DAMAGE baseline already means.
+        // the new default-true FALL_DAMAGE baseline.
         val region = region()
         RegionFlags.migrateLegacy(region.flags)
         assertTrue("FALL_DAMAGE" in region.flags)

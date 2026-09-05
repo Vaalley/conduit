@@ -578,16 +578,17 @@ object RegionProtection {
     /**
      * Whether a fall may hurt [player] where they are standing.
      *
-     * `FALL_DAMAGE` names the *protection*, not the damage: its presence
-     * means a region catches everyone inside it, member or not, because it is
-     * the ground that is soft — so a fall is only allowed to hurt when the
-     * flag is *absent*. Seeded present by default (`RegionFlags.FALL_DAMAGE`'s
-     * `defaultAllowed = true`), matching this rework's chosen default of
-     * fall-damage-protected rather than the Portal's old opt-in.
+     * `FALL_DAMAGE` names the damage plainly: present means a fall hurts,
+     * absent means the region catches everyone inside it, member or not,
+     * because the ground is soft. Seeded present by default
+     * (`RegionFlags.FALL_DAMAGE`'s `defaultAllowed = true`), so every region
+     * takes fall damage unless an admin turns it off — or unless the region
+     * carried the legacy `DISABLE_PLAYER_FALL_DAMAGE` flag, which migrates to
+     * `FALL_DAMAGE` absent.
      */
     private fun allowsFallDamage(player: ServerPlayer): Boolean {
         val region = RegionTracker.regionOf(player) ?: return true
-        return FALL_DAMAGE !in region.flags
+        return FALL_DAMAGE in region.flags
     }
 
     /**

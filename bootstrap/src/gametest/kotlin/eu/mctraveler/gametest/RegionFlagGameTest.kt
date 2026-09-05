@@ -19,8 +19,9 @@ import net.minecraft.world.phys.Vec3
 
 /**
  * The flags a region owner turns *off* to take something away (spec User
- * Story 36): fall damage protection, public redstone, weighted plates, and
- * the gate/door/trapdoor trio split from the old single `DISABLE_GATES`.
+ * Story 36): fall damage, public redstone, weighted plates, and the
+ * gate/door/trapdoor trio split from the old single `DISABLE_GATES`. (Fall
+ * damage on means a fall hurts; off makes the ground soft.)
  *
  * All were accepted and enforced nowhere in the Portal (inventory §2.8,
  * deviation 7). The "public" ones restrict people who are not members —
@@ -39,20 +40,20 @@ class RegionFlagGameTest {
     // ---- FALL_DAMAGE ----
 
     @GameTest
-    fun theFlagCatchesAPlayerWhoFallsInside(helper: GameTestHelper) {
+    fun aFallHurtsInsideARegionByDefault(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T15FallA")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
         alice.standAt(helper, 2.0, 2.0, 2.0)
 
         alice.takesFallDamage(helper)
 
-        helper.assertValueEqual(alice.health, alice.maxHealth, "the health of a resident who landed hard")
+        helper.assertTrue(alice.health < alice.maxHealth, "a fall in an ordinary region did no damage")
         alice.leave()
         helper.succeed()
     }
 
     @GameTest
-    fun aFallStillHurtsWithoutTheFlag(helper: GameTestHelper) {
+    fun turningTheFlagOffMakesTheGroundSoft(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T15DropA")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
         alice.setFlag("FALL_DAMAGE", on = false)
@@ -60,17 +61,18 @@ class RegionFlagGameTest {
 
         alice.takesFallDamage(helper)
 
-        helper.assertTrue(alice.health < alice.maxHealth, "a fall with the flag off did no damage")
+        helper.assertValueEqual(alice.health, alice.maxHealth, "a fall with the flag off still hurt")
         alice.leave()
         helper.succeed()
     }
 
     @GameTest
-    fun theFlagCatchesStrangersToo(helper: GameTestHelper) {
+    fun theSoftGroundCatchesStrangersToo(helper: GameTestHelper) {
         // The flag is about the ground, not about who is standing on it.
         val alice = MessageCapturingPlayer.join(helper, "T15SoftA")
         val bob = MessageCapturingPlayer.join(helper, "T15SoftB")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        alice.setFlag("FALL_DAMAGE", on = false)
         bob.standAt(helper, 2.0, 2.0, 2.0)
 
         bob.takesFallDamage(helper)
@@ -85,11 +87,12 @@ class RegionFlagGameTest {
     fun onlyTheFallIsForgiven(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T15HurtA")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        alice.setFlag("FALL_DAMAGE", on = false)
         alice.standAt(helper, 2.0, 2.0, 2.0)
 
         alice.hurtServer(helper.level, helper.level.damageSources().magic(), FALL_DAMAGE)
 
-        helper.assertTrue(alice.health < alice.maxHealth, "the flag shrugged off damage that was not a fall")
+        helper.assertTrue(alice.health < alice.maxHealth, "the soft ground shrugged off damage that was not a fall")
         alice.leave()
         helper.succeed()
     }
@@ -100,12 +103,13 @@ class RegionFlagGameTest {
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
         alice.standAt(helper, 2.0, 2.0, 2.0)
         alice.takesFallDamage(helper)
-        helper.assertValueEqual(alice.health, alice.maxHealth, "precondition: the fall did no damage")
+        helper.assertTrue(alice.health < alice.maxHealth, "precondition: the fall did damage")
+        alice.health = alice.maxHealth
 
         alice.setFlag("FALL_DAMAGE", on = false)
 
         alice.takesFallDamage(helper)
-        helper.assertTrue(alice.health < alice.maxHealth, "the health after the flag went off")
+        helper.assertValueEqual(alice.health, alice.maxHealth, "the health after the flag went off")
         alice.leave()
         helper.succeed()
     }

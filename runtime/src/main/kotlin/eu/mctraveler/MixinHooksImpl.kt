@@ -80,7 +80,9 @@ object MixinHooksImpl : MixinHooks {
         eu.mctraveler.vanish.VanishFeature.isHiddenFrom(target, viewer)
 
     override fun markdownLineFor(editor: ServerPlayer, raw: String): Component? =
-        if (eu.mctraveler.rank.RankFeature.rankOf(editor) == eu.mctraveler.rank.Rank.DONATOR) {
+        if (eu.mctraveler.rank.RankFeature.rankOf(editor) == eu.mctraveler.rank.Rank.DONATOR ||
+            eu.mctraveler.region.RegionsFeature.isAdmin(editor)
+        ) {
             eu.mctraveler.text.Markdown.parse(raw)
         } else {
             null
