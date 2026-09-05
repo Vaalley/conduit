@@ -161,7 +161,7 @@ object RegionFlagsMenu {
             RegionFlags.StatusStyle.TRUE_FALSE -> if (allowed) Paint.green("True") else Paint.red("False")
         }
         return ItemStack(def.icon).apply {
-            set(DataComponents.CUSTOM_NAME, upright(def.label))
+            set(DataComponents.CUSTOM_NAME, flagName(def.label))
             set(DataComponents.LORE, loreOf(listOf<Any>(status, Component.empty()) + def.description))
             hideAdditionalTooltip(this)
         }
@@ -169,14 +169,14 @@ object RegionFlagsMenu {
 
     private fun adminButtonItem(): ItemStack =
         ItemStack(Items.REPEATING_COMMAND_BLOCK).apply {
-            set(DataComponents.CUSTOM_NAME, upright("Admin flags"))
+            set(DataComponents.CUSTOM_NAME, flagName("Admin flags"))
             set(DataComponents.LORE, loreOf(listOf("Click to view admin-only flags")))
             hideAdditionalTooltip(this)
         }
 
     private fun backButtonItem(): ItemStack =
         ItemStack(Items.ARROW).apply {
-            set(DataComponents.CUSTOM_NAME, upright("Back"))
+            set(DataComponents.CUSTOM_NAME, flagName("Back"))
             set(DataComponents.LORE, loreOf(listOf("Click to return to region flags")))
             hideAdditionalTooltip(this)
         }
@@ -186,6 +186,9 @@ object RegionFlagsMenu {
             set(DataComponents.CUSTOM_NAME, upright(" "))
             hideAdditionalTooltip(this)
         }
+
+    /** The widest a lore line may be — narrow, because a large GUI scale clips wider lines off-screen. */
+    private const val MAX_LORE_WIDTH = 16
 
     /**
      * Vanilla renders `custom_name` and lore lines in italic by default; every
@@ -200,8 +203,54 @@ object RegionFlagsMenu {
         return copy.setStyle(copy.style.withItalic(false))
     }
 
-    private fun loreOf(lines: List<Any>): ItemLore =
-        ItemLore(lines.map { upright(if (it is Component) it else Component.literal(it.toString())) })
+    /** An item's display name: upright and bold. */
+    private fun flagName(text: String): Component =
+        Component.literal(text).setStyle(Style.EMPTY.withItalic(false).withBold(true))
+
+    /**
+     * Builds the lore, wrapping every plain-string line to [MAX_LORE_WIDTH]
+     * characters (already-built [Component]s — the status word, the blank
+     * separator — are passed through untouched).
+     */
+    private fun loreOf(lines: List<Any>): ItemLore {
+        val out = mutableListOf<Component>()
+        for (line in lines) {
+            if (line is Component) {
+                out.add(upright(line))
+            } else {
+                wrap(line.toString(), MAX_LORE_WIDTH).forEach { out.add(upright(it)) }
+            }
+        }
+        return ItemLore(out)
+    }
+
+    /** Greedily word-wraps [text] to lines of at most [width] characters, hard-splitting any longer word. */
+    private fun wrap(text: String, width: Int): List<String> {
+        val lines = mutableListOf<String>()
+        var current = StringBuilder()
+        for (rawWord in text.split(' ')) {
+            var word = rawWord
+            while (word.length > width) {
+                if (current.isNotEmpty()) {
+                    lines.add(current.toString())
+                    current = StringBuilder()
+                }
+                lines.add(word.take(width))
+                word = word.drop(width)
+            }
+            if (word.isEmpty()) continue
+            when {
+                current.isEmpty() -> current.append(word)
+                current.length + 1 + word.length <= width -> current.append(' ').append(word)
+                else -> {
+                    lines.add(current.toString())
+                    current = StringBuilder(word)
+                }
+            }
+        }
+        if (current.isNotEmpty()) lines.add(current.toString())
+        return lines.ifEmpty { listOf("") }
+    }
 
     private fun hideAdditionalTooltip(stack: ItemStack) {
         stack.set(DataComponents.TOOLTIP_DISPLAY, TooltipDisplay.DEFAULT.withHidden(DataComponents.PROFILE, true))

@@ -79,6 +79,7 @@ object RegionFlags {
             defaultAllowed = false,
             label = "Public chests",
             description = listOf("Allows non-members to open chests in this region"),
+            statusStyle = StatusStyle.TRUE_FALSE,
         ),
         // Row 2 — automation & transport
         Definition(
