@@ -1422,6 +1422,28 @@ class RegionProtectionGameTest {
         helper.succeed()
     }
 
+    @GameTest
+    fun aLeashedHorseIsNotRideableWithAnItemInHandEither(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T10LeashItemA")
+        val bob = MessageCapturingPlayer.join(helper, "T10LeashItemB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        // PUBLIC_VILLAGERS opens held-item interactions; the leash still wins.
+        alice.setFlag("PUBLIC_VILLAGERS", on = true)
+        val horse = helper.spawnWithNoFreeWill(EntityTypes.HORSE, BlockPos(2, 2, 2))
+        horse.setTamed(true)
+        horse.setLeashedTo(alice, true)
+        bob.standAt(helper, 2.0, 2.0, 2.0)
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.STICK))
+        bob.messages.clear()
+
+        bob.interactsWith(horse)
+        helper.assertFalse(bob.isPassenger, "a non-member rode a leashed horse holding an item")
+        helper.assertTrue(bob.wasRefusedBy("T10LeashItemA's Place"), "no refusal for the leashed horse")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
     // ---- TNT ignition ----
 
     @GameTest

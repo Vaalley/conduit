@@ -805,10 +805,13 @@ object RegionProtection {
             }
             return refuse(p, region)
         }
+        // A leashed rideable mount is off-limits to a passing non-member whether
+        // or not they hold something — neither RIDEABLE nor PUBLIC_VILLAGERS'
+        // held-item opening hands over a mount someone else has on a lead.
+        if (entity != null && isRideableMount(entity) && entity is Mob && entity.isLeashed) {
+            return refuse(p, region)
+        }
         if (entity != null && isRideableMount(entity) && emptyHand && !p.isShiftKeyDown) {
-            // A leashed mount is being handled by someone — RIDEABLE does not
-            // hand it to a passing non-member.
-            if (entity is Mob && entity.isLeashed) return refuse(p, region)
             if (RIDEABLE in region.flags) return true
             return refuse(p, region)
         }

@@ -3,6 +3,7 @@ package eu.mctraveler.region
 import eu.mctraveler.text.Paint
 import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
+import net.minecraft.network.chat.Style
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.Container
 import net.minecraft.world.SimpleContainer
@@ -160,7 +161,7 @@ object RegionFlagsMenu {
             RegionFlags.StatusStyle.TRUE_FALSE -> if (allowed) Paint.green("True") else Paint.red("False")
         }
         return ItemStack(def.icon).apply {
-            set(DataComponents.CUSTOM_NAME, Component.literal(def.label))
+            set(DataComponents.CUSTOM_NAME, upright(def.label))
             set(DataComponents.LORE, loreOf(listOf<Any>(status, Component.empty()) + def.description))
             hideAdditionalTooltip(this)
         }
@@ -168,26 +169,39 @@ object RegionFlagsMenu {
 
     private fun adminButtonItem(): ItemStack =
         ItemStack(Items.REPEATING_COMMAND_BLOCK).apply {
-            set(DataComponents.CUSTOM_NAME, Component.literal("Admin flags"))
+            set(DataComponents.CUSTOM_NAME, upright("Admin flags"))
             set(DataComponents.LORE, loreOf(listOf("Click to view admin-only flags")))
             hideAdditionalTooltip(this)
         }
 
     private fun backButtonItem(): ItemStack =
         ItemStack(Items.ARROW).apply {
-            set(DataComponents.CUSTOM_NAME, Component.literal("Back"))
+            set(DataComponents.CUSTOM_NAME, upright("Back"))
             set(DataComponents.LORE, loreOf(listOf("Click to return to region flags")))
             hideAdditionalTooltip(this)
         }
 
     private fun fillerItem(): ItemStack =
         ItemStack(Items.STAINED_GLASS_PANE.gray()).apply {
-            set(DataComponents.CUSTOM_NAME, Component.literal(" "))
+            set(DataComponents.CUSTOM_NAME, upright(" "))
             hideAdditionalTooltip(this)
         }
 
+    /**
+     * Vanilla renders `custom_name` and lore lines in italic by default; every
+     * name, status word and lore line in this GUI is meant to read upright, so
+     * the italic bit is explicitly cleared on the component's own style.
+     */
+    private fun upright(text: String): Component =
+        Component.literal(text).setStyle(Style.EMPTY.withItalic(false))
+
+    private fun upright(component: Component): Component {
+        val copy = component.copy()
+        return copy.setStyle(copy.style.withItalic(false))
+    }
+
     private fun loreOf(lines: List<Any>): ItemLore =
-        ItemLore(lines.map { if (it is Component) it else Component.literal(it.toString()) })
+        ItemLore(lines.map { upright(if (it is Component) it else Component.literal(it.toString())) })
 
     private fun hideAdditionalTooltip(stack: ItemStack) {
         stack.set(DataComponents.TOOLTIP_DISPLAY, TooltipDisplay.DEFAULT.withHidden(DataComponents.PROFILE, true))
