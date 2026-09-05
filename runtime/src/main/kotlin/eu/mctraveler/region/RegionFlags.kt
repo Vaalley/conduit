@@ -74,11 +74,11 @@ object RegionFlags {
             description = listOf("Allows non-members to open trapdoors"),
         ),
         Definition(
-            id = "PUBLIC_CONTAINERS",
+            id = "PUBLIC_CHESTS",
             icon = Items.CHEST,
             defaultAllowed = false,
-            label = "Public containers",
-            description = listOf("Allows non-members to use chests and other containers"),
+            label = "Public chests",
+            description = listOf("Allows non-members to open chests in this region"),
         ),
         // Row 2 — automation & transport
         Definition(
@@ -107,7 +107,7 @@ object RegionFlags {
             icon = Items.OAK_BOAT,
             defaultAllowed = true,
             label = "Boats",
-            description = listOf("Allows non-members to break and place boats"),
+            description = listOf("Allows non-members to break and place plain boats (chest boats are always protected)"),
         ),
         Definition(
             id = "RIDEABLE",
@@ -231,7 +231,8 @@ object RegionFlags {
      */
     fun migrateLegacy(flags: MutableSet<String>) {
         remapRenamed(flags, "ENABLE_EXPLOSIONS", "EXPLOSIONS")
-        remapRenamed(flags, "ENABLE_PUBLIC_CONTAINERS", "PUBLIC_CONTAINERS")
+        remapRenamed(flags, "ENABLE_PUBLIC_CONTAINERS", "PUBLIC_CHESTS")
+        remapRenamed(flags, "PUBLIC_CONTAINERS", "PUBLIC_CHESTS")
         remapRenamed(flags, "ENABLE_FIRE_DAMAGE", "FIRE_DAMAGE")
         remapRenamed(flags, "ENABLE_PUBLIC_VILLAGER_TRADING", "PUBLIC_VILLAGERS")
 

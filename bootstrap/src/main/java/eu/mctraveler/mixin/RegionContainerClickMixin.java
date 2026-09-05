@@ -5,6 +5,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.inventory.MerchantMenu;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -34,6 +35,14 @@ public abstract class RegionContainerClickMixin {
                 || Hooks.isPersonalEnderChestMenu(menu)
                 || Hooks.isWorkstationMenu(menu)
                 || !(player instanceof ServerPlayer clicker)) {
+            return;
+        }
+        // A villager trade screen: completing a trade is gated by
+        // PUBLIC_VILLAGERS rather than the chests flag.
+        if (menu instanceof MerchantMenu) {
+            if (!Hooks.allowsVillagerTrade(clicker)) {
+                ci.cancel();
+            }
             return;
         }
         if (!Hooks.allowsContainerUse(clicker)) {

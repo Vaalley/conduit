@@ -37,13 +37,17 @@ import net.minecraft.world.entity.animal.pig.Pig
 import net.minecraft.world.entity.monster.Enemy
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.entity.decoration.BlockAttachedEntity
+import net.minecraft.world.entity.npc.villager.AbstractVillager
 import net.minecraft.world.entity.projectile.Projectile
-import net.minecraft.world.entity.vehicle.boat.Boat
-import net.minecraft.world.entity.vehicle.boat.ChestBoat
+import net.minecraft.world.entity.vehicle.boat.AbstractBoat
+import net.minecraft.world.entity.vehicle.boat.AbstractChestBoat
 import net.minecraft.world.entity.vehicle.minecart.Minecart
+import net.minecraft.world.CompoundContainer
 import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.inventory.ChestMenu
+import net.minecraft.world.inventory.MerchantMenu
 import net.minecraft.world.inventory.PlayerEnderChestContainer
+import net.minecraft.world.level.block.entity.ChestBlockEntity
 import net.minecraft.world.item.BoatItem
 import net.minecraft.world.item.BucketItem
 import net.minecraft.world.item.ItemStack
@@ -94,7 +98,7 @@ object RegionProtection {
     // decided once, by whether RegionFlags.Definition.defaultAllowed seeds it
     // at region creation — nothing below branches on a flag's own polarity.
     private const val PUBLIC = "PUBLIC"
-    private const val PUBLIC_CONTAINERS = "PUBLIC_CONTAINERS"
+    private const val PUBLIC_CHESTS = "PUBLIC_CHESTS"
     private const val PUBLIC_VILLAGERS = "PUBLIC_VILLAGERS"
     private const val ANIMAL_PROTECTION = "ANIMAL_PROTECTION"
     private const val FALL_DAMAGE = "FALL_DAMAGE"
@@ -182,6 +186,20 @@ object RegionProtection {
     @JvmStatic
     fun isPersonalEnderChestMenu(menu: AbstractContainerMenu): Boolean =
         menu is ChestMenu && menu.container is PlayerEnderChestContainer
+
+    /**
+     * Whether [menu] is a real world chest (single or double, plain or
+     * trapped) — the only container `PUBLIC_CHESTS` opens to non-members.
+     *
+     * Barrels also draw a [ChestMenu], but their container is a
+     * `BarrelBlockEntity` rather than a [ChestBlockEntity] / [CompoundContainer],
+     * so they are left out here: a barrel stays members-only like every other
+     * non-chest container.
+     */
+    private fun isPublicChestMenu(menu: AbstractContainerMenu): Boolean =
+        menu is ChestMenu &&
+            menu.container !is PlayerEnderChestContainer &&
+            (menu.container is ChestBlockEntity || menu.container is CompoundContainer)
 
 
     private fun isExemptItem(stack: ItemStack): Boolean =
@@ -300,7 +318,16 @@ object RegionProtection {
             allowedOrFail(player !is ServerPlayer || allowsEntityAttack(player, entity))
         }
         UseEntityCallback.EVENT.reloadable.register { player, _, hand, entity, _ ->
-            allowedOrFail(player !is ServerPlayer || allowsEntityInteract(player, hand, entity))
+            // A refused entity right-click (fuelling a furnace minecart, milking
+            // a cow) leaves a ghost stack the client already moved, exactly like
+            // a refused block right-click — so resync the inventory on refusal,
+            // the way the block hooks do.
+            if (player !is ServerPlayer || allowsEntityInteract(player, hand, entity)) {
+                InteractionResult.PASS
+            } else {
+                resyncInventory(player)
+                InteractionResult.FAIL
+            }
         }
 
         ServerPlayerEvents.LEAVE.reloadable.register { player ->
@@ -393,8 +420,12 @@ object RegionProtection {
         ) {
             return default
         }
+        // A villager's trade screen keeps its name — viewing the trades is
+        // allowed for anyone (PUBLIC_VILLAGERS only gates completing a trade).
+        if (menu is MerchantMenu) return default
         val region = containerRegionFor(player) ?: return default
-        if (canModifyRegion(player, region) || PUBLIC_CONTAINERS in region.flags) return default
+        if (canModifyRegion(player, region)) return default
+        if (PUBLIC_CHESTS in region.flags && isPublicChestMenu(menu)) return default
         return Component.literal("Region protected").withStyle(ChatFormatting.GRAY, ChatFormatting.BOLD)
     }
 
@@ -430,7 +461,22 @@ object RegionProtection {
     @JvmStatic
     fun allowsContainerUse(player: ServerPlayer): Boolean {
         val region = containerRegions[player.uuid] ?: return true
-        if (canModifyRegion(player, region) || PUBLIC_CONTAINERS in region.flags) return true
+        if (canModifyRegion(player, region)) return true
+        if (PUBLIC_CHESTS in region.flags && isPublicChestMenu(player.containerMenu)) return true
+        return refuse(player, region)
+    }
+
+    /**
+     * Whether [player] may complete a villager trade (take the result item) in
+     * the region they opened the merchant screen in — residents and `PUBLIC`
+     * always, anyone else only while the region flies `PUBLIC_VILLAGERS`.
+     * Viewing the trades is never refused ([allowsEntityInteract] lets an
+     * empty-hand click open the screen); this gates only the payout.
+     */
+    @JvmStatic
+    fun allowsVillagerTrade(player: ServerPlayer): Boolean {
+        val region = containerRegions[player.uuid] ?: return true
+        if (canModifyRegion(player, region) || PUBLIC_VILLAGERS in region.flags) return true
         return refuse(player, region)
     }
 
@@ -607,10 +653,23 @@ object RegionProtection {
         if (entity is ServerPlayer) return allowsPvp(p, entity)
         if (entity != null) {
             vehicleFlagFor(entity)?.let { flag -> return allowsVehicleUse(p, entity, flag) }
+            alwaysProtectedRegionOf(entity)?.let { region ->
+                return canModifyRegion(p, region) || refuse(p, region)
+            }
         }
         val region = entityProtectionAround(p, entity) ?: return true
         if (isCullableHostile(entity)) return true
         return refuse(p, region)
+    }
+
+    /**
+     * The region protecting [entity] regardless of any flag — a villager or a
+     * chest boat, which no `ANIMAL_PROTECTION`/`BOATS` toggle ever exposes to a
+     * non-member. Null when [entity] is neither, or stands on unclaimed ground.
+     */
+    private fun alwaysProtectedRegionOf(entity: Entity): Region? {
+        if (entity !is AbstractVillager && entity !is AbstractChestBoat) return null
+        return RegionsFeature.regionAt(entity.level(), entity.blockPosition())
     }
 
     /** An unnamed hostile: killable by anyone, even inside a region. */
@@ -630,6 +689,9 @@ object RegionProtection {
         val player = playerResponsibleFor(source) ?: return true
         if (entity is ServerPlayer) return allowsPvp(player, entity)
         vehicleFlagFor(entity)?.let { flag -> return allowsVehicleUse(player, entity, flag) }
+        alwaysProtectedRegionOf(entity)?.let { region ->
+            return canModifyRegion(player, region) || refuse(player, region)
+        }
         val region = entityProtectionAround(player, entity) ?: return true
         if (isCullableHostile(entity)) return true
         return refuse(player, region)
@@ -658,7 +720,10 @@ object RegionProtection {
      * else, which falls through to [entityProtectionAround]'s ordinary rule.
      */
     private fun vehicleFlagFor(entity: Entity): String? = when {
-        entity is Boat || entity is ChestBoat -> BOATS
+        // A chest boat is never gated by BOATS — it is always protected, via
+        // [alwaysProtectedRegionOf], the way a decoration is.
+        entity is AbstractChestBoat -> null
+        entity is AbstractBoat -> BOATS
         entity is Minecart && entity.passengers.none { it is Mob } -> MINECARTS
         else -> null
     }
@@ -713,6 +778,22 @@ object RegionProtection {
         entity: Entity?
     ): Boolean {
         val p = player ?: return true
+
+        // Villagers and chest boats are protected regardless of ANIMAL_PROTECTION
+        // (which entityProtectionAround honours), so they are handled before it.
+        if (entity is AbstractVillager) {
+            val r = RegionsFeature.regionAt(entity.level(), entity.blockPosition())
+            if (r == null || canModifyRegion(p, r)) return true
+            // An empty hand opens the trade screen so a non-member may LOOK;
+            // completing a trade is gated separately by allowsVillagerTrade.
+            if (p.getItemInHand(hand).isEmpty) return true
+            return if (PUBLIC_VILLAGERS in r.flags) true else refuse(p, r)
+        }
+        if (entity is AbstractChestBoat) {
+            val r = RegionsFeature.regionAt(entity.level(), entity.blockPosition())
+            return r == null || canModifyRegion(p, r) || refuse(p, r)
+        }
+
         val region = entityProtectionAround(p, entity) ?: return true
         if (entity != null && isRegionDecoration(entity)) return refuse(p, region)
 
@@ -725,6 +806,9 @@ object RegionProtection {
             return refuse(p, region)
         }
         if (entity != null && isRideableMount(entity) && emptyHand && !p.isShiftKeyDown) {
+            // A leashed mount is being handled by someone — RIDEABLE does not
+            // hand it to a passing non-member.
+            if (entity is Mob && entity.isLeashed) return refuse(p, region)
             if (RIDEABLE in region.flags) return true
             return refuse(p, region)
         }

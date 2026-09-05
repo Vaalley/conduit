@@ -93,6 +93,7 @@ interface MixinHooks {
     fun isPersonalEnderChestMenu(menu: AbstractContainerMenu): Boolean
     fun isWorkstationMenu(menu: AbstractContainerMenu): Boolean
     fun allowsContainerUse(player: ServerPlayer): Boolean
+    fun allowsVillagerTrade(player: ServerPlayer): Boolean
     fun containerOpened(player: ServerPlayer)
     fun containerClosed(player: ServerPlayer)
     fun containerTitleFor(player: ServerPlayer, menu: AbstractContainerMenu, default: Component): Component
@@ -205,6 +206,8 @@ object Hooks {
     @JvmStatic fun isWorkstationMenu(menu: AbstractContainerMenu): Boolean = impl?.isWorkstationMenu(menu) ?: false
 
     @JvmStatic fun allowsContainerUse(player: ServerPlayer): Boolean = impl?.allowsContainerUse(player) ?: true
+
+    @JvmStatic fun allowsVillagerTrade(player: ServerPlayer): Boolean = impl?.allowsVillagerTrade(player) ?: true
 
     @JvmStatic fun containerOpened(player: ServerPlayer) {
         impl?.containerOpened(player)

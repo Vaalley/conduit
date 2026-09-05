@@ -66,10 +66,19 @@ class RegionFlagsTest {
     }
 
     @Test
-    fun `ENABLE_PUBLIC_CONTAINERS renames straight to PUBLIC_CONTAINERS`() {
+    fun `ENABLE_PUBLIC_CONTAINERS renames straight to PUBLIC_CHESTS`() {
         val region = region("ENABLE_PUBLIC_CONTAINERS")
         RegionFlags.migrateLegacy(region.flags)
-        assertTrue("PUBLIC_CONTAINERS" in region.flags)
+        assertTrue("PUBLIC_CHESTS" in region.flags)
+        assertFalse("PUBLIC_CONTAINERS" in region.flags)
+    }
+
+    @Test
+    fun `the not-yet-released PUBLIC_CONTAINERS id is remapped defensively to PUBLIC_CHESTS`() {
+        val region = region("PUBLIC_CONTAINERS")
+        RegionFlags.migrateLegacy(region.flags)
+        assertTrue("PUBLIC_CHESTS" in region.flags)
+        assertFalse("PUBLIC_CONTAINERS" in region.flags)
     }
 
     @Test

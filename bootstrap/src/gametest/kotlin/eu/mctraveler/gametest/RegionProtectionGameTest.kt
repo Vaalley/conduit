@@ -435,18 +435,42 @@ class RegionProtectionGameTest {
     }
 
     @GameTest
-    fun publicContainersOpenTheChestToStrangers(helper: GameTestHelper) {
+    fun publicChestsOpenTheChestToStrangers(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T14CtnA")
         val bob = MessageCapturingPlayer.join(helper, "T14CtnB")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.setFlag("PUBLIC_CONTAINERS", on = true)
+        alice.setFlag("PUBLIC_CHESTS", on = true)
         helper.stockedChest()
         bob.standAt(helper, 2.0, 2.0, 1.0)
 
         bob.opensChest(helper)
         bob.clicksFirstSlot()
-        helper.assertFalse(bob.containerMenu.carried.isEmpty, "PUBLIC_CONTAINERS kept the chest shut")
-        helper.assertFalse(bob.wasRefusedBy("T14CtnA's Place"), "a public container still refused a stranger")
+        helper.assertFalse(bob.containerMenu.carried.isEmpty, "PUBLIC_CHESTS kept the chest shut")
+        helper.assertFalse(bob.wasRefusedBy("T14CtnA's Place"), "a public chest still refused a stranger")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun publicChestsDoesNotOpenAFurnaceToStrangers(helper: GameTestHelper) {
+        // PUBLIC_CHESTS is chests only — a furnace stays members-only.
+        val alice = MessageCapturingPlayer.join(helper, "T14CtnFurnA")
+        val bob = MessageCapturingPlayer.join(helper, "T14CtnFurnB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        alice.setFlag("PUBLIC_CHESTS", on = true)
+        helper.setBlock(STONE_AT, Blocks.FURNACE)
+        val furnace = helper.level.getBlockEntity(helper.absolutePos(STONE_AT))
+            as net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity
+        furnace.setItem(0, ItemStack(Items.IRON_ORE))
+        bob.standAt(helper, 2.0, 2.0, 1.0)
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY)
+        bob.messages.clear()
+
+        helper.assertTrue(bob.usesHeldItemOn(helper, STONE_AT), "a non-member could not open a furnace to look")
+        bob.clicksFirstSlot()
+        helper.assertTrue(bob.containerMenu.carried.isEmpty, "PUBLIC_CHESTS opened a furnace to a stranger")
+        helper.assertTrue(bob.wasRefusedBy("T14CtnFurnA's Place"), "the furnace slot click was not refused")
         alice.leave()
         bob.leave()
         helper.succeed()
@@ -1280,6 +1304,147 @@ class RegionProtectionGameTest {
             Items.MILK_BUCKET,
             "PUBLIC_VILLAGERS still refused a held-item interaction",
         )
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    // ---- villagers (always protected from harm; trading gated by PUBLIC_VILLAGERS) ----
+
+    @GameTest
+    fun aVillagerStaysProtectedEvenWithAnimalProtectionOff(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T4VillHurtA")
+        val bob = MessageCapturingPlayer.join(helper, "T4VillHurtB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        alice.setFlag("ANIMAL_PROTECTION", on = false)
+        val villager = helper.spawnWithNoFreeWill(EntityTypes.VILLAGER, BlockPos(2, 2, 2))
+        bob.standAt(helper, 2.0, 2.0, 2.0)
+        bob.messages.clear()
+
+        bob.attacks(villager)
+        helper.assertValueEqual(villager.health, villager.maxHealth, "a stranger hurt a villager with ANIMAL_PROTECTION off")
+        helper.assertTrue(bob.wasRefusedBy("T4VillHurtA's Place"), "the villager attack emitted no refusal")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aNonMemberMayLookAtAVillagerButNotTradeWithAnItemInHand(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T4VillIntA")
+        val bob = MessageCapturingPlayer.join(helper, "T4VillIntB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        val villager = helper.spawnWithNoFreeWill(EntityTypes.VILLAGER, BlockPos(2, 2, 2))
+        bob.standAt(helper, 2.0, 2.0, 2.0)
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY)
+        bob.messages.clear()
+
+        bob.interactsWith(villager) // empty hand → allowed (may open the screen to look)
+        helper.assertFalse(bob.wasRefusedBy("T4VillIntA's Place"), "an empty-hand villager look was refused")
+
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.EMERALD))
+        bob.interactsWith(villager)
+        helper.assertTrue(bob.wasRefusedBy("T4VillIntA's Place"), "a held-item villager interaction was not refused")
+
+        alice.setFlag("PUBLIC_VILLAGERS", on = true)
+        bob.messages.clear()
+        bob.interactsWith(villager)
+        helper.assertFalse(bob.wasRefusedBy("T4VillIntA's Place"), "PUBLIC_VILLAGERS still refused a held-item interaction")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    // ---- chest boats (always protected; plain boats gated by BOATS) ----
+
+    @GameTest
+    fun aChestBoatIsNeverBreakableOrMountableByANonMember(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T8ChestBoatA")
+        val bob = MessageCapturingPlayer.join(helper, "T8ChestBoatB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        // BOATS is on by default — proves the chest boat ignores it.
+        val chestBoat = helper.spawn(EntityTypes.OAK_CHEST_BOAT, BlockPos(2, 2, 2))
+        bob.standAt(helper, 2.0, 2.0, 2.0)
+        bob.messages.clear()
+
+        bob.attacks(chestBoat)
+        helper.assertFalse(chestBoat.isRemoved, "a stranger broke a chest boat inside a region")
+        helper.assertTrue(bob.wasRefusedBy("T8ChestBoatA's Place"), "breaking a chest boat emitted no refusal")
+
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY)
+        bob.interactsWith(chestBoat)
+        helper.assertFalse(bob.isPassenger, "a stranger mounted a chest boat inside a region")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aPlainBoatStaysBreakableUnderTheBoatsFlag(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T8PlainBoatA")
+        val bob = MessageCapturingPlayer.join(helper, "T8PlainBoatB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        val boat = helper.spawn(EntityTypes.OAK_BOAT, BlockPos(2, 2, 2))
+        bob.standAt(helper, 2.0, 2.0, 2.0)
+        bob.messages.clear()
+
+        bob.attacks(boat)
+        helper.assertFalse(bob.wasRefusedBy("T8PlainBoatA's Place"), "the default BOATS flag refused a plain boat")
+
+        alice.setFlag("BOATS", on = false)
+        bob.attacks(boat)
+        helper.assertTrue(bob.wasRefusedBy("T8PlainBoatA's Place"), "BOATS off did not protect a plain boat")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    // ---- leashed rideable mounts ----
+
+    @GameTest
+    fun aLeashedHorseIsNotRideableByANonMember(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T10LeashA")
+        val bob = MessageCapturingPlayer.join(helper, "T10LeashB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        // RIDEABLE is on by default — proves the leash overrides it.
+        val horse = helper.spawnWithNoFreeWill(EntityTypes.HORSE, BlockPos(2, 2, 2))
+        horse.setTamed(true)
+        horse.setLeashedTo(alice, true)
+        bob.standAt(helper, 2.0, 2.0, 2.0)
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY)
+        bob.messages.clear()
+
+        bob.interactsWith(horse)
+        helper.assertFalse(bob.isPassenger, "a non-member rode a leashed horse")
+        helper.assertTrue(bob.wasRefusedBy("T10LeashA's Place"), "mounting a leashed horse emitted no refusal")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    // ---- TNT ignition ----
+
+    @GameTest
+    fun aNonMemberCannotLightTntByHand(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T6TntA")
+        val bob = MessageCapturingPlayer.join(helper, "T6TntB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(STONE_AT, Blocks.TNT)
+        bob.standAt(helper, 2.0, 2.0, 1.0)
+        bob.messages.clear()
+
+        for (lighter in listOf(Items.FLINT_AND_STEEL, Items.FIRE_CHARGE)) {
+            bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(lighter))
+            helper.assertFalse(bob.usesHeldItemOn(helper, STONE_AT), "a non-member lit region TNT with $lighter")
+            helper.assertBlockPresent(Blocks.TNT, STONE_AT)
+        }
+        helper.assertTrue(bob.wasRefusedBy("T6TntA's Place"), "lighting TNT emitted no refusal")
+
+        alice.standAt(helper, 2.0, 2.0, 1.0)
+        alice.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.FLINT_AND_STEEL))
+        alice.messages.clear()
+        alice.usesHeldItemOn(helper, STONE_AT)
+        helper.assertFalse(alice.wasRefusedBy("T6TntA's Place"), "a resident could not light their own TNT")
         alice.leave()
         bob.leave()
         helper.succeed()

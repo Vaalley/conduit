@@ -114,6 +114,8 @@ object MixinHooksImpl : MixinHooks {
 
     override fun allowsContainerUse(player: ServerPlayer): Boolean = RegionProtection.allowsContainerUse(player)
 
+    override fun allowsVillagerTrade(player: ServerPlayer): Boolean = RegionProtection.allowsVillagerTrade(player)
+
     override fun containerOpened(player: ServerPlayer) = RegionProtection.containerOpened(player)
 
     override fun containerClosed(player: ServerPlayer) = RegionProtection.containerClosed(player)
