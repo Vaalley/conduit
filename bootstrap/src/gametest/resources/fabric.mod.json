@@ -39,7 +39,8 @@
       "eu.mctraveler.gametest.CrystalMenuGameTest",
       "eu.mctraveler.gametest.VanishGameTest",
       "eu.mctraveler.gametest.SleepRequirementGameTest",
-      "eu.mctraveler.gametest.RankGameTest"
+      "eu.mctraveler.gametest.RankGameTest",
+      "eu.mctraveler.gametest.SignNameTokenGameTest"
     ],
     "server": [
       {

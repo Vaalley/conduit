@@ -18,6 +18,8 @@
     "ClientboundPlayerInfoUpdatePacketAccessor",
     "RegionSignEditMixin",
     "DonatorSignMarkdownMixin",
+    "SignNameDisplayMixin",
+    "SignTokenRegistryMixin",
     "RegionContainerSessionMixin",
     "RegionContainerClickMixin",
     "RegionEntityDamageMixin",

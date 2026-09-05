@@ -52,6 +52,7 @@ object MCTraveler {
         AwayFeature.register()
         eu.mctraveler.rank.RankFeature.register()
         NoRain.register()
+        eu.mctraveler.text.SignNames.register()
 
 
         initialized = true

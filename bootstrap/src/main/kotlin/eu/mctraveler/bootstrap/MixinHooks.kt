@@ -22,6 +22,7 @@ import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.inventory.CraftingContainer
 import net.minecraft.world.inventory.ResultContainer
 import net.minecraft.world.level.Level
+import net.minecraft.world.level.block.entity.SignBlockEntity
 import net.minecraft.world.level.block.state.BlockState
 
 /**
@@ -72,6 +73,19 @@ interface MixinHooks {
      * carries no markdown perk — meaning leave the vanilla-built line alone.
      */
     fun markdownLineFor(editor: ServerPlayer, raw: String): Component?
+
+    /**
+     * The `<name>` sign token: [packet] re-serialised with [viewer]'s own name
+     * where a token stands (or [packet] itself when nothing needs rewriting).
+     * Handles both the sign block-entity packet and the chunk packet.
+     */
+    fun personalizeSignsForViewer(viewer: ServerPlayer, packet: Packet<*>): Packet<*>
+
+    /** Registers whether the chunk at [pos] holds a `<name>` sign (called once the sign is in-world). */
+    fun onSignLoadedOrChanged(level: Level, pos: BlockPos, sign: SignBlockEntity)
+
+    /** Recomputes the `<name>` registry for [pos]'s chunk after a sign is removed. */
+    fun onSignRemoved(level: Level, pos: BlockPos)
 
     // Embassies
     fun beforeTeleport(player: ServerPlayer, destination: ResourceKey<Level>)
@@ -174,6 +188,17 @@ object Hooks {
 
     @JvmStatic fun markdownLineFor(editor: ServerPlayer, raw: String): Component? =
         impl?.markdownLineFor(editor, raw)
+
+    @JvmStatic fun personalizeSignsForViewer(viewer: ServerPlayer, packet: Packet<*>): Packet<*> =
+        impl?.personalizeSignsForViewer(viewer, packet) ?: packet
+
+    @JvmStatic fun onSignLoadedOrChanged(level: Level, pos: BlockPos, sign: SignBlockEntity) {
+        impl?.onSignLoadedOrChanged(level, pos, sign)
+    }
+
+    @JvmStatic fun onSignRemoved(level: Level, pos: BlockPos) {
+        impl?.onSignRemoved(level, pos)
+    }
 
     @JvmStatic fun beforeTeleport(player: ServerPlayer, destination: ResourceKey<Level>) {
         impl?.beforeTeleport(player, destination)

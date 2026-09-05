@@ -88,6 +88,18 @@ object MixinHooksImpl : MixinHooks {
             null
         }
 
+    override fun personalizeSignsForViewer(viewer: ServerPlayer, packet: Packet<*>): Packet<*> =
+        eu.mctraveler.text.SignNames.personalizeSignsForViewer(viewer, packet)
+
+    override fun onSignLoadedOrChanged(
+        level: Level,
+        pos: BlockPos,
+        sign: net.minecraft.world.level.block.entity.SignBlockEntity,
+    ) = eu.mctraveler.text.SignNames.onSignLoadedOrChanged(level, pos, sign)
+
+    override fun onSignRemoved(level: Level, pos: BlockPos) =
+        eu.mctraveler.text.SignNames.onSignRemoved(level, pos)
+
     override fun beforeTeleport(player: ServerPlayer, destination: ResourceKey<Level>) =
         EmbassyOrigins.beforeTeleport(player, destination)
 

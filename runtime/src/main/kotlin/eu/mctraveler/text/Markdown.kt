@@ -17,6 +17,13 @@ import net.minecraft.network.chat.Style
 object Markdown {
 
     /**
+     * The per-viewer name token: recognised as a literal 6-char run (case
+     * sensitive), turned into a sentinel run by [parse], and substituted for the
+     * reading player's name on the way out (see [SignNames]).
+     */
+    private const val NAME_TOKEN = "<name>"
+
+    /**
      * Parses [text] into a styled [Component]: each `%<code>` pair becomes the
      * matching [ChatFormatting] (colors reset decorations, `%r` resets
      * everything — [Style.applyFormat]'s own semantics, identical to vanilla's
@@ -36,6 +43,15 @@ object Markdown {
 
         var i = 0
         while (i < text.length) {
+            if (text.startsWith(NAME_TOKEN, i)) {
+                flush()
+                result.append(
+                    Component.literal(NAME_TOKEN)
+                        .withStyle(style.withInsertion(SignNames.SIGN_NAME_SENTINEL)),
+                )
+                i += NAME_TOKEN.length
+                continue
+            }
             val code = if (i + 1 < text.length) ChatFormatting.getByCode(text[i + 1]) else null
             if (text[i] == '%' && code != null) {
                 flush()

@@ -55,6 +55,10 @@ public abstract class DonatorSignMarkdownMixin {
         }
         if (changed) {
             setText(text, isFrontText);
+            SignBlockEntity self = (SignBlockEntity) (Object) this;
+            if (self.getLevel() != null) {
+                Hooks.onSignLoadedOrChanged(self.getLevel(), self.getBlockPos(), self);
+            }
         }
     }
 }
