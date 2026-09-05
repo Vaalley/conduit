@@ -2,7 +2,12 @@ package eu.mctraveler.region
 
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
+import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.EntityTypes
+import net.minecraft.world.entity.LivingEntity
+import net.minecraft.world.entity.monster.Creeper
+import net.minecraft.world.entity.monster.Enemy
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.entity.projectile.Projectile
 import net.minecraft.world.level.Level
@@ -30,12 +35,15 @@ import net.minecraft.world.level.Level
  */
 object RegionEnvironment {
 
-    private const val ENABLE_EXPLOSIONS = "ENABLE_EXPLOSIONS"
-    private const val ENABLE_FIRE_DAMAGE = "ENABLE_FIRE_DAMAGE"
+    private const val EXPLOSIONS = "EXPLOSIONS"
+    private const val FIRE_DAMAGE = "FIRE_DAMAGE"
+    private const val WIND_CHARGES = "WIND_CHARGES"
+    private const val PUBLIC = "PUBLIC"
+    private const val POTIONS = "POTIONS"
 
     /**
      * Whether an explosion may destroy the block at [pos] — true outside every
-     * region, and inside one flying `ENABLE_EXPLOSIONS`.
+     * region, and inside one flying `EXPLOSIONS`.
      *
      * The blast itself is untouched: what an explosion does to players, mobs
      * and items inside a region is vanilla, and only the region's blocks are
@@ -43,12 +51,12 @@ object RegionEnvironment {
      */
     @JvmStatic
     fun allowsExplosionDamage(level: Level, pos: BlockPos): Boolean =
-        optedIn(level, pos, ENABLE_EXPLOSIONS)
+        optedIn(level, pos, EXPLOSIONS)
 
     /**
      * Whether fire may take the block at [pos] — burn it away, char it into
      * more fire, or catch there in the first place. True outside every region,
-     * and inside one flying `ENABLE_FIRE_DAMAGE`.
+     * and inside one flying `FIRE_DAMAGE`.
      *
      * The flag reads as one thing (this region burns), so both halves of what
      * fire does to blocks answer to it: a fire outside a protected region
@@ -59,7 +67,74 @@ object RegionEnvironment {
      */
     @JvmStatic
     fun allowsFireDamage(level: Level, pos: BlockPos): Boolean =
-        optedIn(level, pos, ENABLE_FIRE_DAMAGE)
+        optedIn(level, pos, FIRE_DAMAGE)
+
+    /**
+     * Whether an explosion's blast — knockback and damage, not the block list
+     * (that is [allowsExplosionDamage]) — may reach [target].
+     *
+     * Wind charges never lose their block-triggering (buttons, targets, and
+     * the like always work regardless of region — [WIND_CHARGES] governs
+     * nothing about that), but a non-member's wind charge is kept off a
+     * non-hostile mob or player inside a region unless it flies
+     * `WIND_CHARGES`; a hostile target is always affected. Decorations (item
+     * frames, paintings, armor stands) are protected from every explosion's
+     * knockback unconditionally, by [allowsDecorationMove]'s own generic rule
+     * on `Entity.move`/`push` — nothing here needs to repeat that.
+     *
+     * A creeper's blast leaves a name-tagged hostile alone unless the region
+     * is `PUBLIC` — the same "a name tag makes even a hostile someone's" idea
+     * [RegionProtection.isCullableHostile] already applies to a player's own
+     * attacks, reached here from the explosion path instead.
+     *
+     * [source] is the explosion's own source entity (the wind charge, the
+     * creeper) — null for a source-less explosion (TNT, a bed), which this
+     * never restricts.
+     */
+    @JvmStatic
+    fun allowsExplosionEntityEffect(level: Level, source: Entity?, target: Entity): Boolean {
+        if (source == null) return true
+        val living = target as? LivingEntity ?: return true
+        val region = RegionsFeature.regionAt(level, living.blockPosition()) ?: return true
+
+        if (isWindCharge(source)) {
+            if (living is Enemy) return true
+            val shooter = shooterOf(source)
+            if (shooter is ServerPlayer && RegionProtection.canModifyRegion(shooter, region)) return true
+            return WIND_CHARGES in region.flags
+        }
+
+        if (source is Creeper && living is Enemy && living.hasCustomName()) {
+            return PUBLIC in region.flags
+        }
+
+        return true
+    }
+
+    /**
+     * Whether a splash or lingering potion's effect, thrown or set by
+     * [thrower], may land on [target] — "Allows use of potions by others".
+     * Silent, like every other rule in this file: refused only for a
+     * non-member's potion reaching someone else's region without `POTIONS`.
+     *
+     * A non-player-attributable potion (there is none in vanilla today, but
+     * the pattern matches every other cause here) is left unaffected.
+     */
+    @JvmStatic
+    fun allowsPotionEffect(level: Level, thrower: Entity?, target: LivingEntity): Boolean {
+        val player = thrower as? ServerPlayer ?: return true
+        val region = RegionsFeature.regionAt(level, target.blockPosition()) ?: return true
+        return RegionProtection.canModifyRegion(player, region) || POTIONS in region.flags
+    }
+
+    private fun isWindCharge(source: Entity): Boolean =
+        source.type == EntityTypes.WIND_CHARGE || source.type == EntityTypes.BREEZE_WIND_CHARGE
+
+    /** The player behind an explosion's source entity: a projectile's owner, or the entity itself. */
+    private fun shooterOf(source: Entity): Entity? = when (source) {
+        is Projectile -> source.owner
+        else -> source
+    }
 
     /**
      * Whether the region covering [pos], if there is one, has asked for this

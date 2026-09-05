@@ -18,26 +18,30 @@ import net.minecraft.world.phys.BlockHitResult
 import net.minecraft.world.phys.Vec3
 
 /**
- * The three flags a region owner turns *on* to take something away (spec User
- * Story 36): no fall damage inside, no strangers at the buttons, no strangers
- * at the doors.
+ * The flags a region owner turns *off* to take something away (spec User
+ * Story 36): fall damage protection, public redstone, weighted plates, and
+ * the gate/door/trapdoor trio split from the old single `DISABLE_GATES`.
  *
- * All three were accepted and enforced nowhere in the Portal (inventory §2.8,
- * deviation 7). The two "public" ones restrict people who are not members —
+ * All were accepted and enforced nowhere in the Portal (inventory §2.8,
+ * deviation 7). The "public" ones restrict people who are not members —
  * where "member" is the same resident-or-PUBLIC question every other refusal
- * asks — so with the flag off, the door and the lever stay open to everyone,
- * which is what leaving them unguarded in ticket 14 was for.
+ * asks — so with a flag on (the default), the door and the lever stay open
+ * to everyone; turning it off is what closes them.
+ *
+ * Every flag here is seeded present by [createRegion] (through the real
+ * `/rg end` -> `RegionFlags.seedDefaults` path), so a test that wants the
+ * *disabled* behaviour removes the flag directly ([setFlag]) rather than
+ * toggling it through a chat command — `/rg flag` no longer exists;
+ * `/rg flags` opens a GUI instead (see `RegionFlagsMenuGameTest`).
  */
 class RegionFlagGameTest {
 
-    // ---- DISABLE_PLAYER_FALL_DAMAGE ----
+    // ---- FALL_DAMAGE ----
 
     @GameTest
     fun theFlagCatchesAPlayerWhoFallsInside(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T15FallA")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
-        alice.runCommand("rg flag DISABLE_PLAYER_FALL_DAMAGE")
         alice.standAt(helper, 2.0, 2.0, 2.0)
 
         alice.takesFallDamage(helper)
@@ -51,11 +55,12 @@ class RegionFlagGameTest {
     fun aFallStillHurtsWithoutTheFlag(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T15DropA")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        alice.setFlag("FALL_DAMAGE", on = false)
         alice.standAt(helper, 2.0, 2.0, 2.0)
 
         alice.takesFallDamage(helper)
 
-        helper.assertTrue(alice.health < alice.maxHealth, "a fall in an ordinary region did no damage")
+        helper.assertTrue(alice.health < alice.maxHealth, "a fall with the flag off did no damage")
         alice.leave()
         helper.succeed()
     }
@@ -66,8 +71,6 @@ class RegionFlagGameTest {
         val alice = MessageCapturingPlayer.join(helper, "T15SoftA")
         val bob = MessageCapturingPlayer.join(helper, "T15SoftB")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
-        alice.runCommand("rg flag DISABLE_PLAYER_FALL_DAMAGE")
         bob.standAt(helper, 2.0, 2.0, 2.0)
 
         bob.takesFallDamage(helper)
@@ -82,8 +85,6 @@ class RegionFlagGameTest {
     fun onlyTheFallIsForgiven(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T15HurtA")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
-        alice.runCommand("rg flag DISABLE_PLAYER_FALL_DAMAGE")
         alice.standAt(helper, 2.0, 2.0, 2.0)
 
         alice.hurtServer(helper.level, helper.level.damageSources().magic(), FALL_DAMAGE)
@@ -94,32 +95,29 @@ class RegionFlagGameTest {
     }
 
     @GameTest
-    fun togglingDisablePlayerFallDamageTakesEffectAtOnce(helper: GameTestHelper) {
+    fun togglingFallDamageTakesEffectAtOnce(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T15SoftLive")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
         alice.standAt(helper, 2.0, 2.0, 2.0)
         alice.takesFallDamage(helper)
-        helper.assertTrue(alice.health < alice.maxHealth, "precondition: the fall did no damage")
-        alice.health = alice.maxHealth
+        helper.assertValueEqual(alice.health, alice.maxHealth, "precondition: the fall did no damage")
 
-        alice.runCommand("rg flag DISABLE_PLAYER_FALL_DAMAGE")
+        alice.setFlag("FALL_DAMAGE", on = false)
 
         alice.takesFallDamage(helper)
-        helper.assertValueEqual(alice.health, alice.maxHealth, "the health after the flag went on")
+        helper.assertTrue(alice.health < alice.maxHealth, "the health after the flag went off")
         alice.leave()
         helper.succeed()
     }
 
-    // ---- DISABLE_PUBLIC_REDSTONE_TRIGGERS ----
+    // ---- PUBLIC_REDSTONE ----
 
     @GameTest
     fun theFlagKeepsStrangersOffTheLever(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T15LevA")
         val bob = MessageCapturingPlayer.join(helper, "T15LevB")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
-        alice.runCommand("rg flag DISABLE_PUBLIC_REDSTONE_TRIGGERS")
+        alice.setFlag("PUBLIC_REDSTONE", on = false)
         helper.mount(Blocks.LEVER)
         bob.standAt(helper, 2.0, 2.0, 1.0)
 
@@ -136,8 +134,7 @@ class RegionFlagGameTest {
     fun aResidentStillFlipsTheirOwnLever(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T15LevOk")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
-        alice.runCommand("rg flag DISABLE_PUBLIC_REDSTONE_TRIGGERS")
+        alice.setFlag("PUBLIC_REDSTONE", on = false)
         helper.mount(Blocks.LEVER)
         alice.standAt(helper, 2.0, 2.0, 1.0)
 
@@ -149,7 +146,7 @@ class RegionFlagGameTest {
     }
 
     @GameTest
-    fun withoutTheFlagAnyoneMayFlipTheLever(helper: GameTestHelper) {
+    fun withTheFlagOnAnyoneMayFlipTheLever(helper: GameTestHelper) {
         // What ticket 14 deliberately left open, so this flag has something to close.
         val alice = MessageCapturingPlayer.join(helper, "T15LevFree")
         val bob = MessageCapturingPlayer.join(helper, "T15LevFreeB")
@@ -170,8 +167,7 @@ class RegionFlagGameTest {
         val alice = MessageCapturingPlayer.join(helper, "T15BtnA")
         val bob = MessageCapturingPlayer.join(helper, "T15BtnB")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
-        alice.runCommand("rg flag DISABLE_PUBLIC_REDSTONE_TRIGGERS")
+        alice.setFlag("PUBLIC_REDSTONE", on = false)
         helper.mount(Blocks.STONE_BUTTON)
         bob.standAt(helper, 2.0, 2.0, 1.0)
 
@@ -189,8 +185,7 @@ class RegionFlagGameTest {
         val alice = MessageCapturingPlayer.join(helper, "T15PlateA")
         val bob = MessageCapturingPlayer.join(helper, "T15PlateB")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
-        alice.runCommand("rg flag DISABLE_PUBLIC_REDSTONE_TRIGGERS")
+        alice.setFlag("PUBLIC_REDSTONE", on = false)
         helper.mount(Blocks.OAK_PRESSURE_PLATE)
 
         bob.stepsOnThePlate(helper)
@@ -204,7 +199,7 @@ class RegionFlagGameTest {
     }
 
     @GameTest
-    fun withoutTheFlagAnyoneMayStandOnThePressurePlate(helper: GameTestHelper) {
+    fun withTheFlagOnAnyoneMayStandOnThePressurePlate(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T15PlateFree")
         val bob = MessageCapturingPlayer.join(helper, "T15PlateFreeB")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
@@ -222,8 +217,7 @@ class RegionFlagGameTest {
     fun aResidentStillStandsOnTheirOwnPressurePlate(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T15PlateOk")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
-        alice.runCommand("rg flag DISABLE_PUBLIC_REDSTONE_TRIGGERS")
+        alice.setFlag("PUBLIC_REDSTONE", on = false)
         helper.mount(Blocks.OAK_PRESSURE_PLATE)
 
         alice.stepsOnThePlate(helper)
@@ -233,14 +227,12 @@ class RegionFlagGameTest {
         helper.succeed()
     }
 
-    // ---- DISABLE_WEIGHTED_PRESSURE_PLATES ----
+    // ---- WEIGHTED_PRESSURE_PLATES ----
 
     @GameTest
     fun weightedPressurePlatesWorkInsideRegionsByDefault(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T15WeightA")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
-        alice.runCommand("rg flag DISABLE_PUBLIC_REDSTONE_TRIGGERS")
         helper.mount(Blocks.LIGHT_WEIGHTED_PRESSURE_PLATE)
 
         helper.dropItemOnWeightedPlate()
@@ -254,8 +246,7 @@ class RegionFlagGameTest {
     fun theWeightedPressurePlateFlagDisablesThemInsideARegion(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T15WeightOff")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
-        alice.runCommand("rg flag DISABLE_WEIGHTED_PRESSURE_PLATES")
+        alice.setFlag("WEIGHTED_PRESSURE_PLATES", on = false)
         helper.mount(Blocks.LIGHT_WEIGHTED_PRESSURE_PLATE)
 
         helper.dropItemOnWeightedPlate()
@@ -266,35 +257,33 @@ class RegionFlagGameTest {
     }
 
     @GameTest
-    fun togglingDisablePublicRedstoneTriggersTakesEffectAtOnce(helper: GameTestHelper) {
+    fun togglingPublicRedstoneTakesEffectAtOnce(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T15TrigLive")
         val bob = MessageCapturingPlayer.join(helper, "T15TrigLiveB")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
         helper.mount(Blocks.LEVER)
         bob.standAt(helper, 2.0, 2.0, 1.0)
         bob.rightClicks(helper, TRIGGER_AT)
         helper.assertBlockProperty(TRIGGER_AT, BlockStateProperties.POWERED, true)
 
-        alice.runCommand("rg flag DISABLE_PUBLIC_REDSTONE_TRIGGERS")
+        alice.setFlag("PUBLIC_REDSTONE", on = false)
 
         bob.rightClicks(helper, TRIGGER_AT)
         helper.assertBlockProperty(TRIGGER_AT, BlockStateProperties.POWERED, true)
-        helper.assertTrue(bob.wasRefusedBy("T15TrigLive's Place"), "no refusal once the flag went on")
+        helper.assertTrue(bob.wasRefusedBy("T15TrigLive's Place"), "no refusal once the flag went off")
         alice.leave()
         bob.leave()
         helper.succeed()
     }
 
-    // ---- DISABLE_GATES ----
+    // ---- GATES / DOORS / TRAPDOORS ----
 
     @GameTest
     fun theFlagKeepsStrangersOutOfTheDoor(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T15DoorA")
         val bob = MessageCapturingPlayer.join(helper, "T15DoorB")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
-        alice.runCommand("rg flag DISABLE_GATES")
+        alice.setFlag("DOORS", on = false)
         helper.hangADoor()
         bob.standAt(helper, 2.0, 2.0, 1.0)
 
@@ -311,8 +300,7 @@ class RegionFlagGameTest {
     fun aResidentStillOpensTheirOwnDoor(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T15DoorOk")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
-        alice.runCommand("rg flag DISABLE_GATES")
+        alice.setFlag("DOORS", on = false)
         helper.hangADoor()
         alice.standAt(helper, 2.0, 2.0, 1.0)
 
@@ -324,7 +312,7 @@ class RegionFlagGameTest {
     }
 
     @GameTest
-    fun withoutTheFlagAnyoneMayOpenTheDoor(helper: GameTestHelper) {
+    fun withTheFlagOnAnyoneMayOpenTheDoor(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T15DoorFree")
         val bob = MessageCapturingPlayer.join(helper, "T15DoorFreeB")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
@@ -344,8 +332,7 @@ class RegionFlagGameTest {
         val alice = MessageCapturingPlayer.join(helper, "T15GateA")
         val bob = MessageCapturingPlayer.join(helper, "T15GateB")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
-        alice.runCommand("rg flag DISABLE_GATES")
+        alice.setFlag("GATES", on = false)
         helper.setBlock(TRIGGER_AT, Blocks.OAK_FENCE_GATE)
         bob.standAt(helper, 2.0, 2.0, 1.0)
 
@@ -363,8 +350,7 @@ class RegionFlagGameTest {
         val alice = MessageCapturingPlayer.join(helper, "T15TrapA")
         val bob = MessageCapturingPlayer.join(helper, "T15TrapB")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
-        alice.runCommand("rg flag DISABLE_GATES")
+        alice.setFlag("TRAPDOORS", on = false)
         helper.setBlock(TRIGGER_AT, Blocks.OAK_TRAPDOOR)
         bob.standAt(helper, 2.0, 2.0, 1.0)
 
@@ -378,13 +364,13 @@ class RegionFlagGameTest {
     }
 
     @GameTest
-    fun disableGatesLeavesTheLeverAlone(helper: GameTestHelper) {
-        // The two flags are separate switches, and each closes only its own door.
+    fun disablingDoorsLeavesTheLeverAlone(helper: GameTestHelper) {
+        // Each of GATES/DOORS/TRAPDOORS/PUBLIC_REDSTONE is a separate switch,
+        // and each closes only its own door.
         val alice = MessageCapturingPlayer.join(helper, "T15MixA")
         val bob = MessageCapturingPlayer.join(helper, "T15MixB")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
-        alice.runCommand("rg flag DISABLE_GATES")
+        alice.setFlag("DOORS", on = false)
         helper.mount(Blocks.LEVER)
         bob.standAt(helper, 2.0, 2.0, 1.0)
 
@@ -397,21 +383,37 @@ class RegionFlagGameTest {
     }
 
     @GameTest
-    fun togglingDisableGatesTakesEffectAtOnce(helper: GameTestHelper) {
+    fun disablingDoorsLeavesTheFenceGateAlone(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T15MixGateA")
+        val bob = MessageCapturingPlayer.join(helper, "T15MixGateB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        alice.setFlag("DOORS", on = false)
+        helper.setBlock(TRIGGER_AT, Blocks.OAK_FENCE_GATE)
+        bob.standAt(helper, 2.0, 2.0, 1.0)
+
+        bob.rightClicks(helper, TRIGGER_AT)
+
+        helper.assertBlockProperty(TRIGGER_AT, BlockStateProperties.OPEN, true)
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun togglingDoorsTakesEffectAtOnce(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T15GateLive")
         val bob = MessageCapturingPlayer.join(helper, "T15GateLiveB")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
         helper.hangADoor()
         bob.standAt(helper, 2.0, 2.0, 1.0)
         bob.rightClicks(helper, TRIGGER_AT)
         helper.assertBlockProperty(TRIGGER_AT, BlockStateProperties.OPEN, true)
 
-        alice.runCommand("rg flag DISABLE_GATES")
+        alice.setFlag("DOORS", on = false)
 
         bob.rightClicks(helper, TRIGGER_AT)
         helper.assertBlockProperty(TRIGGER_AT, BlockStateProperties.OPEN, true)
-        helper.assertTrue(bob.wasRefusedBy("T15GateLive's Place"), "no refusal once the flag went on")
+        helper.assertTrue(bob.wasRefusedBy("T15GateLive's Place"), "no refusal once the flag went off")
         alice.leave()
         bob.leave()
         helper.succeed()

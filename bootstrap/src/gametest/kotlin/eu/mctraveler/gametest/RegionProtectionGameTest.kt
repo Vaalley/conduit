@@ -98,8 +98,7 @@ class RegionProtectionGameTest {
         val alice = MessageCapturingPlayer.join(helper, "T14PubA")
         val bob = MessageCapturingPlayer.join(helper, "T14PubB")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
-        alice.runCommand("rg flag PUBLIC")
+        alice.setFlag("PUBLIC", on = true)
         helper.setBlock(STONE_AT, Blocks.STONE)
         bob.standAt(helper, 2.0, 2.0, 1.0)
 
@@ -440,14 +439,13 @@ class RegionProtectionGameTest {
         val alice = MessageCapturingPlayer.join(helper, "T14CtnA")
         val bob = MessageCapturingPlayer.join(helper, "T14CtnB")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
-        alice.runCommand("rg flag ENABLE_PUBLIC_CONTAINERS")
+        alice.setFlag("PUBLIC_CONTAINERS", on = true)
         helper.stockedChest()
         bob.standAt(helper, 2.0, 2.0, 1.0)
 
         bob.opensChest(helper)
         bob.clicksFirstSlot()
-        helper.assertFalse(bob.containerMenu.carried.isEmpty, "ENABLE_PUBLIC_CONTAINERS kept the chest shut")
+        helper.assertFalse(bob.containerMenu.carried.isEmpty, "PUBLIC_CONTAINERS kept the chest shut")
         helper.assertFalse(bob.wasRefusedBy("T14CtnA's Place"), "a public container still refused a stranger")
         alice.leave()
         bob.leave()
@@ -459,8 +457,7 @@ class RegionProtectionGameTest {
         val alice = MessageCapturingPlayer.join(helper, "T14PubBoxA")
         val bob = MessageCapturingPlayer.join(helper, "T14PubBoxB")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
-        alice.runCommand("rg flag PUBLIC")
+        alice.setFlag("PUBLIC", on = true)
         helper.stockedChest()
         bob.standAt(helper, 2.0, 2.0, 1.0)
 
@@ -996,23 +993,22 @@ class RegionProtectionGameTest {
         val bob = MessageCapturingPlayer.join(helper, "T14NoPvpB")
         val charlie = MessageCapturingPlayer.join(helper, "T14NoPvpC")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
-        alice.runCommand("rg flag DISABLE_PVP")
+        alice.setFlag("PVP", on = false)
         charlie.standAt(helper, 2.0, 2.0, 2.0)
         bob.standAt(helper, 2.0, 2.0, 3.0)
         bob.messages.clear()
 
         bob.attacks(charlie)
 
-        helper.assertValueEqual(charlie.health, charlie.maxHealth, "DISABLE_PVP did not stop a stranger's hit")
-        helper.assertTrue(bob.wasRefusedBy("T14NoPvpA's Place"), "DISABLE_PVP's hit emitted no refusal")
+        helper.assertValueEqual(charlie.health, charlie.maxHealth, "turning PVP off did not stop a stranger's hit")
+        helper.assertTrue(bob.wasRefusedBy("T14NoPvpA's Place"), "PVP off emitted no refusal")
 
         // The flag protects everyone, membership included — a safe zone, not
         // a members-only exemption.
         alice.standAt(helper, 2.0, 2.0, 3.0)
         alice.messages.clear()
         alice.attacks(charlie)
-        helper.assertValueEqual(charlie.health, charlie.maxHealth, "DISABLE_PVP let a member hit another player")
+        helper.assertValueEqual(charlie.health, charlie.maxHealth, "turning PVP off let a member hit another player")
 
         alice.leave()
         bob.leave()
@@ -1119,13 +1115,12 @@ class RegionProtectionGameTest {
         val alice = MessageCapturingPlayer.join(helper, "T14AnimA")
         val bob = MessageCapturingPlayer.join(helper, "T14AnimB")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
-        alice.runCommand("rg flag DISABLE_ANIMAL_PROTECTION")
+        alice.setFlag("ANIMAL_PROTECTION", on = false)
         val cow = helper.spawnWithNoFreeWill(EntityTypes.COW, BlockPos(2, 2, 2))
         bob.standAt(helper, 2.0, 2.0, 2.0)
 
         bob.attacks(cow)
-        helper.assertTrue(cow.health < cow.maxHealth, "DISABLE_ANIMAL_PROTECTION still shielded the animal")
+        helper.assertTrue(cow.health < cow.maxHealth, "turning ANIMAL_PROTECTION off still shielded the animal")
         helper.assertFalse(bob.wasRefusedBy("T14AnimA's Place"), "the unprotected animal still refused the hit")
         alice.leave()
         bob.leave()
@@ -1274,8 +1269,7 @@ class RegionProtectionGameTest {
         val alice = MessageCapturingPlayer.join(helper, "T14VillA")
         val bob = MessageCapturingPlayer.join(helper, "T14VillB")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
-        alice.runCommand("rg flag ENABLE_PUBLIC_VILLAGER_TRADING")
+        alice.setFlag("PUBLIC_VILLAGERS", on = true)
         val cow = helper.spawnWithNoFreeWill(EntityTypes.COW, BlockPos(2, 2, 2))
         bob.standAt(helper, 2.0, 2.0, 2.0)
         bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.BUCKET))
@@ -1284,7 +1278,7 @@ class RegionProtectionGameTest {
         helper.assertValueEqual(
             bob.mainHandItem.item,
             Items.MILK_BUCKET,
-            "ENABLE_PUBLIC_VILLAGER_TRADING still refused a held-item interaction",
+            "PUBLIC_VILLAGERS still refused a held-item interaction",
         )
         alice.leave()
         bob.leave()

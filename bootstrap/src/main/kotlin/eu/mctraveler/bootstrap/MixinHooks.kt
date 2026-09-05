@@ -15,7 +15,9 @@ import net.minecraft.server.level.ServerPlayer
 import net.minecraft.server.players.NameAndId
 import net.minecraft.world.damagesource.DamageSource
 import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.player.Player
+import net.minecraft.world.entity.projectile.Projectile
 import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.inventory.CraftingContainer
 import net.minecraft.world.inventory.ResultContainer
@@ -97,6 +99,7 @@ interface MixinHooks {
     fun allowsPressurePlate(state: BlockState, level: Level, pos: BlockPos, entity: Entity): Boolean
     fun allowsBlockChange(player: ServerPlayer, level: Level, pos: BlockPos): Boolean
     fun allowsEntityDamage(entity: Entity, source: DamageSource): Boolean
+    fun allowsProjectileBlockChange(projectile: Projectile, level: Level, pos: BlockPos): Boolean
 
     // Region environment
     fun allowsCreatureBlockChange(level: Level, pos: BlockPos, creature: Entity?): Boolean
@@ -104,6 +107,8 @@ interface MixinHooks {
     fun allowsFireDamage(level: Level, pos: BlockPos): Boolean
     fun allowsFluidSpread(level: Level, from: BlockPos, to: BlockPos): Boolean
     fun allowsDecorationMove(level: Level, pos: BlockPos): Boolean
+    fun allowsExplosionEntityEffect(level: Level, source: Entity?, target: Entity): Boolean
+    fun allowsPotionEffect(level: Level, thrower: Entity?, target: LivingEntity): Boolean
     fun allowsPistonMove(
         level: Level,
         pistonPos: BlockPos,
@@ -224,6 +229,15 @@ object Hooks {
 
     @JvmStatic fun allowsBlockChange(player: ServerPlayer, level: Level, pos: BlockPos): Boolean =
         impl?.allowsBlockChange(player, level, pos) ?: true
+
+    @JvmStatic fun allowsProjectileBlockChange(projectile: Projectile, level: Level, pos: BlockPos): Boolean =
+        impl?.allowsProjectileBlockChange(projectile, level, pos) ?: true
+
+    @JvmStatic fun allowsExplosionEntityEffect(level: Level, source: Entity?, target: Entity): Boolean =
+        impl?.allowsExplosionEntityEffect(level, source, target) ?: true
+
+    @JvmStatic fun allowsPotionEffect(level: Level, thrower: Entity?, target: LivingEntity): Boolean =
+        impl?.allowsPotionEffect(level, thrower, target) ?: true
 
     @JvmStatic fun allowsCreatureBlockChange(level: Level, pos: BlockPos, creature: Entity?): Boolean =
         impl?.allowsCreatureBlockChange(level, pos, creature) ?: true

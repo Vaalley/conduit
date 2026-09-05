@@ -30,7 +30,9 @@ import net.minecraft.server.level.ServerPlayer
 import net.minecraft.server.players.NameAndId
 import net.minecraft.world.damagesource.DamageSource
 import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.player.Player
+import net.minecraft.world.entity.projectile.Projectile
 import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.inventory.CraftingContainer
 import net.minecraft.world.inventory.ResultContainer
@@ -130,6 +132,15 @@ object MixinHooksImpl : MixinHooks {
 
     override fun allowsBlockChange(player: ServerPlayer, level: Level, pos: BlockPos): Boolean =
         RegionProtection.allowsBlockChange(player, level, pos)
+
+    override fun allowsProjectileBlockChange(projectile: Projectile, level: Level, pos: BlockPos): Boolean =
+        RegionProtection.allowsProjectileBlockChange(projectile, level, pos)
+
+    override fun allowsExplosionEntityEffect(level: Level, source: Entity?, target: Entity): Boolean =
+        RegionEnvironment.allowsExplosionEntityEffect(level, source, target)
+
+    override fun allowsPotionEffect(level: Level, thrower: Entity?, target: LivingEntity): Boolean =
+        RegionEnvironment.allowsPotionEffect(level, thrower, target)
 
     override fun allowsCreatureBlockChange(level: Level, pos: BlockPos, creature: Entity?): Boolean =
         RegionEnvironment.allowsCreatureBlockChange(level, pos, creature)

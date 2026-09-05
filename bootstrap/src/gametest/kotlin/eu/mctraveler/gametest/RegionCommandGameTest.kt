@@ -28,7 +28,7 @@ class RegionCommandGameTest {
         Paint.gray(" - "), Paint.white("/rg delete"), "\n",
         Paint.gray(" - "), Paint.white("/rg start"), " ", Paint.gray("+ "), Paint.white("/rg end"), "\n",
         Paint.gray(" - "), Paint.white("/rg extend <distance>"), "\n",
-        Paint.gray(" - "), Paint.white("/rg flag [flag]"), "\n",
+        Paint.gray(" - "), Paint.white("/rg flags"), "\n",
         Paint.gray(" - "), Paint.white("/rg locate <name>"),
     )
 
@@ -302,7 +302,7 @@ class RegionCommandGameTest {
         val admin = MessageCapturingPlayer.join(helper, "T12AdmOp")
         admin.makeAdmin()
         admin.standAt(helper, 3.0, 1.0, 3.0)
-        admin.runCommand("rg flag ADMIN")
+        admin.setFlag("ADMIN", on = true)
 
         // Even the resident cannot nest inside an ADMIN-flagged region.
         alice.standAt(helper, 0.0, 1.0, 0.0)

@@ -1,5 +1,6 @@
 package eu.mctraveler.gametest
 
+import eu.mctraveler.region.RegionEnvironment
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
@@ -7,11 +8,13 @@ import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.util.RandomSource
 import net.minecraft.world.entity.EntityTypes
 import net.minecraft.world.entity.Mob
+import net.minecraft.world.entity.decoration.ItemFrame
 import net.minecraft.world.entity.monster.EnderMan
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
+import net.minecraft.world.phys.BlockHitResult
 import net.minecraft.world.phys.Vec3
 
 /**
@@ -55,8 +58,7 @@ class RegionEnvironmentGameTest {
     fun enableExplosionsOptsTheRegionBackIn(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T15TntA")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
-        alice.runCommand("rg flag ENABLE_EXPLOSIONS")
+        alice.setFlag("EXPLOSIONS", on = true)
         helper.setBlock(TARGET_AT, Blocks.DIRT)
 
         helper.explodeAt(TARGET_AT)
@@ -70,12 +72,11 @@ class RegionEnvironmentGameTest {
     fun togglingEnableExplosionsTakesEffectAtOnce(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T15LiveA")
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
         helper.setBlock(TARGET_AT, Blocks.DIRT)
         helper.explodeAt(TARGET_AT)
         helper.assertBlockPresent(Blocks.DIRT, TARGET_AT)
 
-        alice.runCommand("rg flag ENABLE_EXPLOSIONS")
+        alice.setFlag("EXPLOSIONS", on = true)
 
         helper.explodeAt(TARGET_AT)
         helper.assertBlockNotPresent(Blocks.DIRT, TARGET_AT)
@@ -161,13 +162,12 @@ class RegionEnvironmentGameTest {
     fun togglingEnableFireDamageTakesEffectAtOnce(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T15FlameA")
         createRegion(helper, alice, 2.0 to 0.0, 4.0 to 4.0)
-        alice.makeAdmin()
         helper.lightAFireOutside()
         helper.setBlock(NEXT_TO_FIRE, Blocks.OAK_PLANKS)
         helper.letTheFireBurn()
         helper.assertBlockPresent(Blocks.OAK_PLANKS, NEXT_TO_FIRE)
 
-        alice.runCommand("rg flag ENABLE_FIRE_DAMAGE")
+        alice.setFlag("FIRE_DAMAGE", on = true)
 
         helper.letTheFireBurn()
         helper.assertBlockNotPresent(Blocks.OAK_PLANKS, NEXT_TO_FIRE)
@@ -408,6 +408,213 @@ class RegionEnvironmentGameTest {
         bob.leave()
         helper.succeed()
     }
+
+    // ---- WIND_CHARGES ----
+    //
+    // Block-triggering is never gated by region — that is the existing
+    // RegionExplosionMixin block-list filter, unaffected by this flag, and
+    // already covered by [anExplosionSparesRegionBlocks] and friends above
+    // for every explosion source including wind charges (the block-list
+    // filter does not special-case the source). What is new here is entity
+    // effects: whether a wind charge's knockback/damage may reach a
+    // non-member's non-hostile mob or player, exercised directly against
+    // [RegionEnvironment.allowsExplosionEntityEffect] — the exact entrypoint
+    // RegionExplosionEntityMixin calls — since driving a real wind-charge
+    // projectile end-to-end through ServerExplosion adds nothing this does
+    // not already prove about the production decision itself.
+
+    @GameTest
+    fun windChargeCannotAffectANonMemberByDefault(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T15WindA")
+        val bob = MessageCapturingPlayer.join(helper, "T15WindB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        bob.standAt(helper, 2.0, 2.0, 2.0)
+        val windCharge = helper.spawn(EntityTypes.WIND_CHARGE, BlockPos(2, 2, 2))
+
+        val allowed = RegionEnvironment.allowsExplosionEntityEffect(helper.level, windCharge, bob)
+
+        helper.assertFalse(allowed, "a non-member's wind charge could affect a stranger by default")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun windChargeAffectsAPlayerOnceTheFlagIsSet(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T15WindOnA")
+        val bob = MessageCapturingPlayer.join(helper, "T15WindOnB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        alice.setFlag("WIND_CHARGES", on = true)
+        bob.standAt(helper, 2.0, 2.0, 2.0)
+        val windCharge = helper.spawn(EntityTypes.WIND_CHARGE, BlockPos(2, 2, 2))
+
+        val allowed = RegionEnvironment.allowsExplosionEntityEffect(helper.level, windCharge, bob)
+
+        helper.assertTrue(allowed, "the flag did not open wind charges up")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aMembersOwnWindChargeAlwaysAffectsThem(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T15WindSelfA")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        alice.standAt(helper, 2.0, 2.0, 2.0)
+        val windCharge = helper.spawn(EntityTypes.WIND_CHARGE, BlockPos(2, 2, 2))
+        windCharge.owner = alice
+
+        val allowed = RegionEnvironment.allowsExplosionEntityEffect(helper.level, windCharge, alice)
+
+        helper.assertTrue(allowed, "a resident's own wind charge could not affect them")
+        alice.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun windChargeAlwaysAffectsAHostileMob(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T15WindHostA")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        val windCharge = helper.spawn(EntityTypes.WIND_CHARGE, BlockPos(2, 2, 2))
+        val zombie = helper.spawnWithNoFreeWill(EntityTypes.ZOMBIE, BlockPos(2, 2, 2))
+
+        val allowed = RegionEnvironment.allowsExplosionEntityEffect(helper.level, windCharge, zombie)
+
+        helper.assertTrue(allowed, "a hostile mob was protected from a wind charge")
+        alice.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun anItemFrameIsNeverAffectedByAWindChargeRegardlessOfTheFlag(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T15WindFrameA")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        alice.setFlag("WIND_CHARGES", on = true)
+        val frameAt = helper.absolutePos(BlockPos(2, 2, 2))
+        val frame = ItemFrame(helper.level, frameAt, Direction.SOUTH)
+        helper.level.addFreshEntity(frame)
+        val before = frame.position()
+
+        frame.push(5.0, 5.0, 5.0)
+
+        helper.assertTrue(frame.position() == before, "an item frame moved even with WIND_CHARGES on")
+        alice.leave()
+        helper.succeed()
+    }
+
+    // ---- chorus flower popping (a real vanilla mechanic; see ChorusFlowerBlock.onProjectileHit) ----
+
+    @GameTest
+    fun aNonMembersProjectileCannotPopAChorusFlower(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T15ChorusA")
+        val bob = MessageCapturingPlayer.join(helper, "T15ChorusB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(TARGET_AT, Blocks.CHORUS_FLOWER)
+        val arrow = helper.spawn(EntityTypes.ARROW, BlockPos(2, 3, 2))
+        arrow.owner = bob
+
+        helper.popChorusFlowerAt(TARGET_AT, arrow)
+
+        helper.assertBlockPresent(Blocks.CHORUS_FLOWER, TARGET_AT)
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aMembersProjectilePopsTheirOwnChorusFlower(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T15ChorusOkA")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(TARGET_AT, Blocks.CHORUS_FLOWER)
+        val arrow = helper.spawn(EntityTypes.ARROW, BlockPos(2, 3, 2))
+        arrow.owner = alice
+
+        helper.popChorusFlowerAt(TARGET_AT, arrow)
+
+        helper.assertBlockNotPresent(Blocks.CHORUS_FLOWER, TARGET_AT)
+        alice.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aChorusFlowerInAPublicRegionPopsForAnyone(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T15ChorusPubA")
+        val bob = MessageCapturingPlayer.join(helper, "T15ChorusPubB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        alice.setFlag("PUBLIC", on = true)
+        helper.setBlock(TARGET_AT, Blocks.CHORUS_FLOWER)
+        val arrow = helper.spawn(EntityTypes.ARROW, BlockPos(2, 3, 2))
+        arrow.owner = bob
+
+        helper.popChorusFlowerAt(TARGET_AT, arrow)
+
+        helper.assertBlockNotPresent(Blocks.CHORUS_FLOWER, TARGET_AT)
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aDispenserFiredArrowIsUnaffectedByRegion(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T15ChorusDispA")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(TARGET_AT, Blocks.CHORUS_FLOWER)
+        val arrow = helper.spawn(EntityTypes.ARROW, BlockPos(2, 3, 2))
+        // No owner at all — nothing a dispenser's shot ever has.
+
+        helper.popChorusFlowerAt(TARGET_AT, arrow)
+
+        helper.assertBlockNotPresent(Blocks.CHORUS_FLOWER, TARGET_AT)
+        alice.leave()
+        helper.succeed()
+    }
+
+    // ---- creeper vs. name-tagged hostile mobs (gated by PUBLIC) ----
+
+    @GameTest
+    fun aCreeperCannotHurtANamedHostileByDefault(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T15CreepA")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        val creeper = helper.spawnWithNoFreeWill(EntityTypes.CREEPER, BlockPos(2, 2, 2))
+        val zombie = helper.spawnWithNoFreeWill(EntityTypes.ZOMBIE, BlockPos(2, 2, 2))
+        zombie.customName = net.minecraft.network.chat.Component.literal("Named")
+
+        val allowed = RegionEnvironment.allowsExplosionEntityEffect(helper.level, creeper, zombie)
+
+        helper.assertFalse(allowed, "a creeper could hurt a named hostile by default")
+        alice.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aCreeperCanHurtANamedHostileInAPublicRegion(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T15CreepPubA")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        alice.setFlag("PUBLIC", on = true)
+        val creeper = helper.spawnWithNoFreeWill(EntityTypes.CREEPER, BlockPos(2, 2, 2))
+        val zombie = helper.spawnWithNoFreeWill(EntityTypes.ZOMBIE, BlockPos(2, 2, 2))
+        zombie.customName = net.minecraft.network.chat.Component.literal("Named")
+
+        val allowed = RegionEnvironment.allowsExplosionEntityEffect(helper.level, creeper, zombie)
+
+        helper.assertTrue(allowed, "PUBLIC did not open the named hostile up to the creeper")
+        alice.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aCreeperCanAlwaysHurtAnUnnamedHostile(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T15CreepPlainA")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        val creeper = helper.spawnWithNoFreeWill(EntityTypes.CREEPER, BlockPos(2, 2, 2))
+        val zombie = helper.spawnWithNoFreeWill(EntityTypes.ZOMBIE, BlockPos(2, 2, 2))
+
+        val allowed = RegionEnvironment.allowsExplosionEntityEffect(helper.level, creeper, zombie)
+
+        helper.assertTrue(allowed, "an unnamed hostile was protected from a creeper")
+        alice.leave()
+        helper.succeed()
+    }
 }
 
 /** The block every environment test works on, inside the test region. */
@@ -441,6 +648,19 @@ private const val TICK_SEED = 1337L
 
 /** How many of its own ticks a driven fire gets — enough for its odds to land. */
 private const val FIRE_TICKS = 600
+
+/**
+ * Fires the real `ChorusFlowerBlock.onProjectileHit` path at [at] — the
+ * public delegator `BlockBehaviour.BlockStateBase.onProjectileHit` vanilla's
+ * own projectile-impact code calls, rather than reaching for the block's own
+ * protected override directly.
+ */
+private fun GameTestHelper.popChorusFlowerAt(at: BlockPos, projectile: net.minecraft.world.entity.projectile.Projectile) {
+    val pos = absolutePos(at)
+    val state = level.getBlockState(pos)
+    val hit = BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos, false)
+    state.onProjectileHit(level, state, hit, projectile)
+}
 
 /** Sets off a TNT-sized explosion centred on [at]. */
 private fun GameTestHelper.explodeAt(at: BlockPos, power: Float = 4.0f) {

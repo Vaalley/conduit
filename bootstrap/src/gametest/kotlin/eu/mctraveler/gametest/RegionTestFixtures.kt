@@ -1,6 +1,7 @@
 package eu.mctraveler.gametest
 
 import eu.mctraveler.region.Region
+import eu.mctraveler.region.RegionTracker
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.text.Paint
 import kotlin.math.floor
@@ -30,6 +31,20 @@ fun createRegion(
     return checkNotNull(
         service.regionAt("world", floor(player.x).toInt(), 1, floor(player.z).toInt()),
     ) { "region creation for ${player.gameProfile.name} did not take" }
+}
+
+/**
+ * Turns [id] on or off directly on the region the player stands in, and
+ * redraws the sidebar live — the gametest equivalent of a GUI toggle now that
+ * `/rg flags` is a menu rather than a chat command. Mirrors what
+ * [eu.mctraveler.region.RegionFlagsMenu]'s own toggle handler does: mutate,
+ * save, redraw.
+ */
+fun MessageCapturingPlayer.setFlag(id: String, on: Boolean) {
+    val region = checkNotNull(RegionTracker.regionOf(this)) { "not standing in a region" }
+    if (on) region.flags.add(id) else region.flags.remove(id)
+    RegionsFeature.requireService().save()
+    RegionTracker.redraw(level().server, region)
 }
 
 /** Points the player at a cardinal direction, so `/rg extend` reads their facing. */

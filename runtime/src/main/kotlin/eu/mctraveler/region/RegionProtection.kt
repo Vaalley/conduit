@@ -27,18 +27,28 @@ import net.minecraft.tags.DamageTypeTags
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
 import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.Mob
 import net.minecraft.world.entity.OwnableEntity
+import net.minecraft.world.entity.animal.camel.Camel
 import net.minecraft.world.entity.animal.equine.AbstractChestedHorse
 import net.minecraft.world.entity.animal.equine.AbstractHorse
+import net.minecraft.world.entity.animal.nautilus.AbstractNautilus
+import net.minecraft.world.entity.animal.pig.Pig
 import net.minecraft.world.entity.monster.Enemy
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.entity.decoration.BlockAttachedEntity
+import net.minecraft.world.entity.projectile.Projectile
+import net.minecraft.world.entity.vehicle.boat.Boat
+import net.minecraft.world.entity.vehicle.boat.ChestBoat
+import net.minecraft.world.entity.vehicle.minecart.Minecart
 import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.inventory.ChestMenu
 import net.minecraft.world.inventory.PlayerEnderChestContainer
+import net.minecraft.world.item.BoatItem
 import net.minecraft.world.item.BucketItem
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
+import net.minecraft.world.item.MinecartItem
 import net.minecraft.world.item.alchemy.PotionContents
 import net.minecraft.world.item.alchemy.Potions
 import net.minecraft.world.item.context.UseOnContext
@@ -57,7 +67,7 @@ import net.minecraft.world.level.block.state.BlockState
  * from containers, using items, and harming what lives inside (spec User
  * Stories 34 and 38; inventory §2.8's protection hooks) — and, where a region
  * asks for it, working its doors, its switches, and the ground under a fall
- * (spec User Story 36's three `DISABLE_` flags).
+ * (spec User Story 36's flags — see [RegionFlags]).
  *
  * What a region stops the *world* doing — explosions, fire, pistons, creatures
  * — is [RegionEnvironment]. The line between them is whether anyone is asking:
@@ -79,15 +89,24 @@ import net.minecraft.world.level.block.state.BlockState
  */
 object RegionProtection {
 
+    // Uniform presence semantics (RegionFlags): every flag here reads as
+    // "<ID> in region.flags" means allowed, full stop. A flag's default is
+    // decided once, by whether RegionFlags.Definition.defaultAllowed seeds it
+    // at region creation — nothing below branches on a flag's own polarity.
     private const val PUBLIC = "PUBLIC"
-    private const val ENABLE_PUBLIC_CONTAINERS = "ENABLE_PUBLIC_CONTAINERS"
-    private const val ENABLE_PUBLIC_VILLAGER_TRADING = "ENABLE_PUBLIC_VILLAGER_TRADING"
-    private const val DISABLE_ANIMAL_PROTECTION = "DISABLE_ANIMAL_PROTECTION"
-    private const val DISABLE_PLAYER_FALL_DAMAGE = "DISABLE_PLAYER_FALL_DAMAGE"
-    private const val DISABLE_PUBLIC_REDSTONE_TRIGGERS = "DISABLE_PUBLIC_REDSTONE_TRIGGERS"
-    private const val DISABLE_WEIGHTED_PRESSURE_PLATES = "DISABLE_WEIGHTED_PRESSURE_PLATES"
-    private const val DISABLE_GATES = "DISABLE_GATES"
-    private const val DISABLE_PVP = "DISABLE_PVP"
+    private const val PUBLIC_CONTAINERS = "PUBLIC_CONTAINERS"
+    private const val PUBLIC_VILLAGERS = "PUBLIC_VILLAGERS"
+    private const val ANIMAL_PROTECTION = "ANIMAL_PROTECTION"
+    private const val FALL_DAMAGE = "FALL_DAMAGE"
+    private const val PUBLIC_REDSTONE = "PUBLIC_REDSTONE"
+    private const val WEIGHTED_PRESSURE_PLATES = "WEIGHTED_PRESSURE_PLATES"
+    private const val GATES = "GATES"
+    private const val DOORS = "DOORS"
+    private const val TRAPDOORS = "TRAPDOORS"
+    private const val BOATS = "BOATS"
+    private const val MINECARTS = "MINECARTS"
+    private const val RIDEABLE = "RIDEABLE"
+    private const val PVP = "PVP"
     private const val REFUSAL_MESSAGE_COOLDOWN_TICKS = 20L
 
     /** The region a player's currently-open container is judged against. */
@@ -202,17 +221,28 @@ object RegionProtection {
         // is [UseBlockCallback] below.
         ItemEvents.USE_ON.reloadable.register { context ->
             val player = context.player
-            val modifies =
-                RegionInteractables.isRegionModifyingItem(context.itemInHand) ||
-                    exemptUseChangesBlock(context)
-            if (player is ServerPlayer &&
-                modifies &&
-                !allowsBlockChange(player, context.level, context.clickedPos)
-            ) {
-                resyncInventory(player)
-                InteractionResult.FAIL
-            } else {
+            if (player !is ServerPlayer) {
                 null
+            } else if (context.itemInHand.item is MinecartItem) {
+                // A minecart is placed on the rail it is used on — an entity,
+                // not a block, so it answers to MINECARTS rather than the
+                // plain membership gate every other placement uses.
+                if (!allowsVehiclePlacement(player, context.level, context.clickedPos, MINECARTS)) {
+                    resyncInventory(player)
+                    InteractionResult.FAIL
+                } else {
+                    null
+                }
+            } else {
+                val modifies =
+                    RegionInteractables.isRegionModifyingItem(context.itemInHand) ||
+                        exemptUseChangesBlock(context)
+                if (modifies && !allowsBlockChange(player, context.level, context.clickedPos)) {
+                    resyncInventory(player)
+                    InteractionResult.FAIL
+                } else {
+                    null
+                }
             }
         }
 
@@ -220,8 +250,9 @@ object RegionProtection {
         // Fires for every block right-click before vanilla decides whether the
         // block or the item in hand handles it, so one hook covers the
         // workstation that opens, the furnace a stranger may look inside, the
-        // composter that fills, the note block that retunes, and the door the
-        // DISABLE_ flags close. [allowsBlockInteract] sorts them (issue #40).
+        // composter that fills, the note block that retunes, and the door,
+        // gate or trapdoor a flag closes. [allowsBlockInteract] sorts them
+        // (issue #40).
         UseBlockCallback.EVENT.reloadable.register { player, level, hand, hit ->
             if (player !is ServerPlayer) {
                 InteractionResult.PASS
@@ -303,6 +334,25 @@ object RegionProtection {
     }
 
     /**
+     * Whether [projectile] may pop the chorus flower it just hit
+     * (`ChorusFlowerBlock.onProjectileHit`, a real vanilla mechanic every
+     * arrow, trident, firework, snowball, egg, fireball and wind charge
+     * triggers unconditionally) — a protection gap this closes rather than a
+     * new rule: it is the ordinary block-change gate, reached from a
+     * projectile's block hit instead of a player's own click, so it already
+     * respects `PUBLIC` and membership exactly as every other block-change
+     * rule does.
+     *
+     * A projectile with no player behind it (a dispenser-fired arrow, say) is
+     * unaffected, matching this file's usual pattern for non-player causes.
+     */
+    @JvmStatic
+    fun allowsProjectileBlockChange(projectile: Projectile, level: Level, pos: BlockPos): Boolean {
+        val shooter = projectile.owner as? ServerPlayer ?: return true
+        return allowsBlockChange(shooter, level, pos)
+    }
+
+    /**
      * Remembers the region a container [player] just opened is judged against,
      * and lets it govern the whole session — stepping outside, or a region
      * appearing, mid-session cannot change what the open chest allows (the
@@ -344,7 +394,7 @@ object RegionProtection {
             return default
         }
         val region = containerRegionFor(player) ?: return default
-        if (canModifyRegion(player, region) || ENABLE_PUBLIC_CONTAINERS in region.flags) return default
+        if (canModifyRegion(player, region) || PUBLIC_CONTAINERS in region.flags) return default
         return Component.literal("Region protected").withStyle(ChatFormatting.GRAY, ChatFormatting.BOLD)
     }
 
@@ -380,7 +430,7 @@ object RegionProtection {
     @JvmStatic
     fun allowsContainerUse(player: ServerPlayer): Boolean {
         val region = containerRegions[player.uuid] ?: return true
-        if (canModifyRegion(player, region) || ENABLE_PUBLIC_CONTAINERS in region.flags) return true
+        if (canModifyRegion(player, region) || PUBLIC_CONTAINERS in region.flags) return true
         return refuse(player, region)
     }
 
@@ -393,9 +443,9 @@ object RegionProtection {
      *
      * Two things can refuse a non-member here:
      *
-     * - the `DISABLE_GATES` / `DISABLE_PUBLIC_REDSTONE_TRIGGERS` flags, exactly
-     *   as before — the doors and the switches a region owner asks to be
-     *   closed;
+     * - the `GATES` / `DOORS` / `TRAPDOORS` / `PUBLIC_REDSTONE` flags, exactly
+     *   as before — the gates, the doors, the trapdoors and the switches a
+     *   region owner asks to be closed;
      * - the interaction class (issue #40): a block that changes the region's
      *   contents (`REQUIRES_MEMBERSHIP`) is refused, a workstation or a
      *   container a non-member may open to look inside (`FREE`,
@@ -439,11 +489,11 @@ object RegionProtection {
     /**
      * Whether [entity] may set off the pressure plate at [pos].
      *
-     * Ordinary plates use `DISABLE_PUBLIC_REDSTONE_TRIGGERS`: non-members are
-     * ignored while residents and non-player entities still work the plate.
+     * Ordinary plates use `PUBLIC_REDSTONE`: non-members are ignored unless it
+     * is on, while residents and non-player entities still work the plate.
      * Weighted plates are automation rather than membership checks, so they
      * work for every entity by default and are disabled wholesale only by
-     * `DISABLE_WEIGHTED_PRESSURE_PLATES`.
+     * turning `WEIGHTED_PRESSURE_PLATES` off.
      */
     @JvmStatic
     fun allowsPressurePlate(
@@ -454,37 +504,44 @@ object RegionProtection {
     ): Boolean {
         val region = RegionsFeature.regionAt(level, pos) ?: return true
         if (state.block is WeightedPressurePlateBlock) {
-            return DISABLE_WEIGHTED_PRESSURE_PLATES !in region.flags
+            return WEIGHTED_PRESSURE_PLATES in region.flags
         }
         val player = entity as? ServerPlayer ?: return true
-        return canModifyRegion(player, region) || DISABLE_PUBLIC_REDSTONE_TRIGGERS !in region.flags
+        return canModifyRegion(player, region) || PUBLIC_REDSTONE in region.flags
     }
 
     /** Which flag, if any, can take this block's own behaviour away from a stranger. */
     private fun restrictingFlagFor(state: BlockState): String? = when (state.block) {
-        is DoorBlock, is FenceGateBlock, is TrapDoorBlock -> DISABLE_GATES
-        is ButtonBlock, is LeverBlock -> DISABLE_PUBLIC_REDSTONE_TRIGGERS
+        is DoorBlock -> DOORS
+        is FenceGateBlock -> GATES
+        is TrapDoorBlock -> TRAPDOORS
+        is ButtonBlock, is LeverBlock -> PUBLIC_REDSTONE
         else -> null
     }
 
     /**
-     * The region at [pos] that refuses [player] because it flies [flag], or
-     * null — no region, a member, or the flag is off.
+     * The region at [pos] that refuses [player] because it lacks [flag], or
+     * null — no region, a member, or the flag is on.
      */
     private fun regionRefusing(player: ServerPlayer, level: Level, pos: BlockPos, flag: String): Region? {
         val region = RegionsFeature.regionAt(level, pos) ?: return null
         if (canModifyRegion(player, region)) return null
-        return if (flag in region.flags) region else null
+        return if (flag !in region.flags) region else null
     }
 
     /**
-     * Whether a fall may hurt [player] where they are standing —
-     * `DISABLE_PLAYER_FALL_DAMAGE` catches everyone inside the region, member
-     * or not, because it is the ground that is soft.
+     * Whether a fall may hurt [player] where they are standing.
+     *
+     * `FALL_DAMAGE` names the *protection*, not the damage: its presence
+     * means a region catches everyone inside it, member or not, because it is
+     * the ground that is soft — so a fall is only allowed to hurt when the
+     * flag is *absent*. Seeded present by default (`RegionFlags.FALL_DAMAGE`'s
+     * `defaultAllowed = true`), matching this rework's chosen default of
+     * fall-damage-protected rather than the Portal's old opt-in.
      */
     private fun allowsFallDamage(player: ServerPlayer): Boolean {
         val region = RegionTracker.regionOf(player) ?: return true
-        return DISABLE_PLAYER_FALL_DAMAGE !in region.flags
+        return FALL_DAMAGE !in region.flags
     }
 
     /**
@@ -502,10 +559,21 @@ object RegionProtection {
      */
     @JvmStatic
     fun allowsItemUse(player: ServerPlayer?, stack: ItemStack): Boolean {
-        if (stack.isEmpty || isExemptItem(stack) || stack.item !is BucketItem) return true
+        if (stack.isEmpty || isExemptItem(stack)) return true
         val p = player ?: return true
+        if (stack.item is BoatItem) {
+            val region = RegionTracker.regionOf(p) ?: return true
+            return canModifyRegion(p, region) || BOATS in region.flags || refuse(p, region)
+        }
+        if (stack.item !is BucketItem) return true
         val region = RegionTracker.regionOf(p) ?: return true
         return canModifyRegion(p, region) || refuse(p, region)
+    }
+
+    /** Whether [player] may place a minecart on the rail at [pos], gated by [flag] (`MINECARTS`). */
+    private fun allowsVehiclePlacement(player: ServerPlayer, level: Level, pos: BlockPos, flag: String): Boolean {
+        val region = RegionsFeature.regionAt(level, pos) ?: return true
+        return canModifyRegion(player, region) || flag in region.flags || refuse(player, region)
     }
 
     /** Block-changing use-on paths hidden inside otherwise safe air-use items. */
@@ -529,12 +597,17 @@ object RegionProtection {
      * Hitting [entity] is refused in its deepest target region — except an
      * un-named hostile mob, which a non-member may cull (issue #40). A name tag
      * makes even a hostile someone's, and so protected; item frames and armor
-     * stands are always protected.
+     * stands are always protected. A boat or an empty minecart is not an
+     * animal, so it answers to its own `BOATS`/`MINECARTS` flag instead of
+     * `ANIMAL_PROTECTION`.
      */
     @JvmStatic
     fun allowsEntityAttack(player: ServerPlayer?, entity: Entity?): Boolean {
         val p = player ?: return true
         if (entity is ServerPlayer) return allowsPvp(p, entity)
+        if (entity != null) {
+            vehicleFlagFor(entity)?.let { flag -> return allowsVehicleUse(p, entity, flag) }
+        }
         val region = entityProtectionAround(p, entity) ?: return true
         if (isCullableHostile(entity)) return true
         return refuse(p, region)
@@ -556,22 +629,46 @@ object RegionProtection {
         if (isRegionDecoration(entity)) return allowsDecorationDamage(entity, source)
         val player = playerResponsibleFor(source) ?: return true
         if (entity is ServerPlayer) return allowsPvp(player, entity)
+        vehicleFlagFor(entity)?.let { flag -> return allowsVehicleUse(player, entity, flag) }
         val region = entityProtectionAround(player, entity) ?: return true
         if (isCullableHostile(entity)) return true
         return refuse(player, region)
     }
 
     /**
-     * PVP is allowed inside a region by default (issue request) — only
-     * `DISABLE_PVP` turns a region into a safe zone, and it does so for
-     * everyone standing in it, [victim]'s own membership included: the point
-     * of the flag is "no fighting here," not a members-only exemption.
+     * PVP is allowed inside a region by default (issue request) — only a
+     * region without `PVP` is a safe zone, and it is one for everyone standing
+     * in it, [victim]'s own membership included: the point of the flag is "no
+     * fighting here," not a members-only exemption.
      */
     private fun allowsPvp(attacker: ServerPlayer, victim: ServerPlayer): Boolean {
         if (attacker === victim) return true
         val region = RegionsFeature.regionAt(victim.level(), victim.blockPosition()) ?: return true
-        if (DISABLE_PVP !in region.flags) return true
+        if (PVP in region.flags) return true
         return refuse(attacker, region)
+    }
+
+    /**
+     * The flag that gates breaking or damaging [entity] as a vehicle rather
+     * than as an animal — a boat, a chest boat, or a plain minecart carrying
+     * no mob passenger (a chest/furnace/TNT/hopper/command-block/spawner
+     * minecart, or one currently carrying a mob, stays under the
+     * unconditional decoration-style protection those already have; only an
+     * otherwise-empty rideable minecart is gated here). Null for anything
+     * else, which falls through to [entityProtectionAround]'s ordinary rule.
+     */
+    private fun vehicleFlagFor(entity: Entity): String? = when {
+        entity is Boat || entity is ChestBoat -> BOATS
+        entity is Minecart && entity.passengers.none { it is Mob } -> MINECARTS
+        else -> null
+    }
+
+    /** Whether [player] may break or damage the vehicle [entity], gated by [flag]. */
+    private fun allowsVehicleUse(player: ServerPlayer, entity: Entity, flag: String): Boolean {
+        val region = RegionsFeature.regionAt(entity.level(), entity.blockPosition()) ?: return true
+        if (canModifyRegion(player, region)) return true
+        if (flag in region.flags) return true
+        return refuse(player, region)
     }
 
     /**
@@ -603,10 +700,11 @@ object RegionProtection {
      * - a chested donkey or mule opens its inventory to a crouch-click with an
      *   empty hand — view-only, the container mixin refuses the slot clicks —
      *   and refuses everything else (it is not ridden, its load not touched);
-     * - any other rideable equine may be mounted with an empty hand;
+     * - any other rideable mount (horse-family, camel, pig, nautilus) may be
+     *   mounted with an empty hand, gated by `RIDEABLE`;
      * - every other mob keeps the old rule: an empty-hand interaction that
      *   changes nothing is allowed, a held-item one is refused unless the
-     *   region flies `ENABLE_PUBLIC_VILLAGER_TRADING`.
+     *   region flies `PUBLIC_VILLAGERS`.
      */
     @JvmStatic
     fun allowsEntityInteract(
@@ -626,23 +724,30 @@ object RegionProtection {
             }
             return refuse(p, region)
         }
-        if (entity is AbstractHorse && emptyHand && !p.isShiftKeyDown) return true
+        if (entity != null && isRideableMount(entity) && emptyHand && !p.isShiftKeyDown) {
+            if (RIDEABLE in region.flags) return true
+            return refuse(p, region)
+        }
 
         if (emptyHand) return true
-        if (ENABLE_PUBLIC_VILLAGER_TRADING in region.flags) return true
+        if (PUBLIC_VILLAGERS in region.flags) return true
         return refuse(p, region)
     }
+
+    /** A mount a `RIDEABLE`-flying region may be ridden in: the horse family, camels, pigs, nautiluses. */
+    private fun isRideableMount(entity: Entity): Boolean =
+        entity is AbstractHorse || entity is Camel || entity is Pig || entity is AbstractNautilus
 
     /**
      * The deepest target region whose entities [player] must leave alone, or
      * null when they may do as they like — outside a region, inside one they
-     * can modify, or in one flying `DISABLE_ANIMAL_PROTECTION`.
+     * can modify, or in one without `ANIMAL_PROTECTION`.
      */
     private fun entityProtectionAround(player: ServerPlayer, entity: Entity?): Region? {
         if (entity == null) return null
         val region = RegionsFeature.regionAt(entity.level(), entity.blockPosition()) ?: return null
         if (canModifyRegion(player, region)) return null
-        if (DISABLE_ANIMAL_PROTECTION in region.flags) return null
+        if (ANIMAL_PROTECTION !in region.flags) return null
         return region
     }
 
