@@ -36,24 +36,6 @@ object RegionCommands {
 
     private val startMarkers = HashMap<UUID, StartMarker>()
 
-    /** The Portal's flag vocabulary, in its canonical (display) order. */
-    private val VALID_FLAGS = listOf(
-        Region.EMBASSY_FLAG,
-        "NO_SCOREBOARD",
-        "ENABLE_EXPLOSIONS",
-        "ADMIN",
-        "ENABLE_PUBLIC_CONTAINERS",
-        "DISABLE_GATES",
-        "ENABLE_FIRE_DAMAGE",
-        "DISABLE_PLAYER_FALL_DAMAGE",
-        "ENABLE_PUBLIC_VILLAGER_TRADING",
-        "DISABLE_PUBLIC_REDSTONE_TRIGGERS",
-        "DISABLE_WEIGHTED_PRESSURE_PLATES",
-        "DISABLE_ANIMAL_PROTECTION",
-        "DISABLE_PVP",
-        "PUBLIC",
-    )
-
     private val NAME_REGEX = Regex("^[a-zA-Z0-9!_'?()#:,.+&@*\\- ]{3,30}$")
 
     private const val MAX_MEMBERS = 99
@@ -70,7 +52,7 @@ object RegionCommands {
         Paint.gray(" - "), Paint.white("/rg delete"), "\n",
         Paint.gray(" - "), Paint.white("/rg start"), " ", Paint.gray("+ "), Paint.white("/rg end"), "\n",
         Paint.gray(" - "), Paint.white("/rg extend <distance>"), "\n",
-        Paint.gray(" - "), Paint.white("/rg flag [flag]"), "\n",
+        Paint.gray(" - "), Paint.white("/rg flags"), "\n",
         Paint.gray(" - "), Paint.white("/rg locate <name>"),
     )
 
@@ -147,14 +129,7 @@ object RegionCommands {
                             },
                     ),
             )
-            .then(
-                Commands.literal("flag")
-                    .executes { ctx -> reply(ctx) { listFlags(it) } }
-                    .then(
-                        Commands.argument("flag", StringArgumentType.greedyString())
-                            .executes { ctx -> reply(ctx) { toggleFlag(it, StringArgumentType.getString(ctx, "flag")) } },
-                    ),
-            )
+            .then(Commands.literal("flags").executes { ctx -> reply(ctx) { openFlagsGui(it) } })
             .then(
                 Commands.literal("bounds")
                     .executes { ctx -> reply(ctx) { showBounds(it) } }
@@ -294,6 +269,7 @@ object RegionCommands {
             // Full build height (deviation 2; the Portal wrote 255/15 here).
         )
         region.members.add(player.uuid)
+        RegionFlags.seedDefaults(region)
         service.add(region, parent)
         startMarkers.remove(player.uuid)
         // The creator is standing in it: their sidebar comes up at once, rather
@@ -461,44 +437,23 @@ object RegionCommands {
         return Paint.success(Paint.green(targetName), " has been removed from ", Paint.green(region.title))
     }
 
+    /**
+     * `/rg flags` opens the region-flags GUI ([RegionFlagsMenu]) for the
+     * region the player stands in — resident or admin, same shape as
+     * `rename`/`extend`; main-page flags are self-service now, unlike the
+     * chat-based `/rg flag` this replaces, which was fully admin-gated.
+     */
+    private fun openFlagsGui(player: ServerPlayer): Component? {
+        val region = RegionTracker.regionOf(player)
+            ?: return Paint.error("You must stand in the region you want to view flags for")
+        if (!region.isResident(player.uuid) && !RegionsFeature.isAdmin(player)) {
+            return Paint.error("You are not a member of this region")
+        }
+        RegionFlagsMenu.openMain(player, region)
+        return null
+    }
+
     // ---- admin commands ----
-
-    private fun toggleFlag(player: ServerPlayer, rawFlag: String): Component {
-        RegionsFeature.adminGate(player)?.let { return it }
-        val region = RegionTracker.regionOf(player)
-            ?: return Paint.error("You must stand in the region you want to toggle a flag on")
-        val flag = rawFlag.uppercase()
-        if (flag !in VALID_FLAGS) {
-            return Paint.error("Invalid flag. Valid flags: ${VALID_FLAGS.joinToString(", ")}")
-        }
-        if (flag == Region.EMBASSY_FLAG) {
-            return Paint.error("You cannot toggle the embassy flag")
-        }
-        val added = region.flags.add(flag)
-        if (!added) region.flags.remove(flag)
-        RegionsFeature.requireService().save()
-        // NO_SCOREBOARD decides whether the sidebar is drawn at all, so a
-        // toggle takes effect on the occupants now rather than next time they
-        // walk in (the Portal left the stale board up).
-        RegionTracker.redraw(player.level().server, region)
-        return Paint.success("Flag ", Paint.green(flag), if (added) " added" else " removed")
-    }
-
-    private fun listFlags(player: ServerPlayer): Component {
-        RegionsFeature.adminGate(player)?.let { return it }
-        val region = RegionTracker.regionOf(player)
-            ?: return Paint.error("You must stand in a region to view flags")
-        // Enabled flags in green then disabled in red, each group in the
-        // canonical order, comma-separated on a gray line.
-        val (enabled, disabled) = VALID_FLAGS.partition { it in region.flags }
-        val coloured = enabled.map { Paint.green(it) } + disabled.map { Paint.red(it) }
-        val parts = mutableListOf<Any>("Flags: ")
-        coloured.forEachIndexed { index, flag ->
-            if (index > 0) parts.add(", ")
-            parts.add(flag)
-        }
-        return Paint.gray(*parts.toTypedArray())
-    }
 
     private fun setBounds(player: ServerPlayer, rawMinY: Int, rawMaxY: Int): Component {
         RegionsFeature.adminGate(player)?.let { return it }

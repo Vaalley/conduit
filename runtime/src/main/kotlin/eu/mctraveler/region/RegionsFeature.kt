@@ -53,23 +53,33 @@ object RegionsFeature {
 
     /**
      * The username behind a member uuid — the online player's, else the name
-     * cache's (deviation 10: a real cache, so member lists are complete).
-     * Null only when the name is genuinely unknown, in which case that member
+     * cache's (deviation 10: a real cache, so member lists are complete), else
+     * vanilla's own `usercache.json`-backed name/id resolver, which covers
+     * every player who has ever joined this server rather than only those the
+     * mod's own cache happened to be tracking since it started up. Null only
+     * when the name is genuinely unknown anywhere, in which case that member
      * is invisible to `/rg locate`, `/rg remove` and the sidebar, exactly as
      * in the Portal.
      */
     fun usernameFor(server: MinecraftServer, uuid: UUID): String? =
         server.playerList.getPlayer(uuid)?.gameProfile?.name
             ?: MCTraveler.persistence?.names?.usernameFor(uuid)
+            ?: server.services().nameToIdCache().get(uuid).map { it.name() }.orElse(null)
 
     /**
-     * Resolves a present player first, then a player recorded by [NameCache].
+     * Resolves a present player first, then a player recorded by [NameCache],
+     * then vanilla's own name/id resolver — the same fallback order as
+     * [usernameFor], so `/rg add` can find a player who has quit the server
+     * (and so left the mod's own name cache never having seen them) as long as
+     * they have ever joined it at all.
      *
      * This permits region membership changes for known offline players without
      * treating an arbitrary, never-seen username as an identity.
      */
     fun uuidForUsername(server: MinecraftServer, username: String): UUID? =
-        server.playerList.getPlayerByName(username)?.uuid ?: MCTraveler.persistence?.names?.uuidFor(username)
+        server.playerList.getPlayerByName(username)?.uuid
+            ?: MCTraveler.persistence?.names?.uuidFor(username)
+            ?: server.services().nameToIdCache().get(username).map { it.id() }.orElse(null)
 
     /**
      * The deepest region covering [pos] in [level], or null — the block-shaped
@@ -108,6 +118,9 @@ object RegionsFeature {
         }
         RegionTracker.register()
         RegionProtection.register()
+        // The region-flags GUI is the mod's own menu (deviation 16, same as
+        // the Teleportation Crystal's).
+        RegionProtection.exemptMenu { it is RegionFlagsMenu.RegionFlagsChestMenu }
         // The Portal kept start markers per connection; dropping them on
         // disconnect preserves that lifetime.
         ServerPlayConnectionEvents.DISCONNECT.reloadable.register { handler, _ ->

@@ -1,6 +1,7 @@
 package eu.mctraveler.gametest
 
 import eu.mctraveler.region.Region
+import eu.mctraveler.region.RegionFlagsMenu
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.text.Paint
 import java.util.UUID
@@ -26,7 +27,9 @@ class RegionAdminCommandGameTest {
     fun adminCommandsRefuseNonAdmins(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "T12Gate")
         player.standAt(helper, 0.0, 1.0, 0.0)
-        for (command in listOf("rg flag", "rg flag PUBLIC", "rg bounds", "rg bounds 0 100", "rg locate x")) {
+        // /rg flags is no longer admin-gated at all (main-page flags are
+        // self-service now); only bounds and locate stay admin-only.
+        for (command in listOf("rg bounds", "rg bounds 0 100", "rg locate x")) {
             player.runCommand(command)
             helper.assertValueEqual(player.messages.last(), notAdmin, "the non-admin reply to /$command")
         }
@@ -34,57 +37,37 @@ class RegionAdminCommandGameTest {
         helper.succeed()
     }
 
-    // ---- /rg flag ----
+    // ---- /rg flags ----
 
     @GameTest
-    fun anAdminTogglesAFlagOnAndOff(helper: GameTestHelper) {
-        val admin = adminWithRegion(helper, "T12FlagTog")
-        admin.runCommand("rg flag public") // lower case: flags are upper-cased
-        helper.assertValueEqual(
-            admin.messages.last(),
-            Paint.success("Flag ", Paint.green("PUBLIC"), " added"),
-            "the flag-added reply",
-        )
-        admin.runCommand("rg flag PUBLIC")
-        helper.assertValueEqual(
-            admin.messages.last(),
-            Paint.success("Flag ", Paint.green("PUBLIC"), " removed"),
-            "the flag-removed reply",
-        )
-        admin.leave()
-        helper.succeed()
+    fun rgFlagsOpensTheRegionFlagsGui(helper: GameTestHelper) {
+        val admin = adminWithRegion(helper, "T12FlagsOpen")
+        try {
+            admin.runCommand("rg flags")
+
+            val menu = RegionFlagsMenu.openMenuOf(admin)
+            helper.assertTrue(menu != null, "/rg flags opened no menu")
+            helper.assertValueEqual(menu!!.page, RegionFlagsMenu.Page.MAIN, "the page /rg flags opens")
+            helper.succeed()
+        } finally {
+            admin.leave()
+        }
     }
 
     @GameTest
-    fun anInvalidFlagListsTheValidFlags(helper: GameTestHelper) {
-        val admin = adminWithRegion(helper, "T12FlagBad")
-        admin.runCommand("rg flag NOT_A_FLAG")
-        helper.assertValueEqual(
-            admin.messages.last(),
-            Paint.error(
-                "Invalid flag. Valid flags: EMBASSY, NO_SCOREBOARD, ENABLE_EXPLOSIONS, ADMIN, " +
-                    "ENABLE_PUBLIC_CONTAINERS, DISABLE_GATES, ENABLE_FIRE_DAMAGE, " +
-                    "DISABLE_PLAYER_FALL_DAMAGE, ENABLE_PUBLIC_VILLAGER_TRADING, " +
-                    "DISABLE_PUBLIC_REDSTONE_TRIGGERS, DISABLE_WEIGHTED_PRESSURE_PLATES, " +
-                    "DISABLE_ANIMAL_PROTECTION, DISABLE_PVP, PUBLIC",
-            ),
-            "the invalid-flag reply",
-        )
-        admin.leave()
-        helper.succeed()
-    }
+    fun aNonAdminResidentCanStillOpenRgFlags(helper: GameTestHelper) {
+        // Main-page flags are self-service — residency is enough, no admin
+        // status required (unlike the old chat-based /rg flag).
+        val resident = MessageCapturingPlayer.join(helper, "T12FlagsRes")
+        try {
+            createRegion(helper, resident, 0.0 to 0.0, 4.0 to 4.0)
+            resident.runCommand("rg flags")
 
-    @GameTest
-    fun theEmbassyFlagCannotBeToggled(helper: GameTestHelper) {
-        val admin = adminWithRegion(helper, "T12FlagEmb")
-        admin.runCommand("rg flag EMBASSY")
-        helper.assertValueEqual(
-            admin.messages.last(),
-            Paint.error("You cannot toggle the embassy flag"),
-            "the embassy-toggle reply",
-        )
-        admin.leave()
-        helper.succeed()
+            helper.assertTrue(RegionFlagsMenu.openMenuOf(resident) != null, "a resident could not open /rg flags")
+            helper.succeed()
+        } finally {
+            resident.leave()
+        }
     }
 
     @GameTest
@@ -93,8 +76,7 @@ class RegionAdminCommandGameTest {
         admin.makeAdmin()
         admin.standAt(helper, 0.0, 1.0, 0.0) // outside every region
         val expectations = listOf(
-            "rg flag PUBLIC" to "You must stand in the region you want to toggle a flag on",
-            "rg flag" to "You must stand in a region to view flags",
+            "rg flags" to "You must stand in the region you want to view flags for",
             "rg bounds 0 100" to "You must stand in the region you want to set bounds for",
             "rg bounds" to "You must stand in a region to view bounds",
         )
@@ -102,31 +84,6 @@ class RegionAdminCommandGameTest {
             admin.runCommand(command)
             helper.assertValueEqual(admin.messages.last(), Paint.error(message), "the reply to /$command")
         }
-        admin.leave()
-        helper.succeed()
-    }
-
-    @GameTest
-    fun flagListShowsEnabledGreenThenDisabledRed(helper: GameTestHelper) {
-        val admin = adminWithRegion(helper, "T12FlagList")
-        admin.runCommand("rg flag NO_SCOREBOARD")
-        admin.runCommand("rg flag PUBLIC")
-        admin.runCommand("rg flag")
-        helper.assertValueEqual(
-            admin.messages.last(),
-            Paint.gray(
-                "Flags: ",
-                Paint.green("NO_SCOREBOARD"), ", ", Paint.green("PUBLIC"), ", ",
-                Paint.red("EMBASSY"), ", ", Paint.red("ENABLE_EXPLOSIONS"), ", ",
-                Paint.red("ADMIN"), ", ", Paint.red("ENABLE_PUBLIC_CONTAINERS"), ", ",
-                Paint.red("DISABLE_GATES"), ", ", Paint.red("ENABLE_FIRE_DAMAGE"), ", ",
-                Paint.red("DISABLE_PLAYER_FALL_DAMAGE"), ", ", Paint.red("ENABLE_PUBLIC_VILLAGER_TRADING"), ", ",
-                Paint.red("DISABLE_PUBLIC_REDSTONE_TRIGGERS"), ", ",
-                Paint.red("DISABLE_WEIGHTED_PRESSURE_PLATES"), ", ", Paint.red("DISABLE_ANIMAL_PROTECTION"), ", ",
-                Paint.red("DISABLE_PVP"),
-            ),
-            "the flag list",
-        )
         admin.leave()
         helper.succeed()
     }

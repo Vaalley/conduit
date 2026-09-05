@@ -5,6 +5,7 @@ import eu.mctraveler.text.Paint
 import java.util.UUID
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.gametest.framework.GameTestHelper
+import net.minecraft.server.players.NameAndId
 
 /**
  * Region membership at the running-server seam (spec story 31): `/rg add` and
@@ -35,18 +36,34 @@ class RegionMembershipGameTest {
     }
 
     @GameTest
-    fun addingAnUnknownPlayerReportsNotFoundBeforeAnyRegionCheck(helper: GameTestHelper) {
-        // Target resolution precedes the command body, so this error wins even
-        // when the sender is standing nowhere near a region.
-        val player = MessageCapturingPlayer.join(helper, "T13AddGone")
-        player.standAt(helper, 0.0, 1.0, 0.0)
-        player.runCommand("rg add Nobody")
+    fun addingATrulyUnknownNameStillResolvesThroughTheVanillaFallbackHere(helper: GameTestHelper) {
+        // Not "not found" any more, and deliberately so: vanilla's own
+        // `GameTestServer` (net.minecraft.gametest.framework.GameTestServer)
+        // swaps in a `MockUserNameToIdResolver` whose `get(String)` always
+        // answers with *something* — a saved entry, or else a freshly
+        // vivified offline uuid — regardless of `resolveOfflineUsers`. A real
+        // (online-mode) production server's own resolver only vivifies like
+        // this when running without Mojang authentication, so there a name
+        // with no real account genuinely still reports "not found"; here, in
+        // this always-vivifying mock, the offline-add fix's third tier
+        // resolves literally any name, which is exactly the behaviour this
+        // pins: the target resolves (and so the command reaches the ordinary
+        // "you must stand in a region" guard) rather than the old chat-only
+        // resolution silently stopping short of this new fallback tier.
+        val alice = MessageCapturingPlayer.join(helper, "T13AddGoneA")
+        val region = createRegion(helper, alice, 0.0 to 0.0, 7.0 to 1.0)
+
+        alice.runCommand("rg add NeverJoinedThisServer")
+
         helper.assertValueEqual(
-            player.messages.last(),
-            Paint.gray("Player ", Paint.red("Nobody"), " not found or is offline"),
-            "the offline-target /rg add reply",
+            alice.messages.last(),
+            Paint.success(
+                Paint.green("NeverJoinedThisServer"), " has been added to ", Paint.green("T13AddGoneA's Place"),
+            ),
+            "the vanilla-fallback /rg add reply",
         )
-        player.leave()
+        helper.assertTrue(region.members.size == 2, "the resolved offline uuid was not added as a member")
+        alice.leave()
         helper.succeed()
     }
 
@@ -98,6 +115,33 @@ class RegionMembershipGameTest {
             "the cached offline /rg add reply",
         )
         helper.assertTrue(region.isResident(bob.uuid), "the known offline player is not a member")
+        alice.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aResidentAddsAPlayerKnownOnlyToVanillasOwnUserCache(helper: GameTestHelper) {
+        // Nobody named T13AddVanB has ever joined this server, so the mod's
+        // own NameCache has never heard of them — the offline-add fix's whole
+        // point is falling further back, to vanilla's own usercache.json-backed
+        // resolver, which knows anyone who has ever joined *any* server run
+        // from this profile cache. Seeding it directly (rather than joining
+        // and leaving a real player) is what isolates that third tier from
+        // the mod's own cache, which the case above already covers.
+        val alice = MessageCapturingPlayer.join(helper, "T13AddVanA")
+        createRegion(helper, alice, 0.0 to 0.0, 7.0 to 1.0)
+        val vanillaOnlyUuid = UUID.fromString("11111111-2222-3333-4444-555555555555")
+        helper.level.server.services().nameToIdCache().add(NameAndId(vanillaOnlyUuid, "T13AddVanB"))
+
+        alice.runCommand("rg add T13AddVanB")
+
+        helper.assertValueEqual(
+            alice.messages.last(),
+            Paint.success(Paint.green("T13AddVanB"), " has been added to ", Paint.green("T13AddVanA's Place")),
+            "the vanilla-cache-only /rg add reply",
+        )
+        val region = checkNotNull(eu.mctraveler.region.RegionTracker.regionOf(alice))
+        helper.assertTrue(region.isResident(vanillaOnlyUuid), "the vanilla-cache-only player is not a member")
         alice.leave()
         helper.succeed()
     }
