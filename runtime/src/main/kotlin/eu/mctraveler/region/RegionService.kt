@@ -142,6 +142,20 @@ class RegionService(private val file: Path) {
     }
 
     /**
+     * Whether [region] is still attached to the live tree — false once it has
+     * gone through [remove] (or was never [add]ed). The region-flags GUI
+     * ([RegionFlagsMenu]) re-checks this at click time rather than holding a
+     * region deleted mid-session for granted: a `Region` object is otherwise
+     * indistinguishable from a live one once detached, since nothing about it
+     * marks it as removed.
+     */
+    fun contains(region: Region): Boolean {
+        fun scan(regions: List<Region>): Boolean =
+            regions.any { it === region || scan(it.subRegions) }
+        return scan(roots)
+    }
+
+    /**
      * Every region whose title or any member's name contains [query]
      * (case-insensitive), in depth-first file order — the `/rg locate` search.
      * [memberName] resolves a member uuid to a name, or null if unknown

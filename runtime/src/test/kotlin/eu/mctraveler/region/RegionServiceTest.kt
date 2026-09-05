@@ -1,6 +1,7 @@
 package eu.mctraveler.region
 
 import com.google.gson.JsonObject
+import eu.mctraveler.MinecraftTestBootstrap
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
@@ -9,6 +10,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 
@@ -22,6 +24,12 @@ import org.junit.jupiter.api.io.TempDir
  * the importer — so storage tests assert raw file text.
  */
 class RegionServiceTest {
+    companion object {
+        @JvmStatic
+        @BeforeAll
+        fun bootstrapMinecraft() = MinecraftTestBootstrap.ensure()
+    }
+
     @TempDir
     lateinit var dir: Path
 
@@ -37,9 +45,11 @@ class RegionServiceTest {
         return service()
     }
 
-    // A regions.json exactly as the Portal wrote it: y bounds omitted when they
-    // are the 320/−64 defaults, present otherwise (and after `members`, where
-    // the Portal's serializer put them), flags and sub-regions only when
+    // A regions.json exactly as the Portal wrote it (predating both `metadata`
+    // and the region-flags GUI rework, so it carries neither `flags-migrated`
+    // nor any new-vocabulary flag): y bounds omitted when they are the
+    // 320/−64 defaults, present otherwise (and after `members`, where the
+    // Portal's serializer put them), flags and sub-regions only when
     // non-empty, 2-space pretty-printing.
     private val legacyFile = """
         {
@@ -89,6 +99,15 @@ class RegionServiceTest {
         }
     """.trimIndent()
 
+    // Every region.migrateLegacy adds to a region that carried none of the old
+    // flags at all — the seeded baseline a brand-new region gets too, in
+    // catalog order (see RegionFlagsTest for the full migration table).
+    private val migratedBaselineFlags = listOf(
+        "SCOREBOARD", "GATES", "DOORS", "TRAPDOORS", "PUBLIC_REDSTONE",
+        "WEIGHTED_PRESSURE_PLATES", "ANIMAL_PROTECTION", "PVP",
+        "MINECARTS", "BOATS", "RIDEABLE", "FALL_DAMAGE",
+    )
+
     // ---- storage ----
 
     @Test
@@ -106,30 +125,86 @@ class RegionServiceTest {
         assertEquals(-64, commons.endY)
         assertEquals("world", commons.world)
         assertEquals(setOf(alice), commons.members)
-        assertEquals(setOf("EMBASSY"), commons.flags)
+        // Migrated on load: EMBASSY passes through unchanged, and the region
+        // gains the same seeded baseline a brand-new region would.
+        assertEquals((listOf("EMBASSY") + migratedBaselineFlags).toSet(), commons.flags)
 
         val sanctum = commons.subRegions.single()
         assertEquals("Inner Sanctum", sanctum.title)
         assertEquals(255, sanctum.startY)
         assertEquals(15, sanctum.endY)
         assertSame(commons, sanctum.parent)
+        assertEquals(migratedBaselineFlags.toSet(), sanctum.flags)
 
         val keep = roots[1]
         assertEquals("last_nether", keep.world)
         assertEquals(setOf(alice, bob), keep.members)
-        assertTrue(keep.flags.isEmpty())
+        assertEquals(migratedBaselineFlags.toSet(), keep.flags)
         assertTrue(keep.subRegions.isEmpty())
     }
 
     @Test
-    fun `saving reproduces the legacy file byte for byte`() {
+    fun `loading a legacy file migrates its flags and marks it migrated on save`() {
+        // The whole point of the flags-migrated marker: a truly legacy file
+        // (no marker) is rewritten with the seeded baseline plus the marker,
+        // rather than reproduced byte for byte — see the next test for the
+        // stable case once that marker is present.
         val service = serviceWith(legacyFile)
         service.save()
-        assertEquals(legacyFile, Files.readString(file()))
+        val saved = Files.readString(file())
+        assertTrue(saved.contains("\"flags-migrated\": true"), "the saved file carries no migration marker")
+        assertTrue(saved.contains("\"GATES\""), "the migrated file carries no seeded GATES flag")
+        assertTrue(!saved.equals(legacyFile), "a legacy file round-tripped byte for byte, which should now be false")
     }
 
     @Test
-    fun `a new region saves with default y bounds omitted and no flags key`() {
+    fun `an already-migrated file round-trips byte for byte and is never migrated again`() {
+        // The regression this guards: without the marker, an admin's explicit
+        // disable of a defaultAllowed flag (GATES removed here) would be put
+        // back on every reload, because "never mentioned" and "explicitly
+        // turned off after migrating" look identical from the flags array
+        // alone once the old flag names are gone.
+        val migratedFile = """
+            {
+              "flags-migrated": true,
+              "regions": {
+                "0": {
+                  "title": "Open Gate Manor",
+                  "start-x": 0,
+                  "start-z": 0,
+                  "end-x": 10,
+                  "end-z": 10,
+                  "world": "world",
+                  "members": [
+                    "11111111-1111-1111-1111-111111111111"
+                  ],
+                  "flags": [
+                    "DOORS",
+                    "TRAPDOORS",
+                    "PUBLIC_REDSTONE",
+                    "WEIGHTED_PRESSURE_PLATES",
+                    "ANIMAL_PROTECTION",
+                    "PVP",
+                    "SCOREBOARD",
+                    "MINECARTS",
+                    "BOATS",
+                    "RIDEABLE",
+                    "FALL_DAMAGE"
+                  ]
+                }
+              }
+            }
+        """.trimIndent()
+        val service = serviceWith(migratedFile)
+        assertTrue("GATES" !in service.roots[0].flags, "precondition: GATES was explicitly disabled")
+
+        service.save()
+
+        assertEquals(migratedFile, Files.readString(file()))
+    }
+
+    @Test
+    fun `a new region saves with default y bounds omitted, no flags key, and the migration marker`() {
         val service = service()
         val region = Region(
             title = "Alice's Place",
@@ -141,6 +216,7 @@ class RegionServiceTest {
 
         val expected = """
             {
+              "flags-migrated": true,
               "regions": {
                 "0": {
                   "title": "Alice's Place",
@@ -164,7 +240,9 @@ class RegionServiceTest {
     // The same schema with the one new optional key: an embassy region as
     // /embassy create writes it. `metadata` sits after `flags`, and the two
     // never meet `sub-regions` in practice — a region cannot be created inside
-    // an embassy, so an embassy never has one.
+    // an embassy, so an embassy never has one. Legacy (no `flags-migrated`
+    // marker), like [legacyFile] — used only for the metadata-parsing test,
+    // which does not care about flags.
     private val embassyFile = """
         {
           "regions": {
@@ -198,11 +276,12 @@ class RegionServiceTest {
 
     @Test
     fun `a region with no metadata writes no metadata key`() {
-        // The whole of deviation 6's promise: legacy entries are untouched.
+        // The whole of deviation 6's promise: an entry that came in with no
+        // metadata key writes none back, migration of its flags notwithstanding.
         val service = serviceWith(legacyFile)
         assertTrue(service.roots.all { it.metadata.isEmpty() })
         service.save()
-        assertEquals(legacyFile, Files.readString(file()))
+        assertTrue(!Files.readString(file()).contains("\"metadata\""), "a metadata key appeared from nowhere")
     }
 
     @Test
@@ -220,17 +299,51 @@ class RegionServiceTest {
     }
 
     @Test
-    fun `saving reproduces a metadata file byte for byte`() {
+    fun `an already-migrated metadata file round-trips byte for byte`() {
         // Including the number literals: "64.0" must not come back as "64".
-        val service = serviceWith(embassyFile)
+        val migratedEmbassyFile = """
+            {
+              "flags-migrated": true,
+              "regions": {
+                "0": {
+                  "title": "Unnamed Embassy",
+                  "start-x": 3,
+                  "start-z": 3,
+                  "end-x": 13,
+                  "end-z": 13,
+                  "world": "embassies",
+                  "members": [
+                    "11111111-1111-1111-1111-111111111111"
+                  ],
+                  "flags": [
+                    "EMBASSY"
+                  ],
+                  "metadata": {
+                    "embassy-destination": {
+                      "x": 123.5,
+                      "y": 64.0,
+                      "z": -87.25,
+                      "yaw": 90.0,
+                      "pitch": 0.0,
+                      "world": "world"
+                    }
+                  }
+                }
+              }
+            }
+        """.trimIndent()
+        val service = serviceWith(migratedEmbassyFile)
         service.save()
-        assertEquals(embassyFile, Files.readString(file()))
+        assertEquals(migratedEmbassyFile, Files.readString(file()))
     }
 
     @Test
     fun `metadata built in memory writes the embassy-destination shape`() {
         // Pins the bytes /embassy create produces — the format ticket 05's
-        // importer has to write for the twenty Nucleus-era embassies.
+        // importer has to write for the twenty Nucleus-era embassies. Built
+        // directly (not through RegionStore.parse), so only the flag this
+        // test explicitly adds is present — no seeded baseline, since nothing
+        // here goes through migration or RegionFlags.seedDefaults.
         val service = service()
         val region = Region(
             title = "Unnamed Embassy",
@@ -249,7 +362,38 @@ class RegionServiceTest {
         }
         service.add(region, parent = null)
 
-        assertEquals(embassyFile, Files.readString(file()))
+        val expected = """
+            {
+              "flags-migrated": true,
+              "regions": {
+                "0": {
+                  "title": "Unnamed Embassy",
+                  "start-x": 3,
+                  "start-z": 3,
+                  "end-x": 13,
+                  "end-z": 13,
+                  "world": "embassies",
+                  "members": [
+                    "11111111-1111-1111-1111-111111111111"
+                  ],
+                  "flags": [
+                    "EMBASSY"
+                  ],
+                  "metadata": {
+                    "embassy-destination": {
+                      "x": 123.5,
+                      "y": 64.0,
+                      "z": -87.25,
+                      "yaw": 90.0,
+                      "pitch": 0.0,
+                      "world": "world"
+                    }
+                  }
+                }
+              }
+            }
+        """.trimIndent()
+        assertEquals(expected, Files.readString(file()))
     }
 
     @Test

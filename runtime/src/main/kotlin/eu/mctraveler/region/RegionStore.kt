@@ -11,16 +11,17 @@ import java.util.UUID
  * pre-proxy plugin's) format:
  *
  * ```
- * { "regions": { "<idx>": { title, start-x, start-z, end-x, end-z, world,
- *   members, start-y? (omitted if 320), end-y? (omitted if −64), flags?,
- *   metadata?: { …free-form JSON }, sub-regions?: { …recursive } } } }
+ * { "flags-migrated": true, "regions": { "<idx>": { title, start-x, start-z,
+ *   end-x, end-z, world, members, start-y? (omitted if 320),
+ *   end-y? (omitted if −64), flags?, metadata?: { …free-form JSON },
+ *   sub-regions?: { …recursive } } } }
  * ```
  *
  * Serialization reproduces the Portal's `JSON.stringify(…, null, 2)` output
  * exactly — key order, 2-space indentation, y defaults omitted, `flags`,
  * `metadata` and `sub-regions` only when non-empty — so a load/save cycle over
- * migrated data is byte-identical. Parsing tolerates omitted y bounds (320/−64
- * defaults) and omitted members/flags/metadata/sub-regions; anything
+ * already-migrated data is byte-identical. Parsing tolerates omitted y bounds
+ * (320/−64 defaults) and omitted members/flags/metadata/sub-regions; anything
  * structurally malformed throws, so a file we could not read is never
  * overwritten.
  *
@@ -28,16 +29,32 @@ import java.util.UUID
  * after `flags` and before `sub-regions`; the two never co-occur in practice,
  * since the only regions carrying metadata are embassies and a region cannot
  * be created inside one.
+ *
+ * `flags-migrated` is the one key neither the Portal nor the pre-rework mod
+ * ever wrote (the region-flags GUI rework). Its absence is how a truly legacy
+ * file is told apart from one already in the new flag vocabulary:
+ * [RegionFlags.migrateLegacy] runs over every region in the file exactly once,
+ * only when this key is missing, and every [serialize] writes it — so a file
+ * this codec has ever saved is never migrated again. Without that guard, an
+ * admin's explicit disable of a `defaultAllowed` flag (removing `GATES`, say)
+ * would be silently put back on every server restart, because "the old flag
+ * was never mentioned" and "this flag was explicitly turned off after
+ * migrating" look identical from the flags array alone.
  */
 internal object RegionStore {
+    private const val FLAGS_MIGRATED_KEY = "flags-migrated"
+
     fun parse(text: String): MutableList<Region> {
         val root = JsonParser.parseString(text).asJsonObject
+        val needsFlagMigration = !root.has(FLAGS_MIGRATED_KEY)
         val regions = root.get("regions") ?: return mutableListOf()
         return regions.asJsonObject.entrySet()
-            .mapTo(mutableListOf()) { (_, data) -> parseRegion(data.asJsonObject, parent = null) }
+            .mapTo(mutableListOf()) { (_, data) ->
+                parseRegion(data.asJsonObject, parent = null, migrate = needsFlagMigration)
+            }
     }
 
-    private fun parseRegion(data: JsonObject, parent: Region?): Region {
+    private fun parseRegion(data: JsonObject, parent: Region?, migrate: Boolean): Region {
         val region = Region(
             title = data.get("title").asString,
             world = data.get("world").asString,
@@ -51,18 +68,19 @@ internal object RegionStore {
         region.parent = parent
         data.get("members")?.asJsonArray?.forEach { region.members.add(UUID.fromString(it.asString)) }
         data.get("flags")?.asJsonArray?.forEach { region.flags.add(it.asString) }
+        if (migrate) RegionFlags.migrateLegacy(region.flags)
         data.get("metadata")?.asJsonObject?.entrySet()?.forEach { (key, value) ->
             region.metadata[key] = value
         }
         data.get("sub-regions")?.asJsonObject?.entrySet()?.forEach { (_, sub) ->
-            region.subRegions.add(parseRegion(sub.asJsonObject, parent = region))
+            region.subRegions.add(parseRegion(sub.asJsonObject, parent = region, migrate = migrate))
         }
         return region
     }
 
     fun serialize(regions: List<Region>): String {
         val out = StringBuilder()
-        out.append("{\n  \"regions\": ")
+        out.append("{\n  \"$FLAGS_MIGRATED_KEY\": true,\n  \"regions\": ")
         writeIndexedObject(out, regions, indent = "  ") { region, indent ->
             writeRegion(out, region, indent)
         }

@@ -3,6 +3,7 @@ package eu.mctraveler.embassy
 import eu.mctraveler.MCTraveler
 import eu.mctraveler.reloadable
 import eu.mctraveler.region.Region
+import eu.mctraveler.region.RegionFlags
 import eu.mctraveler.region.RegionWorlds
 import eu.mctraveler.region.RegionsFeature
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback
@@ -45,9 +46,11 @@ object EmbassiesFeature {
     /**
      * The whole dimension as a region, for every position no real embassy
      * covers: protection turns everyone away from the void (nobody is a
-     * member), and `NO_SCOREBOARD` keeps the sidebar off the screen between
-     * plots. In memory only — it is never in the region tree, so no save can
-     * write it to `regions.json`.
+     * member), and leaving `SCOREBOARD` out keeps the sidebar off the screen
+     * between plots. In memory only — it is never in the region tree, so no
+     * save can write it to `regions.json`, and it deliberately never goes
+     * through [RegionFlags.seedDefaults]: this hand-built flag set is the
+     * whole of what it needs.
      *
      * Its corners are Nucleus's: 0/0, never read, because the guard hands this
      * region back by position rather than by containment.
@@ -59,7 +62,7 @@ object EmbassiesFeature {
         startZ = 0,
         endX = 0,
         endZ = 0,
-    ).also { it.flags.add("NO_SCOREBOARD") }
+    )
 
     /** Whether [level] is the embassies dimension. */
     fun isEmbassies(level: Level): Boolean = level.dimension() == DIMENSION

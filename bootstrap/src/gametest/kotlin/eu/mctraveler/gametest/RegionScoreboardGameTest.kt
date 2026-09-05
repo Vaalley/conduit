@@ -300,18 +300,22 @@ class RegionScoreboardGameTest {
         val bob = MessageCapturingPlayer.join(helper, "T13SbFlagB")
         createRegion(helper, alice, 0.0 to 0.0, 3.0 to 2.0)
         val quiet = createRegion(helper, bob, 5.0 to 0.0, 8.0 to 2.0)
-        quiet.flags.add("NO_SCOREBOARD")
+        quiet.flags.remove("SCOREBOARD")
         RegionsFeature.requireService().save()
         val view = SidebarView(alice)
 
         helper.runAfterDelay(2) {
             helper.assertTrue(view.refresh().visible, "no sidebar in the ordinary region")
-            alice.standAt(helper, 6.0, 1.0, 1.0) // into the NO_SCOREBOARD region
+            alice.standAt(helper, 6.0, 1.0, 1.0) // into the region without SCOREBOARD
         }
         helper.runAfterDelay(4) {
             view.refresh()
-            helper.assertFalse(view.visible, "a NO_SCOREBOARD region showed a sidebar")
-            helper.assertValueEqual(view.lines, emptyList<Component>(), "the sidebar lines in a NO_SCOREBOARD region")
+            helper.assertFalse(view.visible, "a region without SCOREBOARD showed a sidebar")
+            helper.assertValueEqual(
+                view.lines,
+                emptyList<Component>(),
+                "the sidebar lines in a region without SCOREBOARD",
+            )
             alice.leave()
             bob.leave()
             helper.succeed()
@@ -319,7 +323,7 @@ class RegionScoreboardGameTest {
     }
 
     @GameTest
-    fun togglingNoScoreboardTakesTheSidebarAwayAndGivesItBack(helper: GameTestHelper) {
+    fun togglingScoreboardTakesTheSidebarAwayAndGivesItBack(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T13SbTogA")
         val admin = MessageCapturingPlayer.join(helper, "T13SbTogOp")
         createRegion(helper, alice, 0.0 to 0.0, 3.0 to 2.0)
@@ -328,15 +332,15 @@ class RegionScoreboardGameTest {
         val view = SidebarView(alice)
 
         helper.runAfterDelay(2) {
-            helper.assertTrue(view.refresh().visible, "no sidebar before the flag was set")
+            helper.assertTrue(view.refresh().visible, "no sidebar before the flag was cleared")
 
-            admin.runCommand("rg flag NO_SCOREBOARD")
+            admin.setFlag("SCOREBOARD", on = false)
             view.refresh()
-            helper.assertFalse(view.visible, "the sidebar survived NO_SCOREBOARD being set")
+            helper.assertFalse(view.visible, "the sidebar survived SCOREBOARD being cleared")
 
-            admin.runCommand("rg flag NO_SCOREBOARD")
+            admin.setFlag("SCOREBOARD", on = true)
             view.refresh()
-            helper.assertTrue(view.visible, "the sidebar did not come back when NO_SCOREBOARD was cleared")
+            helper.assertTrue(view.visible, "the sidebar did not come back when SCOREBOARD was set again")
             helper.assertValueEqual(
                 view.lines,
                 listOf(separator, residents, Paint.white("T13SbTogA")),

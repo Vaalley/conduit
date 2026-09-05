@@ -200,7 +200,7 @@ class EmbassiesGameTest {
         }
 
         helper.assertValueEqual(region.title, "Embassies World", "the region covering the embassies void")
-        helper.assertTrue("NO_SCOREBOARD" in region.flags, "the world region does not fly NO_SCOREBOARD")
+        helper.assertFalse("SCOREBOARD" in region.flags, "the world region flies SCOREBOARD; its sidebar should be hidden")
         helper.assertTrue(region.members.isEmpty(), "the world region has members; nobody may build in the void")
         helper.assertFalse(region in service.roots, "the world region was added to the live region tree")
 

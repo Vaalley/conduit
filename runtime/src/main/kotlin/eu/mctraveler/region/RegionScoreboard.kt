@@ -59,11 +59,11 @@ object RegionScoreboard {
 
     /**
      * Draws [region]'s board for [player] — on entry and on every later change
-     * to what it says. A region flagged `NO_SCOREBOARD` draws nothing and takes
+     * to what it says. A region without `SCOREBOARD` draws nothing and takes
      * any previous board away.
      */
     fun draw(player: ServerPlayer, region: Region) {
-        if ("NO_SCOREBOARD" in region.flags) {
+        if ("SCOREBOARD" !in region.flags) {
             hide(player)
             return
         }
