@@ -22,7 +22,15 @@ import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.network.chat.Component
 import net.minecraft.network.protocol.Packet
+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket
+import net.minecraft.network.protocol.game.ClientboundContainerSetContentPacket
+import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket
+import net.minecraft.network.protocol.game.ClientboundGameEventPacket
+import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket
+import net.minecraft.network.protocol.game.ClientboundSetCursorItemPacket
+import net.minecraft.network.protocol.game.ClientboundSetPlayerInventoryPacket
+import net.minecraft.network.protocol.game.ClientboundSetScorePacket
 import net.minecraft.network.protocol.status.ServerStatus
 import net.minecraft.resources.ResourceKey
 import net.minecraft.server.MinecraftServer
@@ -66,15 +74,17 @@ object MixinHooksImpl : MixinHooks {
 
     override fun tabDisplayName(player: ServerPlayer): Component = TabListFeature.tabDisplayName(player)
 
-    override fun maskSpectators(
-        viewer: ServerPlayer,
-        packet: ClientboundPlayerInfoUpdatePacket,
-    ): ClientboundPlayerInfoUpdatePacket? = SpectatorVisibility.maskFor(viewer, packet)
-
-    override fun maskHealthScore(
-        viewer: ServerPlayer,
-        packet: net.minecraft.network.protocol.game.ClientboundSetScorePacket,
-    ): net.minecraft.network.protocol.game.ClientboundSetScorePacket? = SpectatorVisibility.maskScore(viewer, packet)
+    override fun packetForViewer(viewer: ServerPlayer, packet: Packet<*>): Packet<*> = when (packet) {
+        is ClientboundPlayerInfoUpdatePacket -> SpectatorVisibility.maskFor(viewer, packet) ?: packet
+        is ClientboundSetScorePacket -> SpectatorVisibility.maskScore(viewer, packet) ?: packet
+        is ClientboundContainerSetSlotPacket, is ClientboundContainerSetContentPacket,
+        is ClientboundSetCursorItemPacket, is ClientboundSetPlayerInventoryPacket,
+        -> CrystalDamageDisplay.forViewer(viewer, packet)
+        is ClientboundGameEventPacket -> NoRain.forViewer(viewer, packet)
+        is ClientboundBlockEntityDataPacket, is ClientboundLevelChunkWithLightPacket ->
+            eu.mctraveler.text.SignNames.personalizeSignsForViewer(viewer, packet)
+        else -> packet
+    }
 
     override fun isVanishedFromViewer(target: ServerPlayer, viewer: ServerPlayer): Boolean =
         eu.mctraveler.vanish.VanishFeature.isHiddenFrom(target, viewer)
@@ -87,9 +97,6 @@ object MixinHooksImpl : MixinHooks {
         } else {
             null
         }
-
-    override fun personalizeSignsForViewer(viewer: ServerPlayer, packet: Packet<*>): Packet<*> =
-        eu.mctraveler.text.SignNames.personalizeSignsForViewer(viewer, packet)
 
     override fun onSignLoadedOrChanged(
         level: Level,
@@ -113,12 +120,6 @@ object MixinHooksImpl : MixinHooks {
         craftSlots: CraftingContainer,
         resultSlots: ResultContainer,
     ) = CrystalCrafting.guard(menu, player, craftSlots, resultSlots)
-
-    override fun crystalDamageForViewer(viewer: ServerPlayer, packet: Packet<*>): Packet<*> =
-        CrystalDamageDisplay.forViewer(viewer, packet)
-
-    override fun weatherForViewer(viewer: ServerPlayer, packet: Packet<*>): Packet<*> =
-        NoRain.forViewer(viewer, packet)
 
     override fun isModOwnedMenu(menu: AbstractContainerMenu): Boolean = RegionProtection.isModOwnedMenu(menu)
     override fun isPersonalEnderChestMenu(menu: AbstractContainerMenu): Boolean =

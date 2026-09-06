@@ -2,6 +2,7 @@ package eu.mctraveler.persistence
 
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.Locale
 import java.util.UUID
 
 /**
@@ -16,6 +17,9 @@ import java.util.UUID
  * All access is expected from the server thread.
  */
 class NameCache(private val file: Path) {
+    /** Lowercase username -> the uuid key that most recently recorded it. */
+    private val latestOwner = HashMap<String, String>()
+
     private val names: LinkedHashMap<String, String> = load()
 
     /** The last username seen for [uuid], or null if never seen. */
@@ -23,22 +27,28 @@ class NameCache(private val file: Path) {
 
     /** The most recently recorded UUID for [username], or null if never seen. */
     fun uuidFor(username: String): UUID? =
-        names.entries.lastOrNull { (_, cachedName) -> cachedName.equals(username, ignoreCase = true) }
-            ?.key
-            ?.let(UUID::fromString)
+        latestOwner[username.lowercase(Locale.ROOT)]?.let(UUID::fromString)
 
     /** Remember [username] as [uuid]'s name, replacing any previous name. */
     fun record(uuid: UUID, username: String) {
         val key = uuid.toString()
-        val latestMatchingKey = names.entries.lastOrNull { (_, cachedName) ->
-            cachedName.equals(username, ignoreCase = true)
-        }?.key
-        if (names[key] == username && latestMatchingKey == key) return
+        val lower = username.lowercase(Locale.ROOT)
+        if (names[key] == username && latestOwner[lower] == key) return
 
         // LinkedHashMap iteration order records the latest observed owner of a
         // name, while preserving historical UUID -> name display data.
+        val old = names[key]
         names.remove(key)
         names[key] = username
+        latestOwner[lower] = key
+        // A rename leaves the old name's owner pointing at this uuid; re-seat
+        // it on whoever recorded that name most recently (renames are rare,
+        // so the one scan there is fine).
+        if (old != null && !old.equals(username, ignoreCase = true)) {
+            val oldLower = old.lowercase(Locale.ROOT)
+            val owner = names.entries.lastOrNull { it.value.equals(old, ignoreCase = true) }?.key
+            if (owner == null) latestOwner.remove(oldLower) else latestOwner[oldLower] = owner
+        }
         save()
     }
 
@@ -46,7 +56,10 @@ class NameCache(private val file: Path) {
         if (Files.notExists(file)) return LinkedHashMap()
         val entries = PortalJson.parse(Files.readString(file))
         return entries.entries.associateTo(LinkedHashMap()) { (uuid, field) ->
-            uuid to PortalJson.decodeString(field.rawValue)
+            val name = PortalJson.decodeString(field.rawValue)
+            // In file order, so the last writer wins each name.
+            latestOwner[name.lowercase(Locale.ROOT)] = uuid
+            uuid to name
         }
     }
 

@@ -58,6 +58,13 @@ interface PlayerStore {
     fun setCrystalNextRegenAt(uuid: UUID, playTimeTicks: Int?)
 
     /**
+     * Sets energy and the pending recharge together in one write; a null
+     * [nextRegenAt] clears the field (see [setCrystalNextRegenAt]). No write at
+     * all when neither value changes.
+     */
+    fun setCrystalState(uuid: UUID, energy: Int, nextRegenAt: Int?)
+
+    /**
      * Whether [uuid] has a record at all — the "has this account ever been
      * seen before" signal, independent of any one field. [eu.mctraveler.rank.RankFeature]
      * uses it to tell a genuinely brand-new player (welcomed as a Newbie) apart

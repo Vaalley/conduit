@@ -18,6 +18,8 @@ data class ChatMessage(
 	val content: String,
 )
 
+private val LINE_BREAKS = Regex("[\r\n]")
+
 object ChatBridge {
 	private const val MAX_MESSAGES = 256
 
@@ -53,7 +55,7 @@ object ChatBridge {
 
 private fun sanitize(content: Component): String {
 	return content.string
-		.replace(Regex("[\r\n]"), " ")
+		.replace(LINE_BREAKS, " ")
 		.replace("§", "")
 		.trim()
 }

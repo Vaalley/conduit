@@ -45,6 +45,7 @@ object MCTraveler {
 
     fun start() {
         TabListFeature.register()
+        eu.mctraveler.tablist.SpectatorVisibility.register()
         PrivateMessages.register()
         ChatFeature.register()
         GeoIpFeature.register()

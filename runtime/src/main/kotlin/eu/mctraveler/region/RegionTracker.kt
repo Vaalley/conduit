@@ -8,18 +8,22 @@ import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents
+import net.minecraft.resources.ResourceKey
 import net.minecraft.server.MinecraftServer
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.level.GameType
+import net.minecraft.world.level.Level
 
 /**
  * Which region each player is standing in, the sidebar that follows from it,
  * and the client-facing Adventure mode used while a survival player stands in
  * land they cannot modify.
  *
- * The answer is recomputed from every player's live position once per server
- * tick, so entering and leaving a region are noticed however the player got
- * there — walking, teleporting, or a region appearing around them. [refresh]
+ * The answer is checked against every player's live position once per server
+ * tick — the region tree is only re-queried when the player's block position
+ * or dimension changed, or the tree itself did — so entering and leaving a
+ * region are noticed however the player got there — walking, teleporting, or
+ * a region appearing around them. [refresh]
  * does one player on demand: the seam arrivals worth reacting to within the
  * same tick hang off portals, Travel, respawns, and membership changes.
  */
@@ -30,6 +34,17 @@ object RegionTracker {
 
     /** Players whose Survival -> Adventure transition this tracker owns. */
     private val forcedAdventure = HashSet<UUID>()
+
+    /** The block position and dimension a player's last region lookup was for. */
+    private class Standing(
+        val dimension: ResourceKey<Level>,
+        val x: Int,
+        val y: Int,
+        val z: Int,
+        val region: Region?,
+    )
+
+    private val standing = HashMap<UUID, Standing>()
 
     fun register() {
         ServerTickEvents.END_SERVER_TICK.reloadable.register { server ->
@@ -54,9 +69,15 @@ object RegionTracker {
         ServerLifecycleEvents.SERVER_STOPPING.reloadable.register { server ->
             for (player in server.playerList.players) restoreGameMode(player)
         }
+        // Region mutations can put a stationary player in a different region
+        // without their position ever changing: drop every cached standing.
+        ServerLifecycleEvents.SERVER_STARTED.reloadable.register {
+            RegionsFeature.requireService().onChange { standing.clear() }
+        }
         ServerLifecycleEvents.SERVER_STOPPED.reloadable.register {
             inside.clear()
             forcedAdventure.clear()
+            standing.clear()
             RegionScoreboard.forgetAll()
         }
     }
@@ -64,12 +85,16 @@ object RegionTracker {
     /** The region [player] is standing in right now, from their live position. */
     fun regionOf(player: ServerPlayer): Region? {
         val pos = player.position()
-        return RegionsFeature.regionAt(
-            RegionWorlds.legacyName(player.level().dimension()),
-            floor(pos.x).toInt(),
-            floor(pos.y).toInt(),
-            floor(pos.z).toInt(),
-        )
+        val dimension = player.level().dimension()
+        val x = floor(pos.x).toInt()
+        val y = floor(pos.y).toInt()
+        val z = floor(pos.z).toInt()
+        standing[player.uuid]?.let {
+            if (it.dimension == dimension && it.x == x && it.y == y && it.z == z) return it.region
+        }
+        val region = RegionsFeature.regionAt(RegionWorlds.legacyName(dimension), x, y, z)
+        standing[player.uuid] = Standing(dimension, x, y, z, region)
+        return region
     }
 
     /** Brings [player]'s mode and sidebar in line with where they now are. */
@@ -96,6 +121,7 @@ object RegionTracker {
 
     /** Recomputes every live player's mode and sidebar after the region tree changed. */
     fun afterRemoval(server: MinecraftServer) {
+        standing.clear()
         for (player in server.playerList.players) refresh(player)
     }
 
@@ -110,6 +136,7 @@ object RegionTracker {
     fun forget(player: ServerPlayer) {
         restoreGameMode(player)
         inside.remove(player.uuid)
+        standing.remove(player.uuid)
         RegionScoreboard.forget(player.uuid)
     }
 

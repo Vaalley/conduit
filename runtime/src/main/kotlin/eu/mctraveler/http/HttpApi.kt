@@ -39,6 +39,7 @@ object HttpApi {
     private const val MAX_BROADCAST_LENGTH = 256
     private const val MAX_SENDER_LENGTH = 32
 
+    private val LINE_BREAKS = Regex("[\r\n]")
     private val gson = GsonBuilder().serializeNulls().create()
     private val joinedAt = ConcurrentHashMap<UUID, Long>()
 
@@ -265,7 +266,7 @@ object HttpApi {
 
     private fun sanitize(text: String, maxLength: Int): String {
         return text
-            .replace(Regex("[\r\n]"), " ")
+            .replace(LINE_BREAKS, " ")
             .replace("§", "")
             .take(maxLength)
             .trim()

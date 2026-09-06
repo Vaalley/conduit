@@ -34,7 +34,7 @@ import net.minecraft.world.level.block.entity.SignText
  * unambiguous literal `<name>`.
  *
  * The rewrite happens on the way out, at the one seam that knows both the packet
- * and its recipient ([eu.mctraveler.mixin.SignNameDisplayMixin]): every sign
+ * and its recipient ([eu.mctraveler.mixin.OutboundPacketMixin]): every sign
  * block-entity packet leaves wearing that viewer's name, and the stored sign is
  * never touched.
  *
@@ -158,6 +158,7 @@ object SignNames {
     fun personalizeSignsForViewer(viewer: ServerPlayer, packet: Packet<*>): Packet<*> {
         when (packet) {
             is ClientboundBlockEntityDataPacket -> {
+                if (tokenChunks.isEmpty()) return packet
                 if (!isSignType(packet.type)) return packet
                 val sign = viewer.level().getBlockEntity(packet.pos) as? SignBlockEntity ?: return packet
                 return personalizedPacket(sign, viewer) ?: packet

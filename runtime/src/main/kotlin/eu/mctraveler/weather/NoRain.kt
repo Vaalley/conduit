@@ -19,7 +19,7 @@ import java.util.UUID
  * The command changes no [net.minecraft.server.level.ServerLevel] weather state: it only
  * substitutes the weather packets sent to a player who opted in. The outgoing packet seam
  * is the only place that knows both the packet and its recipient, so
- * [eu.mctraveler.mixin.NoRainWeatherMixin] delegates the actual substitution to this
+ * [eu.mctraveler.mixin.OutboundPacketMixin] delegates the actual substitution to this
  * object. State is in-memory and session-scoped.
  */
 object NoRain {

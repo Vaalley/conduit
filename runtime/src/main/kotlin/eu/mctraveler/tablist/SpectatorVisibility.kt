@@ -2,8 +2,11 @@ package eu.mctraveler.tablist
 
 import eu.mctraveler.mixin.ClientboundPlayerInfoUpdatePacketAccessor
 import eu.mctraveler.region.RegionsFeature
+import eu.mctraveler.reloadable
 import eu.mctraveler.vanish.VanishFeature
 import kotlin.math.roundToInt
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket
 import net.minecraft.network.protocol.game.ClientboundSetScorePacket
 import net.minecraft.server.level.ServerPlayer
@@ -16,8 +19,8 @@ import net.minecraft.world.level.GameType
  * exactly when an admin is spectating them. Vanilla builds one identical packet (from the
  * live `GameType`) and broadcasts it unchanged to every connection, so hiding the tell from
  * non-admins means substituting a different packet for
- * their connection specifically — [SpectatorVisibilityMixin][eu.mctraveler.mixin
- * .SpectatorVisibilityMixin] does that per outgoing packet; this object decides *what* to
+ * their connection specifically — [OutboundPacketMixin][eu.mctraveler.mixin
+ * .OutboundPacketMixin] does that per outgoing packet; this object decides *what* to
  * send.
  *
  * Two independent things get masked, since Creative and Spectator each have their own tell:
@@ -45,6 +48,26 @@ import net.minecraft.world.level.GameType
  * real Mixin-generated setter, not reflection.
  */
 object SpectatorVisibility {
+
+    /**
+     * The names of online players in Spectator or Creative — the owners
+     * [maskScore] may have to mask a health score for. Refreshed once per tick,
+     * so a gamemode change is masked from the next tick on.
+     */
+    private var maskedOwners: Set<String> = emptySet()
+
+    fun register() {
+        ServerTickEvents.START_SERVER_TICK.reloadable.register { server ->
+            val masked = server.playerList.players
+                .filter {
+                    val mode = it.gameMode.gameModeForPlayer
+                    mode == GameType.SPECTATOR || mode == GameType.CREATIVE
+                }
+                .mapTo(HashSet()) { it.gameProfile.name }
+            maskedOwners = if (masked.isEmpty()) emptySet() else masked
+        }
+        ServerLifecycleEvents.SERVER_STOPPED.reloadable.register { maskedOwners = emptySet() }
+    }
 
     /**
      * A copy of [packet] with every entry belonging to someone other than [viewer] masked
@@ -104,6 +127,15 @@ object SpectatorVisibility {
     @JvmStatic
     fun maskScore(viewer: ServerPlayer, packet: ClientboundSetScorePacket): ClientboundSetScorePacket? {
         if (packet.objectiveName() != TabListFeature.HEALTH_OBJECTIVE) return null
+        // Fast path: the per-tick [maskedOwners] refresh answers owners who were
+        // in a masked mode then; anyone else is checked live so a mid-tick
+        // gamemode change is never missed.
+        val owner = packet.owner()
+        if (owner !in maskedOwners) {
+            val live = viewer.level().server.playerList.getPlayerByName(owner) ?: return null
+            val liveMode = live.gameMode.gameModeForPlayer
+            if (liveMode != GameType.SPECTATOR && liveMode != GameType.CREATIVE) return null
+        }
         if (RegionsFeature.isAdmin(viewer)) return null
         val subject = viewer.level().server.playerList.getPlayerByName(packet.owner()) ?: return null
         if (subject === viewer) return null
