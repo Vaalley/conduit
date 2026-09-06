@@ -114,15 +114,12 @@ object TabListFeature {
      * Footer: `\n<gray "          play.mctraveler.eu          ">\n<darkGray "TPS: "><yellow tps>`
      * (10 spaces around the address), the [tps] rendered to one decimal.
      */
-    fun footer(tps: Double): Component = footer(String.format(Locale.ROOT, "%.1f", tps))
-
-    /** [footer] with the TPS text already rendered. */
-    fun footer(tpsText: String): Component = Paint(
+    fun footer(tps: Double): Component = Paint(
         "\n",
         Paint.gray("          play.mctraveler.eu          "),
         "\n",
         Paint.darkGray("TPS: "),
-        Paint.yellow(tpsText),
+        Paint.yellow(String.format(Locale.ROOT, "%.1f", tps)),
     )
 
     /**

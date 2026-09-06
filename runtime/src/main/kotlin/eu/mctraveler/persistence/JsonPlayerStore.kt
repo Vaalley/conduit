@@ -120,13 +120,22 @@ class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
         persist(uuid, record)
     }
 
-    /** Rewrites [uuid]'s file from [record] and caches it under the new stat. */
+    /**
+     * Rewrites [uuid]'s file from [record] and caches it under the new stat. On
+     * any failure the cache entry is dropped: [record] may already carry a
+     * mutation that never reached disk, so serving it afterwards would lie.
+     */
     private fun persist(uuid: UUID, record: LinkedHashMap<String, PortalJson.Field>) {
-        Files.createDirectories(playersDir)
-        val file = fileFor(uuid)
-        Files.writeString(file, PortalJson.emit(record.values))
-        val attrs = Files.readAttributes(file, BasicFileAttributes::class.java)
-        cache[uuid] = Cached(attrs.size(), attrs.lastModifiedTime(), record)
+        try {
+            Files.createDirectories(playersDir)
+            val file = fileFor(uuid)
+            Files.writeString(file, PortalJson.emit(record.values))
+            val attrs = Files.readAttributes(file, BasicFileAttributes::class.java)
+            cache[uuid] = Cached(attrs.size(), attrs.lastModifiedTime(), record)
+        } catch (e: Exception) {
+            cache.remove(uuid)
+            throw e
+        }
     }
 
     /** A parsed record and the file stat it was read under. */
