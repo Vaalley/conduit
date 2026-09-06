@@ -62,6 +62,87 @@ class RegionImportTest {
         }
     """.trimIndent()
 
+    private val migratedFile = """
+        {
+          "flags-migrated": true,
+          "regions": {
+            "0": {
+              "title": "Spawn Town",
+              "start-x": -10,
+              "start-z": -10,
+              "end-x": 10,
+              "end-z": 10,
+              "world": "world",
+              "members": [
+                "069a79f4-44e9-4726-a5be-fca90e38aaf5"
+              ],
+              "flags": [
+                "SCOREBOARD",
+                "GATES",
+                "DOORS",
+                "TRAPDOORS",
+                "FALL_DAMAGE",
+                "PUBLIC_REDSTONE",
+                "WEIGHTED_PRESSURE_PLATES",
+                "ANIMAL_PROTECTION",
+                "PVP",
+                "MINECARTS",
+                "BOATS",
+                "RIDEABLE"
+              ],
+              "sub-regions": {
+                "0": {
+                  "title": "Vault",
+                  "start-x": -2,
+                  "start-z": -2,
+                  "end-x": 2,
+                  "end-z": 2,
+                  "world": "world",
+                  "members": [],
+                  "flags": [
+                    "SCOREBOARD",
+                    "GATES",
+                    "DOORS",
+                    "TRAPDOORS",
+                    "FALL_DAMAGE",
+                    "PUBLIC_REDSTONE",
+                    "WEIGHTED_PRESSURE_PLATES",
+                    "ANIMAL_PROTECTION",
+                    "PVP",
+                    "MINECARTS",
+                    "BOATS",
+                    "RIDEABLE"
+                  ]
+                }
+              }
+            },
+            "1": {
+              "title": "Far Outpost",
+              "start-x": 500,
+              "start-z": 500,
+              "end-x": 520,
+              "end-z": 520,
+              "world": "last_nether",
+              "members": [],
+              "flags": [
+                "SCOREBOARD",
+                "GATES",
+                "DOORS",
+                "TRAPDOORS",
+                "FALL_DAMAGE",
+                "PUBLIC_REDSTONE",
+                "WEIGHTED_PRESSURE_PLATES",
+                "ANIMAL_PROTECTION",
+                "PVP",
+                "MINECARTS",
+                "BOATS",
+                "RIDEABLE"
+              ]
+            }
+          }
+        }
+    """.trimIndent()
+
     @Test
     fun `every world string the Portal wrote names a dimension the migration writes`() {
         assertEquals(WorldLayout.PRIMARY.dimension(DimensionRole.OVERWORLD), RegionImport.dimensionOf("world"))
@@ -79,7 +160,7 @@ class RegionImportTest {
 
     @Test
     fun `a migrated regions file is exactly what the live region store keeps`() {
-        assertEquals(legacyFile, RegionImport.migrate(legacyFile))
+        assertEquals(migratedFile, RegionImport.migrate(legacyFile))
     }
 
     @Test

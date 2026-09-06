@@ -89,13 +89,12 @@ class EmbassyImportTest {
     }
 
     @Test
-    fun `the regions already in the target come through byte for byte`() {
-        val before = Files.readString(nucleus.regionsFile)
-
+    fun `the regions already in the target receive migrated defaults`() {
         import()
 
-        // Everything up to and including the last existing region's closing brace.
-        assertTrue(Files.readString(nucleus.regionsFile).startsWith(before.removeSuffix("\n  }\n}")))
+        val expectedExistingRegion = NucleusDeploymentFixture.EXPECTED_REGIONS
+            .substringBefore("                \"1\":")
+        assertTrue(Files.readString(nucleus.regionsFile).startsWith(expectedExistingRegion))
     }
 
     @Test

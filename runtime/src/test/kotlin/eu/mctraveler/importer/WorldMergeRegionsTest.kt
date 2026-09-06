@@ -69,11 +69,11 @@ class WorldMergeRegionsTest {
         return requireNotNull(find(swept())) { "no region titled \"$title\" survived the merge" }
     }
 
-    // A regions.json exactly as the Portal's serializer wrote it, holding one of
-    // everything the sweep has to tell apart: a Region already in Primary, a
-    // Secondary Region with a sub-region and non-default y bounds, a Secondary
-    // nether Region whose corners were captured in the un-normalised order, and
-    // an Embassy whose saved destination names Secondary's overworld.
+    // A legacy regions.json exactly as the Portal's serializer wrote it, holding
+    // one of everything the sweep has to tell apart: a Region already in
+    // Primary, a Secondary Region with a sub-region and non-default y bounds, a
+    // Secondary nether Region whose corners were captured in the un-normalised
+    // order, and an Embassy whose saved destination names Secondary's overworld.
     private val legacyFile = """
         {
           "regions": {
@@ -154,7 +154,7 @@ class WorldMergeRegionsTest {
     // ---- the file the server boots from -------------------------------------
 
     @Test
-    fun `the swept file is the legacy file with Secondary moved and nothing else touched`() {
+    fun `the swept file applies flag migration with Secondary moved`() {
         save.withRegions(legacyFile)
 
         merge()
@@ -162,6 +162,7 @@ class WorldMergeRegionsTest {
         assertEquals(
             """
             {
+              "flags-migrated": true,
               "regions": {
                 "0": {
                   "title": "Spawn Commons",
@@ -172,6 +173,20 @@ class WorldMergeRegionsTest {
                   "world": "world",
                   "members": [
                     "11111111-1111-1111-1111-111111111111"
+                  ],
+                  "flags": [
+                    "SCOREBOARD",
+                    "GATES",
+                    "DOORS",
+                    "TRAPDOORS",
+                    "FALL_DAMAGE",
+                    "PUBLIC_REDSTONE",
+                    "WEIGHTED_PRESSURE_PLATES",
+                    "ANIMAL_PROTECTION",
+                    "PVP",
+                    "MINECARTS",
+                    "BOATS",
+                    "RIDEABLE"
                   ]
                 },
                 "1": {
@@ -186,6 +201,20 @@ class WorldMergeRegionsTest {
                   ],
                   "start-y": 200,
                   "end-y": 40,
+                  "flags": [
+                    "SCOREBOARD",
+                    "GATES",
+                    "DOORS",
+                    "TRAPDOORS",
+                    "FALL_DAMAGE",
+                    "PUBLIC_REDSTONE",
+                    "WEIGHTED_PRESSURE_PLATES",
+                    "ANIMAL_PROTECTION",
+                    "PVP",
+                    "MINECARTS",
+                    "BOATS",
+                    "RIDEABLE"
+                  ],
                   "sub-regions": {
                     "0": {
                       "title": "Harbour Vault",
@@ -196,6 +225,20 @@ class WorldMergeRegionsTest {
                       "world": "world",
                       "members": [
                         "22222222-2222-2222-2222-222222222222"
+                      ],
+                      "flags": [
+                        "SCOREBOARD",
+                        "GATES",
+                        "DOORS",
+                        "TRAPDOORS",
+                        "FALL_DAMAGE",
+                        "PUBLIC_REDSTONE",
+                        "WEIGHTED_PRESSURE_PLATES",
+                        "ANIMAL_PROTECTION",
+                        "PVP",
+                        "MINECARTS",
+                        "BOATS",
+                        "RIDEABLE"
                       ]
                     }
                   }
@@ -207,7 +250,21 @@ class WorldMergeRegionsTest {
                   "end-x": 976,
                   "end-z": 64,
                   "world": "world_nether",
-                  "members": []
+                  "members": [],
+                  "flags": [
+                    "SCOREBOARD",
+                    "GATES",
+                    "DOORS",
+                    "TRAPDOORS",
+                    "FALL_DAMAGE",
+                    "PUBLIC_REDSTONE",
+                    "WEIGHTED_PRESSURE_PLATES",
+                    "ANIMAL_PROTECTION",
+                    "PVP",
+                    "MINECARTS",
+                    "BOATS",
+                    "RIDEABLE"
+                  ]
                 },
                 "3": {
                   "title": "Ambassador Plot",
@@ -220,7 +277,19 @@ class WorldMergeRegionsTest {
                     "11111111-1111-1111-1111-111111111111"
                   ],
                   "flags": [
-                    "EMBASSY"
+                    "EMBASSY",
+                    "SCOREBOARD",
+                    "GATES",
+                    "DOORS",
+                    "TRAPDOORS",
+                    "FALL_DAMAGE",
+                    "PUBLIC_REDSTONE",
+                    "WEIGHTED_PRESSURE_PLATES",
+                    "ANIMAL_PROTECTION",
+                    "PVP",
+                    "MINECARTS",
+                    "BOATS",
+                    "RIDEABLE"
                   ],
                   "metadata": {
                     "embassy-destination": {
@@ -246,12 +315,13 @@ class WorldMergeRegionsTest {
 
         merge()
 
-        // The bytes the Portal wrote, still exactly as it wrote them — indentation,
-        // key order and all — inside a file the merge otherwise rewrote.
+        // The migrated Primary Region remains first, with its indentation and
+        // key order preserved inside the file the merge otherwise rewrote.
         assertTrue(
             save.regionsJson().startsWith(
                 """
                 {
+                  "flags-migrated": true,
                   "regions": {
                     "0": {
                       "title": "Spawn Commons",
@@ -262,6 +332,20 @@ class WorldMergeRegionsTest {
                       "world": "world",
                       "members": [
                         "11111111-1111-1111-1111-111111111111"
+                      ],
+                      "flags": [
+                        "SCOREBOARD",
+                        "GATES",
+                        "DOORS",
+                        "TRAPDOORS",
+                        "FALL_DAMAGE",
+                        "PUBLIC_REDSTONE",
+                        "WEIGHTED_PRESSURE_PLATES",
+                        "ANIMAL_PROTECTION",
+                        "PVP",
+                        "MINECARTS",
+                        "BOATS",
+                        "RIDEABLE"
                       ]
                     },
                 """.trimIndent(),
@@ -368,7 +452,24 @@ class WorldMergeRegionsTest {
             setOf("22222222-2222-2222-2222-222222222222"),
             region("Harbour").members.map { it.toString() }.toSet(),
         )
-        assertEquals(setOf(Region.EMBASSY_FLAG), region("Ambassador Plot").flags)
+        assertEquals(
+            setOf(
+                Region.EMBASSY_FLAG,
+                "SCOREBOARD",
+                "GATES",
+                "DOORS",
+                "TRAPDOORS",
+                "FALL_DAMAGE",
+                "PUBLIC_REDSTONE",
+                "WEIGHTED_PRESSURE_PLATES",
+                "ANIMAL_PROTECTION",
+                "PVP",
+                "MINECARTS",
+                "BOATS",
+                "RIDEABLE",
+            ),
+            region("Ambassador Plot").flags,
+        )
     }
 
     // ---- the Embassies -------------------------------------------------------
