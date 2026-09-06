@@ -13,6 +13,7 @@ import eu.mctraveler.map.MapCommand
 import eu.mctraveler.map.MapItemGuard
 import eu.mctraveler.notepad.NotepadFeature
 import eu.mctraveler.persistence.PersistenceService
+import eu.mctraveler.passport.PassportFeature
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.tablist.TabListFeature
 import eu.mctraveler.weather.NoRain
@@ -77,6 +78,7 @@ object MCTraveler {
         eu.mctraveler.worlds.WorldsFeature.register()
         RegionsFeature.register()
         EmbassiesFeature.register()
+        PassportFeature.register()
         // After ChatFeature: its DISCONNECT handler must decide the leave line
         // before this one clears the vanish state (issue #47).
         eu.mctraveler.vanish.VanishFeature.register()

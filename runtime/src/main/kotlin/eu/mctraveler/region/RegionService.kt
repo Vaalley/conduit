@@ -1,5 +1,6 @@
 package eu.mctraveler.region
 
+import com.google.gson.JsonPrimitive
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
@@ -59,6 +60,40 @@ class RegionService(private val file: Path) {
         (region.parent?.subRegions ?: roots).remove(region)
         region.parent = null
         save()
+    }
+
+    /**
+     * Stable id used by passport records. Unlike a tree position, it survives
+     * deleting or reordering unrelated regions.
+     */
+    fun stableIdOf(region: Region): String {
+        val existing = region.metadata[PASSPORT_ID_KEY]
+            ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
+            ?.asString
+            ?.takeIf(String::isNotEmpty)
+        if (existing != null) return existing
+
+        val id = UUID.randomUUID().toString()
+        region.metadata[PASSPORT_ID_KEY] = JsonPrimitive(id)
+        save()
+        return id
+    }
+
+    /** Resolves a stable passport id, or null when the region was deleted. */
+    fun byStableId(id: String): Region? {
+        fun find(regions: List<Region>): Region? {
+            for (region in regions) {
+                if (region.metadata[PASSPORT_ID_KEY]
+                        ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
+                        ?.asString == id
+                ) {
+                    return region
+                }
+                find(region.subRegions)?.let { return it }
+            }
+            return null
+        }
+        return find(roots)
     }
 
     /**
@@ -139,6 +174,10 @@ class RegionService(private val file: Path) {
             return null
         }
         return scan(roots)
+    }
+
+    private companion object {
+        const val PASSPORT_ID_KEY = "passport-id"
     }
 
     /**

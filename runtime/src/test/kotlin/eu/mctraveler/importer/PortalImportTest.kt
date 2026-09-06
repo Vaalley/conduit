@@ -60,6 +60,39 @@ class PortalImportTest {
         }
     """.trimIndent()
 
+    private val migratedRegionsFile = """
+        {
+          "flags-migrated": true,
+          "regions": {
+            "0": {
+              "title": "Wanderer's Keep",
+              "start-x": -10,
+              "start-z": -10,
+              "end-x": 10,
+              "end-z": 10,
+              "world": "last_nether",
+              "members": [
+                "11111111-2222-4333-8444-555555555555"
+              ],
+              "flags": [
+                "SCOREBOARD",
+                "GATES",
+                "DOORS",
+                "TRAPDOORS",
+                "FALL_DAMAGE",
+                "PUBLIC_REDSTONE",
+                "WEIGHTED_PRESSURE_PLATES",
+                "ANIMAL_PROTECTION",
+                "PVP",
+                "MINECARTS",
+                "BOATS",
+                "RIDEABLE"
+              ]
+            }
+          }
+        }
+    """.trimIndent()
+
     @BeforeEach
     fun buildDeployment() {
         portal = PortalDeploymentFixture(dir).build()
@@ -328,7 +361,7 @@ class PortalImportTest {
     fun `regions arrive in the file the live region service keeps`() {
         migrate()
 
-        assertEquals(regionsFile, Files.readString(target.resolve("regions.json")))
+        assertEquals(migratedRegionsFile, Files.readString(target.resolve("regions.json")))
     }
 
     @Test

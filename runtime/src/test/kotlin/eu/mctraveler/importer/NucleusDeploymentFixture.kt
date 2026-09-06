@@ -128,7 +128,7 @@ class NucleusDeploymentFixture(val root: Path) {
             ]
         """.trimIndent()
 
-        /** The run directory's own `regions.json`, in the live store's exact formatting. */
+        /** The run directory's own legacy-format `regions.json`. */
         val TARGET_REGIONS = """
             {
               "regions": {
@@ -148,13 +148,15 @@ class NucleusDeploymentFixture(val root: Path) {
         """.trimIndent()
 
         /**
-         * [TARGET_REGIONS] after the import: the pre-existing entry byte for
-         * byte, then the two embassies as the live store writes them — y bounds
-         * omitted because Nucleus's 320/−64 are exactly its defaults, and the
-         * destination's numbers still spelled the way Nucleus spelled them.
+         * [TARGET_REGIONS] after the import: flag migration is applied to the
+         * pre-existing entry, then the two embassies are appended as the live
+         * store writes them — y bounds omitted because Nucleus's 320/−64 are
+         * exactly its defaults, and the destination's numbers still spelled
+         * the way Nucleus spelled them.
          */
         val EXPECTED_REGIONS = """
             {
+              "flags-migrated": true,
               "regions": {
                 "0": {
                   "title": "Wanderer's Keep",
@@ -165,6 +167,20 @@ class NucleusDeploymentFixture(val root: Path) {
                   "world": "last_nether",
                   "members": [
                     "11111111-2222-4333-8444-555555555555"
+                  ],
+                  "flags": [
+                    "SCOREBOARD",
+                    "GATES",
+                    "DOORS",
+                    "TRAPDOORS",
+                    "FALL_DAMAGE",
+                    "PUBLIC_REDSTONE",
+                    "WEIGHTED_PRESSURE_PLATES",
+                    "ANIMAL_PROTECTION",
+                    "PVP",
+                    "MINECARTS",
+                    "BOATS",
+                    "RIDEABLE"
                   ]
                 },
                 "1": {

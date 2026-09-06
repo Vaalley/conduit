@@ -1,6 +1,7 @@
 package eu.mctraveler.crystal
 
 import eu.mctraveler.embassy.EmbassiesFeature
+import eu.mctraveler.passport.PassportFeature
 import eu.mctraveler.text.Paint
 import eu.mctraveler.worlds.Landing
 import java.util.UUID
@@ -253,7 +254,8 @@ object CrystalMenu {
         }
         player.closeContainer()
         val landing = destination.resolve(player, crystalCharges) ?: return
-        landing.send(player)
+        val sent = landing.send(player)
+        if (sent) PassportFeature.recordCrystalTrip(player)
         if (destination.free) {
             player.sendSystemMessage(Paint.info("You arrived at ", Paint.aqua(destination.name.lowercase())))
         } else {
