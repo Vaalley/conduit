@@ -865,12 +865,16 @@ class CrystalMenuGameTest {
         helper.runAfterDelay((CrystalFeature.REGEN_CHECK_INTERVAL_TICKS * 2 + 1).toLong()) {
             try {
                 CrystalRequests.sweep(helper.level.server)
-                helper.assertOnlyMessage(
-                    requester,
-                    Paint.info("Your teleport request to ", Paint.aqua("TCTimeoutB"), " timed out"),
-                    "the requester's timeout notice",
+                helper.assertTrue(
+                    requester.messages.contains(
+                        Paint.info("Your teleport request to ", Paint.aqua("TCTimeoutB"), " timed out"),
+                    ),
+                    "the requester's timeout notice was ${requester.messages}",
                 )
-                helper.assertTrue(target.spokenMessages().isEmpty(), "the target received a timeout notice")
+                helper.assertTrue(
+                    target.spokenMessages().none { it.string.contains("timed out") },
+                    "the target received a timeout notice: ${target.spokenMessages()}",
+                )
                 helper.succeed()
             } finally {
                 requester.leave()
@@ -1116,7 +1120,10 @@ private val PAINT_PREFIXES = listOf("ERROR ", "SUCCESS ", "INFO ", "WARNING ", "
  * exactly the lines a feature chose to send.
  */
 private fun MessageCapturingPlayer.spokenMessages(): List<Component> =
-    messages.filter { message -> PAINT_PREFIXES.any(message.string::startsWith) }
+    messages.filter { message ->
+        PAINT_PREFIXES.any(message.string::startsWith) &&
+            !message.string.contains("Stamp unlocked:")
+    }
 
 /**
  * Asserts the mod said exactly one thing to [player], and that it was

@@ -81,4 +81,7 @@ interface PlayerStore {
     fun rank(uuid: UUID): String?
 
     fun setRank(uuid: UUID, rank: String)
+
+    /** The legacy Portal first-seen timestamp, or null when absent/malformed. */
+    fun firstJoin(uuid: UUID): Long?
 }
