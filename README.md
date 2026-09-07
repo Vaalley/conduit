@@ -26,7 +26,7 @@ By running the dev server you agree to the
 
 ## Deploying to Production
 
-After a `git pull`, run the deploy script:
+To deploy, run this on the server:
 
 ```sh
 cd /root/mctraveler-fabric && ./scripts/deploy.sh

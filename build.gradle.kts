@@ -96,26 +96,29 @@ tasks.withType<ProcessResources>().configureEach {
 val gameTestMarker = layout.buildDirectory.file("gametest/last-passed")
 tasks.named<JavaExec>("runGameTest") {
     inputs.files(sourceSets["main"].output, sourceSets["gametest"].output, configurations.runtimeClasspath)
-    inputs.files(sourceSets["gametest"].allSource)
     inputs.property("filter", providers.gradleProperty("mctraveler.gametestFilter").orElse(""))
     outputs.file(gameTestMarker)
+    val marker = gameTestMarker
+    val gametestSourceRoot = layout.projectDirectory.dir("src/gametest").asFile
+    // Gradle content snapshots do not notice an mtime-only touch of a gametest source.
     outputs.upToDateWhen {
-        val marker = outputs.files.singleFile
-        val sourceRoot = marker.parentFile.parentFile.parentFile.resolve("src/gametest")
-        marker.exists() &&
-            marker.lastModified() >= (sourceRoot.walkTopDown()
+        val markerFile = marker.get().asFile
+        markerFile.exists() &&
+            markerFile.lastModified() >= (gametestSourceRoot.walkTopDown()
                 .filter { it.isFile }
                 .maxOfOrNull(File::lastModified) ?: 0L)
     }
     providers.gradleProperty("mctraveler.gametestFilter").orNull?.let {
         systemProperty("fabric-api.gametest.filter", it)
     }
+    val runDirectory = layout.buildDirectory.dir("run/gameTest")
     doLast {
-        outputs.files.singleFile.apply {
+        marker.get().asFile.apply {
             parentFile.mkdirs()
             writeText(Instant.now().toString() + "\n")
         }
-        (this as JavaExec).workingDir.deleteRecursively()
+        // Loom's generated run files are task inputs, so remove them between runs.
+        runDirectory.get().asFile.deleteRecursively()
     }
 }
 
