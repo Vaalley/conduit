@@ -18,9 +18,7 @@ Single-context: `CONTEXT.md` at the repo root plus `docs/adr/`. See `docs/agents
 
 ## Production deployment
 
-- Read the `Deploying to Production` section of `README.md` and `docs/hot-reload.md` before changing a live server.
-- `:bootstrap` changes — mixins, `MixinHooks` bridge signatures, or datapack resources — require a controlled stop, replacement of **both** jars, then a start. Never hot-swap a runtime built against a newer bridge into an older bootstrap.
-- A `:runtime`-only change is deployed by replacing the watched runtime jar; it hot-swaps without a restart.
+- Read the README's `Deploying to Production` section before touching a live server; any change means rebuild, stop, replace the jar in `mods/`, and start.
 
 ## Models
 

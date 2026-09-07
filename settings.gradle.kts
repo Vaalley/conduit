@@ -10,5 +10,3 @@ pluginManagement {
 }
 
 rootProject.name = "mctraveler"
-
-include("bootstrap", "runtime")

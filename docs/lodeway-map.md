@@ -63,12 +63,12 @@ mentions an `app.lodeway.api.map` type. A missing API is a silent no-op, not a
 Lodeway's `ready` callback fires again after each of *Lodeway's* runtime swaps,
 and the layer is rebuilt from the region tree when it does.
 
-This mod's own hot reload (docs/hot-reload.md) is the other direction, and it
+This mod's own feature registration is the other direction, and it
 needs the deprecated `Lodeway.forget` at `SERVER_STOPPING`: Lodeway keeps ready
 callbacks in a process-wide static, and its usual unregister hook is a
 Bukkit-family plugin-disable shim that no Fabric server runs. Without that call
 the callback would outlive the runtime and pin its classloader, which is the
-one thing every registration in `:runtime` is shaped to avoid.
+one thing every registration in the mod is shaped to avoid.
 
 ## Testing
 

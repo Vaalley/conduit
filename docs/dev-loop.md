@@ -3,11 +3,6 @@
 How to iterate on the mod in seconds, not minutes. Versions and cited sources live in
 `docs/research/fabric-kotlin-platform.md`.
 
-The mod is split into a `:bootstrap` Fabric mod and a side-loaded, hot-reloadable
-`:runtime` jar (docs/hot-reload.md). Dev runs load the runtime from the classpath, so
-everything below works unchanged; the watched-directory reload path is a
-production/prod-smoke mechanism.
-
 ## Prerequisites
 
 - **JDK 25** — required by Minecraft 26.2 and the Gradle toolchain. Any JDK 25 works for
