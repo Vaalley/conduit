@@ -29,12 +29,14 @@ By running the dev server you agree to the
 To deploy, run this on the server:
 
 ```sh
-cd /root/mctraveler-fabric && ./scripts/deploy.sh
+cd /root/conduit && ./scripts/deploy.sh
 ```
+
+The default deployment target is `/srv/mctraveler/mods/` (on production, this links to `/srv/mctraveler/server/mods/`). Override the server directory with `MCTRAVELER_SERVER_DIR` and the systemd service with `MCTRAVELER_SERVICE` if needed. The build requires JDK 25 and the pinned patched MCA Selector jar described in `gradle/merge-worlds.gradle.kts` (built with JDK 21).
 
 The script pulls, runs the unit tests and headless gametests before stopping the server, removes old versioned jars from `mods/` so a version bump cannot leave two installed, then swaps the jar and restarts the service.
 
-One-time cleanup when moving off the old two-jar layout: delete the watched `/root/mctraveler-server/mctraveler-runtime/` directory — the single jar in `mods/` is now the entire mod.
+One-time cleanup when moving off the old two-jar layout: delete the watched `/srv/mctraveler/server/mctraveler-runtime/` directory — the single jar in `mods/` is now the entire mod.
 
 ## License
 

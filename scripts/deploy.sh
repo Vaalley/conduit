@@ -4,8 +4,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-server_dir="${MCTRAVELER_SERVER_DIR:-/root/mctraveler-server}"
+server_dir="${MCTRAVELER_SERVER_DIR:-/srv/mctraveler}"
 service="${MCTRAVELER_SERVICE:-mctraveler}"
+
+[[ -d "$server_dir/mods" ]] || { echo "missing mods directory: $server_dir/mods" >&2; exit 1; }
 
 git pull --ff-only
 ./gradlew build
