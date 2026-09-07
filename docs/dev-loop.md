@@ -7,7 +7,7 @@ How to iterate on the mod in seconds, not minutes. Versions and cited sources li
 
 - **JDK 25** — required by Minecraft 26.2 and the Gradle toolchain. Any JDK 25 works for
   building (e.g. `brew install openjdk@25`); point `JAVA_HOME` at it.
-- **JetBrains Runtime (JBR) 25** — optional but recommended for the hot-reload loop
+- **JetBrains Runtime (JBR) 25** — optional but recommended for the enhanced class redefinition dev loop
   (enhanced class redefinition). Download a `jbr-25.x-osx-aarch64` build from
   [JetBrainsRuntime releases](https://github.com/JetBrains/JetBrainsRuntime/releases),
   or use the JBR bundled with IntelliJ IDEA 2025.3+.
@@ -21,6 +21,13 @@ How to iterate on the mod in seconds, not minutes. Versions and cited sources li
 | `./gradlew runGameTest` | Headless gametest server only. |
 | `./gradlew runServer` | Interactive dev dedicated server on `localhost` (run dir `run/`; the EULA is auto-accepted by the `acceptDevServerEula` task). Connect with a vanilla client. |
 | `./gradlew prodServer` | Production smoke: boots the *built jar* via the real Fabric server launcher (run dir `run/prod-smoke/`), verifies the mod initialized on a real dedicated server, and stops it cleanly. |
+
+### Which command when
+
+- Use `./gradlew test` for pure logic.
+- Use `./gradlew runGameTest -Pmctraveler.gametestFilter=...` for one gametest class.
+- Run `./gradlew build` before pushing or deploying.
+- Use `./gradlew runGameTest --rerun` to force a gametest run when Gradle says it is up-to-date.
 
 ## Hot reload (edit → running server, no restart)
 
@@ -68,8 +75,10 @@ What hot-swaps and what doesn't:
   slow part of Fabric builds is gone.
 - `gradle.properties` enables the **configuration cache**, **build cache**, **parallel
   execution**, **VFS watching**, and **Kotlin incremental compilation** (K2 daemon).
-- Measured on this scaffold: clean first build is dominated by one-time Minecraft/Loom
-  setup; a warm incremental `build` (edit one Kotlin file, full headless gametest run
-  included) is ~11 s, `test` after an edit is ~6 s, and a no-op `test` is under a second.
+- `tasks.test.maxParallelForks` uses half the available processors, which keeps the
+  MCA Selector subprocess tests from running serially.
+- Measured on 8 cores: a cold-ish `build` is ~3m07s, with `:test` at ~2m42s dominated
+  by the MCA Selector subprocess tests. After a gametest run, a no-op `build` takes
+  ~3s because the up-to-date marker skips `runGameTest`.
 
 Treat regressions of the warm loop as build bugs — profile with `./gradlew build --profile`.

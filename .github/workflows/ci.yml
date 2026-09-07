@@ -46,5 +46,8 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Unit tests
-        run: ./gradlew test --no-daemon -PmcaSelectorJar="$MCA_SELECTOR_JAR"
+      - name: Build (unit tests + gametests)
+        run: ./gradlew build --no-daemon -PmcaSelectorJar="$MCA_SELECTOR_JAR"
+
+      - name: Production smoke
+        run: ./gradlew prodServer --no-daemon -PmcaSelectorJar="$MCA_SELECTOR_JAR"

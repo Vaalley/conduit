@@ -1,4 +1,5 @@
 import java.time.Duration
+import java.time.Instant
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 
 plugins {
@@ -92,9 +93,29 @@ tasks.withType<ProcessResources>().configureEach {
 // `mctraveler-test:<snake_case(ClassName_methodName)>`. For example:
 //   ./gradlew runGameTest -Pmctraveler.gametestFilter='mctraveler-test:embassy_plot_game_test_*'
 // Without the property the whole suite runs, so `./gradlew build` is unchanged.
+val gameTestMarker = layout.buildDirectory.file("gametest/last-passed")
 tasks.named<JavaExec>("runGameTest") {
+    inputs.files(sourceSets["main"].output, sourceSets["gametest"].output, configurations.runtimeClasspath)
+    inputs.files(sourceSets["gametest"].allSource)
+    inputs.property("filter", providers.gradleProperty("mctraveler.gametestFilter").orElse(""))
+    outputs.file(gameTestMarker)
+    outputs.upToDateWhen {
+        val marker = outputs.files.singleFile
+        val sourceRoot = marker.parentFile.parentFile.parentFile.resolve("src/gametest")
+        marker.exists() &&
+            marker.lastModified() >= (sourceRoot.walkTopDown()
+                .filter { it.isFile }
+                .maxOfOrNull(File::lastModified) ?: 0L)
+    }
     providers.gradleProperty("mctraveler.gametestFilter").orNull?.let {
         systemProperty("fabric-api.gametest.filter", it)
+    }
+    doLast {
+        outputs.files.singleFile.apply {
+            parentFile.mkdirs()
+            writeText(Instant.now().toString() + "\n")
+        }
+        (this as JavaExec).workingDir.deleteRecursively()
     }
 }
 

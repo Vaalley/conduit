@@ -18,7 +18,7 @@ Single-context: `CONTEXT.md` at the repo root plus `docs/adr/`. See `docs/agents
 
 ## Production deployment
 
-- Read the README's `Deploying to Production` section before touching a live server; any change means rebuild, stop, replace the jar in `mods/`, and start.
+- Read the README's `Deploying to Production` section before touching a live server; run `scripts/deploy.sh` for the pull, tested build, jar replacement, and restart.
 
 ## Models
 

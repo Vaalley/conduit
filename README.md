@@ -26,18 +26,13 @@ By running the dev server you agree to the
 
 ## Deploying to Production
 
-After a `git pull`, this is the whole deploy — copy and paste it as one block:
+After a `git pull`, run the deploy script:
 
 ```sh
-cd /root/mctraveler-fabric
-git pull
-./gradlew build
-systemctl stop mctraveler
-cp build/libs/mctraveler-0.1.0.jar /root/mctraveler-server/mods/mctraveler-0.1.0.jar
-systemctl start mctraveler
+cd /root/mctraveler-fabric && ./scripts/deploy.sh
 ```
 
-`./gradlew build` runs the unit tests and the headless gametest suite first, so a red test never reaches the server.
+The script pulls, runs the unit tests and headless gametests before stopping the server, removes old versioned jars from `mods/` so a version bump cannot leave two installed, then swaps the jar and restarts the service.
 
 One-time cleanup when moving off the old two-jar layout: delete the watched `/root/mctraveler-server/mctraveler-runtime/` directory — the single jar in `mods/` is now the entire mod.
 
