@@ -26,26 +26,15 @@ By running the dev server you agree to the
 
 ## Deploying to Production
 
-The mod ships as two jars (docs/hot-reload.md): the bootstrap in `mods/` and the
-hot-reloadable runtime in the watched `mctraveler-runtime/` directory next to it.
-
-Routine feature updates need **no restart** — the server picks the new runtime
-up, swaps it live, and tells players an update has been applied:
+To deploy, run this on the server:
 
 ```sh
-cd /root/mctraveler-fabric
-git pull
-./gradlew build
-cp runtime/build/libs/mctraveler-runtime-0.1.0.jar /root/mctraveler-server/mctraveler-runtime/
+cd /root/mctraveler-fabric && ./scripts/deploy.sh
 ```
 
-Only bootstrap changes (mixins, the bridge API, datapack resources) need the
-full restart:
+The script pulls, runs the unit tests and headless gametests before stopping the server, removes old versioned jars from `mods/` so a version bump cannot leave two installed, then swaps the jar and restarts the service.
 
-```sh
-cp bootstrap/build/libs/mctraveler-0.1.0.jar /root/mctraveler-server/mods/mctraveler-0.1.0.jar
-systemctl restart mctraveler
-```
+One-time cleanup when moving off the old two-jar layout: delete the watched `/root/mctraveler-server/mctraveler-runtime/` directory — the single jar in `mods/` is now the entire mod.
 
 ## License
 

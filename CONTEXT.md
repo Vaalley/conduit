@@ -2,7 +2,7 @@
 
 MCTraveler is a community Minecraft survival server whose custom gameplay is being ported from a standalone TypeScript proxy (the Portal) to a server-side Fabric mod, collapsing a two-server topology into one server with one continuous map.
 
-The mod ships as two jars: the `:bootstrap` module is the Fabric mod (mixins and the runtime loader), and the `:runtime` module holds every feature and is side-loaded from a watched directory so it can be hot-swapped on a live server — see `docs/hot-reload.md`.
+The mod ships as a single Fabric jar; see `docs/dev-loop.md`.
 
 ## Language
 

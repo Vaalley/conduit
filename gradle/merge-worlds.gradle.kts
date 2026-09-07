@@ -84,9 +84,7 @@ val provideMcaSelector = tasks.register("provideMcaSelector") {
     val expected = mcaSelectorSha256
     val version = mcaSelectorVersion
     val destination = mcaSelectorJar
-    // rootDir, not projectDirectory: this script is applied from :runtime since the
-    // bootstrap/runtime split, but the patch lives beside the script itself.
-    val patch = rootDir.resolve("gradle/mcaselector/2.8-mctraveler1.patch")
+    val patch = layout.projectDirectory.file("gradle/mcaselector/2.8-mctraveler1.patch").asFile
     inputs.files(provider { if (source.isFile) files(source) else files() }).withPropertyName("mcaSelector")
     inputs.property("sha256", expected)
     inputs.property("source", source.path)
@@ -176,16 +174,10 @@ tasks.named<Test>("test") {
 // output back through the live code, so the gametest JVM needs the tool exactly as
 // the unit tier and the command do. Without this the gametest would have to stand in
 // for the relocation, and a merge gametest driving a stub is a gametest about a stub.
-// runGameTest moved to :bootstrap with the bootstrap/runtime split
-// (docs/hot-reload.md); the gametest JVM still needs the tool.
-rootProject.project("bootstrap").tasks.withType(JavaExec::class.java)
-    .matching { it.name == "runGameTest" }
-    .configureEach {
-        // A cross-project task reference cannot be serialized by the
-        // configuration cache; a mapped provider carries the same dependency.
-        inputs.files(provideMcaSelector.map { mcaSelectorJar })
-        systemProperty(mcaSelectorProperty, mcaSelectorJar.get().asFile.absolutePath)
-    }
+tasks.named<JavaExec>("runGameTest") {
+    inputs.files(provideMcaSelector)
+    systemProperty(mcaSelectorProperty, mcaSelectorJar.get().asFile.absolutePath)
+}
 
 // A diagnostic, not part of the merge: prints what one chunk says about itself,
 // read through the same RegionFile the merge reads it through. Added when a
