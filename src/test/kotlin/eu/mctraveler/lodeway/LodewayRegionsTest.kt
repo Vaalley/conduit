@@ -67,6 +67,9 @@ class LodewayRegionsTest {
         // The far edge of the far block, not its corner: 61 blocks wide.
         assertEquals(listOf(-20.0, 41.0, 41.0, -20.0), area.xs().toList())
         assertEquals(listOf(-20.0, -20.0, 61.0, 61.0), area.zs().toList())
+        assertEquals("#ffd000", area.stroke())
+        assertEquals(3, area.strokeWidth())
+        assertEquals("#ffd00059", area.fill())
         assertEquals("Members:\nAlice", area.detail())
     }
 
@@ -142,9 +145,9 @@ class LodewayRegionsTest {
         assertEquals(listOf(0.0, 11.0, 11.0, 0.0), child.xs().toList())
     }
 
-    /** An embassy is a region with a flag, and reads as one on the map. */
+    /** Region flags are server policy, not public map metadata. */
     @Test
-    fun `an embassy is styled and described apart`() {
+    fun `flags are not sent to Lodeway`() {
         val plain = region(title = "Plain")
         val embassy = region(title = "Embassy", startX = 100, startZ = 100, endX = 120, endZ = 120)
         embassy.flags.add(Region.EMBASSY_FLAG)
@@ -152,10 +155,8 @@ class LodewayRegionsTest {
         publish(listOf(plain, embassy))
 
         val drawn = areas().associateBy { it.label() }
-        assertTrue(drawn.getValue("Embassy").detail().startsWith("Embassy"))
-        // The embassy flag is the first line; the others are still worth listing.
-        assertTrue(drawn.getValue("Embassy").detail().contains("Flags: PUBLIC"))
-        assertTrue(drawn.getValue("Plain").stroke() != drawn.getValue("Embassy").stroke())
+        assertEquals("", drawn.getValue("Embassy").detail())
+        assertEquals(drawn.getValue("Plain").stroke(), drawn.getValue("Embassy").stroke())
     }
 
     @Test

@@ -36,15 +36,10 @@ object LodewayRegions {
     /** Prefixed with the mod id: layer ids are shared with every other plugin. */
     private const val LAYER_ID = "mctraveler.regions"
 
-    /** A restrained claim outline: thin, and a fill you can still read the map through. */
-    private const val REGION_STROKE = "#2e7d3a"
-    private const val REGION_FILL = "#2e7d3a1f"
-
-    /** Embassies are regions too, and worth telling apart at a glance (ADR 0003). */
-    private const val EMBASSY_STROKE = "#c98a2e"
-    private const val EMBASSY_FILL = "#c98a2e1f"
-
-    private const val STROKE_WIDTH = 1
+    /** Bright enough to stay legible over both green terrain and dark map modes. */
+    private const val REGION_STROKE = "#ffd000"
+    private const val REGION_FILL = "#ffd00059"
+    private const val STROKE_WIDTH = 3
 
     /** How many members a popup names before it starts counting them instead. */
     private const val MAX_MEMBERS_SHOWN = 10
@@ -145,7 +140,6 @@ object LodewayRegions {
         regions.forEachIndexed { index, region ->
             val id = "$prefix$index"
             live.add(id)
-            val embassy = Region.EMBASSY_FLAG in region.flags
             layer.area(id)
                 .world(worldName(region.world))
                 .label(region.title)
@@ -162,8 +156,8 @@ object LodewayRegions {
                         region.maxZ + 1.0, region.maxZ + 1.0,
                     ),
                 )
-                .stroke(if (embassy) EMBASSY_STROKE else REGION_STROKE, STROKE_WIDTH)
-                .fill(if (embassy) EMBASSY_FILL else REGION_FILL)
+                .stroke(REGION_STROKE, STROKE_WIDTH)
+                .fill(REGION_FILL)
                 .also { area ->
                     // Full-height regions are the default and say nothing worth
                     // drawing; a region with real y bounds is a floor in a tower.
@@ -174,7 +168,7 @@ object LodewayRegions {
     }
 
     /**
-     * The popup: who lives here, and what kind of region it is. Plain text.
+     * The popup: who lives here. Plain text.
      *
      * Deliberately short. The label above it already names the region and the
      * shape below it already says where it is and how big — a card that
@@ -184,10 +178,6 @@ object LodewayRegions {
      */
     private fun detail(region: Region, memberName: (UUID) -> String?): String {
         val lines = mutableListOf<String>()
-        if (Region.EMBASSY_FLAG in region.flags) lines += "Embassy"
-        // The embassy flag is what the line above already said.
-        val flags = region.flags.filterNot { it == Region.EMBASSY_FLAG }
-        if (flags.isNotEmpty()) lines += "Flags: ${flags.joinToString(", ")}"
         // An unresolvable member is left out rather than shown as a uuid, which is
         // how `/rg locate` and the sidebar treat one.
         val members = region.members.mapNotNull(memberName)

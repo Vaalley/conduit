@@ -18,14 +18,16 @@ API it does not run either — see *The guard* below.
 | `minX`/`maxX`, `minZ`/`maxZ` | the four corners, the far edge taken one block past `max` |
 | `startY`/`endY`, when not the 320/−64 defaults | the area's height |
 | world | the dimension's full id (`minecraft:overworld`, `mctraveler:embassies`) |
-| members, flags | the popup |
-| the `EMBASSY` flag | a second colour, and the popup's first line |
+| members | the popup |
 
-The popup is deliberately short: `Embassy` when it is one, `Flags: …` when
-any other flag is set, then `Members:` and one member per line, ten of them at
-most and `and N more` after that (a region may hold 99). It says nothing the
-map is already drawing — no dimension, no coordinates, no size, no height, no
-sub-region count. The label above it names the region and the shape below it
+All regions use a bright yellow three-pixel outline and a translucent yellow
+fill so their boundaries remain visible over varied terrain. Flags are server
+policy and are not sent to Lodeway.
+
+The popup is deliberately short: `Members:` and one member per line, ten of
+them at most and `and N more` after that (a region may hold 99). It says nothing
+the map is already drawing — no dimension, no coordinates, no size, no height,
+no sub-region count. The label above it names the region and the shape below it
 says where and how big; a card repeating those would spend its height on what
 the visitor can already see.
 
@@ -57,6 +59,12 @@ Lodeway-less server loads. It names the API by string, probes for it with
 `Class.forName`, and only then touches `LodewayRegions` — the one class that
 mentions an `app.lodeway.api.map` type. A missing API is a silent no-op, not a
 `NoClassDefFoundError`.
+
+`/vanish` also asserts invisibility through Lodeway's optional `Vanished` API.
+That newer entry point is resolved by name so an older Lodeway installation
+still starts normally; with a current Lodeway download, vanished players are
+removed from both the map and its online-player list until they return or
+disconnect.
 
 ## Hot reload
 

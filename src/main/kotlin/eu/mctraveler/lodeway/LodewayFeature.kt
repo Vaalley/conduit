@@ -22,14 +22,38 @@ import eu.mctraveler.MCTraveler
 object LodewayFeature {
 
     private const val API_CLASS = "app.lodeway.api.map.Lodeway"
+    private const val VANISHED_API_CLASS = "app.lodeway.api.map.Vanished"
+    private const val VANISH_SOURCE = "mctraveler:vanish"
+
+    /**
+     * Lodeway added player visibility after the first marker API release this
+     * project compiled against. Resolve it by name so an older Lodeway install
+     * still starts normally; updating the optional map must never become a hard
+     * requirement for running Conduit.
+     */
+    private var assertInvisible: java.lang.reflect.Method? = null
 
     fun register() {
         if (!apiPresent()) return
         try {
+            assertInvisible = visibilityMethod()
             LodewayRegions.register()
             MCTraveler.LOGGER.info("Lodeway found: publishing regions to the web map")
+            if (assertInvisible == null) {
+                MCTraveler.LOGGER.warn("Lodeway's player visibility API is unavailable; /vanish cannot hide players from the web map")
+            }
         } catch (unavailable: NoClassDefFoundError) {
             MCTraveler.LOGGER.warn("Lodeway's map API is incomplete; not publishing regions", unavailable)
+        }
+    }
+
+    /** Holds or releases Conduit's own invisibility claim for [playerName]. */
+    fun setPlayerInvisible(playerName: String, invisible: Boolean) {
+        val method = assertInvisible ?: return
+        try {
+            method.invoke(null, VANISH_SOURCE, playerName, invisible)
+        } catch (failed: ReflectiveOperationException) {
+            MCTraveler.LOGGER.warn("could not update $playerName's Lodeway visibility", failed)
         }
     }
 
@@ -40,5 +64,20 @@ object LodewayFeature {
             true
         } catch (missing: ClassNotFoundException) {
             false
+        }
+
+    private fun visibilityMethod(): java.lang.reflect.Method? =
+        try {
+            Class.forName(VANISHED_API_CLASS, false, LodewayFeature::class.java.classLoader)
+                .getMethod(
+                    "assertInvisible",
+                    String::class.java,
+                    String::class.java,
+                    java.lang.Boolean.TYPE,
+                )
+        } catch (missing: ReflectiveOperationException) {
+            null
+        } catch (incompatible: LinkageError) {
+            null
         }
 }

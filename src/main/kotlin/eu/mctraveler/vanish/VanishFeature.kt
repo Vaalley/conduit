@@ -2,6 +2,7 @@ package eu.mctraveler.vanish
 
 import com.mojang.brigadier.Command
 import eu.mctraveler.chat.ChatFeature
+import eu.mctraveler.lodeway.LodewayFeature
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.text.Paint
 import java.util.EnumSet
@@ -35,7 +36,9 @@ import net.minecraft.world.level.GameType
 object VanishFeature {
 
     /** Vanished players, each mapped to the game mode to restore on unvanish. */
-    private val vanished = HashMap<UUID, GameType>()
+    private val vanished = HashMap<UUID, Session>()
+
+    private data class Session(val gameType: GameType, val playerName: String)
 
     /** Whether [player] is currently vanished. */
     @JvmStatic
@@ -64,9 +67,16 @@ object VanishFeature {
             )
         }
         ServerPlayConnectionEvents.DISCONNECT.register { handler, _ ->
-            vanished.remove(handler.player.uuid)
+            vanished.remove(handler.player.uuid)?.let { session ->
+                LodewayFeature.setPlayerInvisible(session.playerName, false)
+            }
         }
-        ServerLifecycleEvents.SERVER_STOPPED.register { vanished.clear() }
+        ServerLifecycleEvents.SERVER_STOPPED.register {
+            vanished.values.forEach { session ->
+                LodewayFeature.setPlayerInvisible(session.playerName, false)
+            }
+            vanished.clear()
+        }
     }
 
     private fun toggle(player: ServerPlayer) {
@@ -79,15 +89,16 @@ object VanishFeature {
 
     private fun enter(player: ServerPlayer) {
         val server = player.level().server
-        vanished[player.uuid] = player.gameMode.gameModeForPlayer
+        val name = player.gameProfile.name
+        vanished[player.uuid] = Session(player.gameMode.gameModeForPlayer, name)
         player.setGameMode(GameType.SPECTATOR)
+        LodewayFeature.setPlayerInvisible(name, true)
 
         for (viewer in nonAdminViewersOf(server, player)) {
             viewer.connection.send(ClientboundPlayerInfoRemovePacket(listOf(player.uuid)))
             viewer.connection.send(ClientboundRemoveEntitiesPacket(player.id))
         }
 
-        val name = player.gameProfile.name
         for (viewer in server.playerList.players) {
             if (viewer === player) continue
             viewer.sendSystemMessage(
@@ -101,8 +112,9 @@ object VanishFeature {
 
     private fun leave(player: ServerPlayer) {
         val server = player.level().server
-        val restore = vanished.remove(player.uuid) ?: GameType.SURVIVAL
-        player.setGameMode(restore)
+        val session = vanished.remove(player.uuid)
+        player.setGameMode(session?.gameType ?: GameType.SURVIVAL)
+        LodewayFeature.setPlayerInvisible(session?.playerName ?: player.gameProfile.name, false)
 
         for (viewer in nonAdminViewersOf(server, player)) {
             viewer.connection.send(
