@@ -1,10 +1,8 @@
 name: Set up MCTraveler build
-description: Check out the repository and prepare MCA Selector, JDK 25, and Gradle
+description: Prepare MCA Selector, JDK 25, and Gradle
 runs:
   using: composite
   steps:
-    - uses: actions/checkout@v4
-
     # Build the patched MCA Selector jar once from the pinned tag and cache it by patch content.
     - name: Restore MCA Selector
       id: mcaselector
