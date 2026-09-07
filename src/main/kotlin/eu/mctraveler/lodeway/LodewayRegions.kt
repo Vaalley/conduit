@@ -37,8 +37,8 @@ object LodewayRegions {
     private const val LAYER_ID = "mctraveler.regions"
 
     /** Bright enough to stay legible over both green terrain and dark map modes. */
-    private const val REGION_STROKE = "#ffd000"
-    private const val REGION_FILL = "#ffd00059"
+    private const val REGION_STROKE = "#ffffff"
+    private const val REGION_FILL = "#ffffff59"
     private const val STROKE_WIDTH = 3
 
     /** How many members a popup names before it starts counting them instead. */

@@ -67,9 +67,9 @@ class LodewayRegionsTest {
         // The far edge of the far block, not its corner: 61 blocks wide.
         assertEquals(listOf(-20.0, 41.0, 41.0, -20.0), area.xs().toList())
         assertEquals(listOf(-20.0, -20.0, 61.0, 61.0), area.zs().toList())
-        assertEquals("#ffd000", area.stroke())
+        assertEquals("#ffffff", area.stroke())
         assertEquals(3, area.strokeWidth())
-        assertEquals("#ffd00059", area.fill())
+        assertEquals("#ffffff59", area.fill())
         assertEquals("Members:\nAlice", area.detail())
     }
 
