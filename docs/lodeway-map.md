@@ -20,7 +20,7 @@ API it does not run either — see *The guard* below.
 | world | the dimension's full id (`minecraft:overworld`, `mctraveler:embassies`) |
 | members | the popup |
 
-All regions use a white three-pixel outline and a translucent white
+All regions use a white five-pixel outline and a lightly translucent white
 fill so their boundaries remain visible over varied terrain. Flags are server
 policy and are not sent to Lodeway.
 

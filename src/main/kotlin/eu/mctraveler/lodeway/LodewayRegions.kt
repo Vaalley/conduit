@@ -38,8 +38,8 @@ object LodewayRegions {
 
     /** Bright enough to stay legible over both green terrain and dark map modes. */
     private const val REGION_STROKE = "#ffffff"
-    private const val REGION_FILL = "#ffffff59"
-    private const val STROKE_WIDTH = 3
+    private const val REGION_FILL = "#ffffff26"
+    private const val STROKE_WIDTH = 5
 
     /** How many members a popup names before it starts counting them instead. */
     private const val MAX_MEMBERS_SHOWN = 10

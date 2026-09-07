@@ -68,8 +68,8 @@ class LodewayRegionsTest {
         assertEquals(listOf(-20.0, 41.0, 41.0, -20.0), area.xs().toList())
         assertEquals(listOf(-20.0, -20.0, 61.0, 61.0), area.zs().toList())
         assertEquals("#ffffff", area.stroke())
-        assertEquals(3, area.strokeWidth())
-        assertEquals("#ffffff59", area.fill())
+        assertEquals(5, area.strokeWidth())
+        assertEquals("#ffffff26", area.fill())
         assertEquals("Members:\nAlice", area.detail())
     }
 
