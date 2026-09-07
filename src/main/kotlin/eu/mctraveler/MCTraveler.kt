@@ -77,6 +77,7 @@ object MCTraveler : ModInitializer {
         // SERVER_STARTED, and the service is created by the handler above.
         LodewayFeature.register()
         CrystalFeature.register()
+        eu.mctraveler.rtp.RtpFeature.register()
         HttpApi.register()
         MapCommand.register()
         MapItemGuard.register()

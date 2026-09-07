@@ -8,6 +8,7 @@ import com.mojang.brigadier.context.CommandContext
 import com.mojang.brigadier.suggestion.SuggestionProvider
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.text.Paint
+import eu.mctraveler.worlds.TeleportCountdown
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
 import net.minecraft.commands.SharedSuggestionProvider
@@ -90,11 +91,14 @@ object CrystalCommands {
         )
     }
 
-    private fun spawn(sender: ServerPlayer, index: Int): Component {
+    private fun spawn(sender: ServerPlayer, index: Int): Component? {
         val definition = CrystalSpawns.definitions().getOrNull(index)
             ?: return Paint.error("That spawn is no longer configured")
-        CrystalSpawns.landing(sender, definition).send(sender)
-        return Paint.success("Arrived at ", Paint.green(definition.name))
+        TeleportCountdown.begin(sender) {
+            if (!CrystalSpawns.landing(sender, definition).send(sender)) return@begin
+            sender.sendSystemMessage(Paint.success("Arrived at ", Paint.green(definition.name)))
+        }
+        return null
     }
 
     private inline fun reply(

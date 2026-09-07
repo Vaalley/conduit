@@ -3,6 +3,7 @@ package eu.mctraveler.crystal
 import eu.mctraveler.text.Paint
 import eu.mctraveler.passport.PassportFeature
 import eu.mctraveler.worlds.Landing
+import eu.mctraveler.worlds.TeleportCountdown
 import java.util.UUID
 import net.minecraft.network.chat.ClickEvent
 import net.minecraft.network.chat.MutableComponent
@@ -129,16 +130,25 @@ object CrystalRequests {
             requester.sendSystemMessage(Paint.error("You have no energy for this request"))
             return
         }
-        if (!Landing.of(acceptor).send(requester)) return
-        PassportFeature.recordCrystalTrip(requester)
-        CrystalEnergy.modify(requester, -1)
-        requester.sendSystemMessage(
-            Paint.info(
-                Paint.aqua(acceptor.gameProfile.name),
-                " has accepted your request; you used one energy",
-            ),
-        )
         acceptor.sendSystemMessage(Paint.success("Request accepted"))
+        // The acceptor is found again at departure: they are three seconds
+        // older by then, and may have moved on or logged off.
+        TeleportCountdown.begin(requester) {
+            val destination = exactPlayer(server, acceptor.gameProfile.name)
+            if (destination == null) {
+                requester.sendSystemMessage(notOnline(acceptor.gameProfile.name))
+                return@begin
+            }
+            if (!Landing.of(destination).send(requester)) return@begin
+            PassportFeature.recordCrystalTrip(requester)
+            CrystalEnergy.modify(requester, -1)
+            requester.sendSystemMessage(
+                Paint.info(
+                    Paint.aqua(destination.gameProfile.name),
+                    " has accepted your request; you used one energy",
+                ),
+            )
+        }
     }
 
     /**
