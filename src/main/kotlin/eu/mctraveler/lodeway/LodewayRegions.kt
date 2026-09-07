@@ -80,8 +80,7 @@ object LodewayRegions {
             // Our reason for calling a deprecated hook: Lodeway holds the ready
             // callback in a process-wide static, and the shim that would forget it
             // for us runs on Bukkit-family loaders, not on Fabric. Without this the
-            // callback outlives a runtime hot reload and pins its classloader —
-            // the leak every event registration in this module is shaped to avoid.
+            // callback would outlive the server it was registered for.
             @Suppress("DEPRECATION")
             Lodeway.forget(LodewayRegions::class.java.classLoader)
             map = null
