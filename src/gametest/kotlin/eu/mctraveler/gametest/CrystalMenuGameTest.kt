@@ -8,8 +8,11 @@ import eu.mctraveler.crystal.CrystalRequests
 import eu.mctraveler.embassy.EmbassiesFeature
 import eu.mctraveler.embassy.EmbassyOrigins
 import eu.mctraveler.region.RegionProtection
+import eu.mctraveler.rtp.RtpConfig
+import eu.mctraveler.rtp.RtpCooldown
 import eu.mctraveler.text.Paint
 import eu.mctraveler.worlds.TeleportCountdown
+import kotlin.math.hypot
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
@@ -188,7 +191,11 @@ class CrystalMenuGameTest {
                     listOf("Request to teleport to a player", "costs one energy when they accept"),
                 ),
                 15 to Triple(Items.SPYGLASS, "Embassy", listOf("Teleport to the embassy world")),
-                16 to Triple(Items.GRASS_BLOCK, "Wilderness", listOf("Coming soon")),
+                16 to Triple(
+                    Items.GRASS_BLOCK,
+                    "Wilderness",
+                    listOf("Random teleport somewhere far away", "free, once every few minutes"),
+                ),
             )
             for ((slot, want) in expected) {
                 val (item, name, lore) = want
@@ -374,13 +381,13 @@ class CrystalMenuGameTest {
         guest.usesCrystal(tier = 3)
         guest.messages.clear()
 
-        helper.afterClick(guest, WILDERNESS_SLOT, owner, guest) {
+        helper.afterClick(guest, BED_SLOT, owner, guest) {
             // Container protection would have swallowed the click before the
-            // menu ever saw it; Wilderness's own refusal proves it got through.
+            // menu ever saw it; Bed's own refusal proves it got through.
             helper.assertOnlyMessage(
                 guest,
-                Paint.error("Sorry, this feature is not available yet"),
-                "the Wilderness refusal from inside a foreign region",
+                Paint.error("You have no bed to go to"),
+                "the no-bed refusal from inside a foreign region",
             )
         }
     }
@@ -629,20 +636,63 @@ class CrystalMenuGameTest {
     }
 
     @GameTest(maxTicks = 200)
-    fun wildernessRefusesAndCostsNothing(helper: GameTestHelper) {
+    fun wildernessIsRtpByAnotherDoorAndCostsNoEnergy(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "TCWild")
+        RtpCooldown.forget(player.uuid)
         CrystalEnergy.setEnergy(player, 5)
+        player.standAt(helper, 1.0, 1.0, 1.0)
+        val start = player.position()
         player.usesCrystal(tier = 3)
         player.messages.clear()
 
-        helper.afterClick(player, WILDERNESS_SLOT, player) {
+        helper.afterClick(player, WILDERNESS_SLOT) {
+            try {
+                helper.assertTrue(CrystalMenu.openMenuOf(player) == null, "Wilderness left the menu open")
+                helper.assertValueEqual(
+                    player.actionBarMessages.map { it.string }.take(3),
+                    listOf("Teleporting in 3...", "Teleporting in 2...", "Teleporting in 1..."),
+                    "the count spoken to the player",
+                )
+                val spawn = helper.level.server.overworld().respawnData.pos()
+                val distance = hypot(player.x - spawn.x, player.z - spawn.z)
+                helper.assertTrue(
+                    distance >= RtpConfig.settings().minDistance - 1,
+                    "landed only $distance from spawn (started at $start)",
+                )
+                helper.assertValueEqual(CrystalEnergy.energyOf(player), 5, "energy after Wilderness")
+                helper.assertTrue(
+                    RtpCooldown.remaining(player.uuid, helper.level.server.tickCount) > 0,
+                    "Wilderness did not start the /rtp cooldown",
+                )
+                helper.succeed()
+            } finally {
+                RtpCooldown.forget(player.uuid)
+                player.leave()
+            }
+        }
+    }
+
+    @GameTest
+    fun wildernessHonoursTheRtpCooldown(helper: GameTestHelper) {
+        val player = MessageCapturingPlayer.join(helper, "TCWildWait")
+        try {
+            RtpCooldown.start(player.uuid, helper.level.server.tickCount, RtpConfig.settings().cooldownTicks)
+            CrystalEnergy.setEnergy(player, 5)
+            player.usesCrystal(tier = 3)
+            player.messages.clear()
+
+            player.containerMenu.clicked(WILDERNESS_SLOT, 0, ContainerInput.PICKUP, player)
             helper.assertOnlyMessage(
                 player,
-                Paint.error("Sorry, this feature is not available yet"),
-                "the Wilderness refusal",
+                Paint.error("You can use /rtp again in ", Paint.gold("5m")),
+                "the cooldown refusal",
             )
-            helper.assertValueEqual(CrystalEnergy.energyOf(player), 5, "energy after Wilderness")
+            helper.assertValueEqual(CrystalEnergy.energyOf(player), 5, "energy after a refused Wilderness")
             helper.assertTrue(CrystalMenu.openMenuOf(player) == null, "Wilderness left the menu open")
+            helper.succeed()
+        } finally {
+            RtpCooldown.forget(player.uuid)
+            player.leave()
         }
     }
 

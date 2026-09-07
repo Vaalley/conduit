@@ -154,7 +154,8 @@ before the new build's first boot.
 31. As a player, I want Embassy to send me to the embassies dimension at
     (0.5, 1.0, 0.5).
 32. As a player, I want Wilderness to reply ERROR "Sorry, this feature is not
-    available yet" (menu closes, no energy spent).
+    available yet" (menu closes, no energy spent). _Superseded_: Wilderness now
+    runs `/rtp` (`RtpFeature.teleport`) — free, same cooldown, same countdown.
 33. As a player, I want Player to refuse with ERROR "No-one else is online" when I am
     alone; otherwise open a "Select a player" GUI (rows = ⌈others/9⌉) of the other
     online players' heads (their skin, name, lore "Click to teleport to this player").
@@ -257,7 +258,6 @@ gains the embassies dimension.
 - Nucleus's `/give` integration (crystal item names in an admin give command) — the
   fabric port never adopted Nucleus admin utils; vanilla `/give` with components
   serves admins.
-- A real Wilderness destination (the stub error is the feature, story 32).
 - Embassy plot resale/reassignment, or any behavior Nucleus did not have.
 - Making embassies a World (/switch, buckets) — ADR 0003.
 

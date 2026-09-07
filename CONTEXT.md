@@ -30,8 +30,7 @@ The pool of 0–5 teleport charges a player carries, shared by every Teleportati
 _Avoid_: charges, durability (the damage bar is a display of Energy, not wear)
 
 **Random Teleport**:
-`/rtp`: a free trip to a random safe surface column in the overworld ring around spawn (`mctraveler/rtp.json`: radius, minDistance, cooldownSeconds), on nobody's region, once per cooldown. Also offered by RTP Signs — signs an Admin marks with `/rtp sign`, right-clicked by players who need not know the command. Overworld only; refused from the Nether, End, and Embassies. Not tied to Energy.
-_Avoid_: wilderness (the crystal menu's unfinished stub)
+`/rtp`: a free trip to a random safe surface column in the overworld ring around spawn (`mctraveler/rtp.json`: radius, minDistance, cooldownSeconds), on nobody's region, once per cooldown. Also offered by RTP Signs — signs an Admin marks with `/rtp sign`, right-clicked by players who need not know the command — and by the crystal menu's *Wilderness* button, which is the same trip (free, same cooldown) behind a different door. Overworld only; refused from the Nether, End, and Embassies. Not tied to Energy.
 
 **Teleport Countdown**:
 The three seconds every teleport — crystal destination, `/spawn1`, accepted request, `/rtp`, RTP Sign — waits before departing, counted on the action bar with a note-block pling per second. Moving more than half a block cancels it, and nothing (Energy, cooldown) is spent for a cancelled trip.
