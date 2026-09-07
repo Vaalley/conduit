@@ -13,6 +13,7 @@ import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
 import net.minecraft.network.chat.Component
 import net.minecraft.server.level.ServerPlayer
+import net.minecraft.util.Mth
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
 import net.minecraft.world.entity.player.Player
@@ -86,9 +87,9 @@ object RtpFeature {
             player.sendSystemMessage(
                 Paint.success(
                     "Teleported to ",
-                    Paint.green(landing.x.toInt()),
+                    Paint.green(Mth.floor(landing.x)),
                     ", ",
-                    Paint.green(landing.z.toInt()),
+                    Paint.green(Mth.floor(landing.z)),
                 ),
             )
         }
