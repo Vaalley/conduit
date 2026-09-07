@@ -4,6 +4,7 @@ import eu.mctraveler.embassy.EmbassiesFeature
 import eu.mctraveler.passport.PassportFeature
 import eu.mctraveler.text.Paint
 import eu.mctraveler.worlds.Landing
+import eu.mctraveler.worlds.TeleportCountdown
 import java.util.UUID
 import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
@@ -254,15 +255,17 @@ object CrystalMenu {
         }
         player.closeContainer()
         val landing = destination.resolve(player, crystalCharges) ?: return
-        val sent = landing.send(player)
-        if (sent) PassportFeature.recordCrystalTrip(player)
-        if (destination.free) {
-            player.sendSystemMessage(Paint.info("You arrived at ", Paint.aqua(destination.name.lowercase())))
-        } else {
-            CrystalEnergy.modify(player, -1)
-            player.sendSystemMessage(
-                Paint.info("You used one energy going to ", Paint.aqua(destination.name.lowercase())),
-            )
+        TeleportCountdown.begin(player) {
+            val sent = landing.send(player)
+            if (sent) PassportFeature.recordCrystalTrip(player)
+            if (destination.free) {
+                player.sendSystemMessage(Paint.info("You arrived at ", Paint.aqua(destination.name.lowercase())))
+            } else {
+                CrystalEnergy.modify(player, -1)
+                player.sendSystemMessage(
+                    Paint.info("You used one energy going to ", Paint.aqua(destination.name.lowercase())),
+                )
+            }
         }
     }
 

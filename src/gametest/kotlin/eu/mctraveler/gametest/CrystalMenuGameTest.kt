@@ -9,6 +9,7 @@ import eu.mctraveler.embassy.EmbassiesFeature
 import eu.mctraveler.embassy.EmbassyOrigins
 import eu.mctraveler.region.RegionProtection
 import eu.mctraveler.text.Paint
+import eu.mctraveler.worlds.TeleportCountdown
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
@@ -255,7 +256,7 @@ class CrystalMenuGameTest {
         }
     }
 
-    @GameTest
+    @GameTest(maxTicks = 200)
     fun aPaidDestinationRefusesWhenTheCrystalTierHasInsufficientEnergy(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "TCEnergyClick")
         try {
@@ -364,7 +365,7 @@ class CrystalMenuGameTest {
         }
     }
 
-    @GameTest
+    @GameTest(maxTicks = 200)
     fun aMenuOpenedOnForeignLandStillAcceptsItsClicks(helper: GameTestHelper) {
         val owner = MessageCapturingPlayer.join(helper, "TCHostA")
         val guest = MessageCapturingPlayer.join(helper, "TCHostB")
@@ -459,7 +460,7 @@ class CrystalMenuGameTest {
 
     // ---- the destinations ----
 
-    @GameTest
+    @GameTest(maxTicks = 200)
     fun adoubleClickSpendsOneEnergyAndTeleportsOnce(helper: GameTestHelper) {
         // The destination is queued rather than run inside the click, so both
         // clicks of a double-click can reach the queue before either has closed
@@ -473,7 +474,7 @@ class CrystalMenuGameTest {
 
         menu.clicked(EMBASSY_SLOT, 0, ContainerInput.PICKUP, player)
         menu.clicked(EMBASSY_SLOT, 0, ContainerInput.PICKUP, player)
-        helper.runAfterDelay(1) {
+        helper.runAfterDelay(AFTER_COUNTDOWN) {
             try {
                 helper.assertValueEqual(
                     CrystalEnergy.energyOf(player),
@@ -492,7 +493,7 @@ class CrystalMenuGameTest {
         }
     }
 
-    @GameTest
+    @GameTest(maxTicks = 200)
     fun spawn1SendsThePlayerToSpawnTownForFree(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "TCSpawn")
         CrystalEnergy.setEnergy(player, 0)
@@ -521,7 +522,7 @@ class CrystalMenuGameTest {
         }
     }
 
-    @GameTest
+    @GameTest(maxTicks = 200)
     fun spawn2SendsThePlayerToTheRemoteSpawnForFree(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "TCSpawn2")
         CrystalEnergy.setEnergy(player, 5)
@@ -548,7 +549,7 @@ class CrystalMenuGameTest {
         }
     }
 
-    @GameTest
+    @GameTest(maxTicks = 200)
     fun bedRefusesAPlayerWithNowhereToWakeUpAndCostsNothing(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "TCNoBed")
         CrystalEnergy.setEnergy(player, 5)
@@ -565,7 +566,7 @@ class CrystalMenuGameTest {
         }
     }
 
-    @GameTest
+    @GameTest(maxTicks = 200)
     fun bedSendsThePlayerToTheirRespawnPoint(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "TCBed")
         val bed = helper.absolutePos(BlockPos(1, 1, 1))
@@ -596,7 +597,7 @@ class CrystalMenuGameTest {
         }
     }
 
-    @GameTest
+    @GameTest(maxTicks = 200)
     fun embassyLandsInTheEmbassiesDimensionAndRecordsAnOrigin(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "TCEmbassy")
         CrystalEnergy.setEnergy(player, 5)
@@ -627,7 +628,7 @@ class CrystalMenuGameTest {
         }
     }
 
-    @GameTest
+    @GameTest(maxTicks = 200)
     fun wildernessRefusesAndCostsNothing(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "TCWild")
         CrystalEnergy.setEnergy(player, 5)
@@ -649,7 +650,7 @@ class CrystalMenuGameTest {
     // online" is a claim about the whole player list, and tests inside a batch
     // run side by side. The id is what makes the batch — see the note on
     // theServerStoppingClosesEveryOpenCrystalMenu below.
-    @GameTest(environment = "mctraveler-test:own_batch_crystal_solo")
+    @GameTest(maxTicks = 200, environment = "mctraveler-test:own_batch_crystal_solo")
     fun playerRefusesWhenNobodyElseIsOnline(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "TCAlone")
         // The claim is about the whole player list, so make it true rather than
@@ -672,7 +673,7 @@ class CrystalMenuGameTest {
         }
     }
 
-    @GameTest
+    @GameTest(maxTicks = 200)
     fun playerOpensAHeadForEveryoneElseOnline(helper: GameTestHelper) {
         val chooser = MessageCapturingPlayer.join(helper, "TCChooser")
         val other = MessageCapturingPlayer.join(helper, "TCChosen")
@@ -780,7 +781,7 @@ class CrystalMenuGameTest {
         acceptor.messages.clear()
 
         acceptor.runsHiddenCommand("${CrystalRequests.ACCEPT_COMMAND} TCComeA")
-        helper.runAfterDelay(1) {
+        helper.runAfterDelay(AFTER_COUNTDOWN) {
             try {
                 helper.assertTrue(
                     requester.position().distanceTo(acceptor.position()) < 1.0,
@@ -1069,7 +1070,7 @@ class CrystalMenuGameTest {
     // needs an id of its own. The `own_batch_*` files are deliberately identical
     // and deliberately not shared — merging them would put these tests back in
     // one batch, which is the very thing each of them cannot survive.
-    @GameTest(environment = "mctraveler-test:own_batch_crystal_sweep")
+    @GameTest(maxTicks = 200, environment = "mctraveler-test:own_batch_crystal_sweep")
     fun theServerStoppingClosesEveryOpenCrystalMenu(helper: GameTestHelper) {
         // SERVER_STOPPING itself cannot be reached from a gametest, so what it
         // calls is called directly (as EmbassiesGameTest does for its own stop hook).
@@ -1176,10 +1177,13 @@ private fun MessageCapturingPlayer.asksToTeleportTo(target: MessageCapturingPlay
     CrystalRequests.send(this, CrystalMenu.Head(target.uuid, target.gameProfile.name))
 }
 
+/** One tick for the queued click, the countdown, and one tick for the departure. */
+private val AFTER_COUNTDOWN = 1L + TeleportCountdown.DURATION_TICKS + 1
+
 /**
  * Clicks [slot] and runs [assertions] once the queued destination has had its
- * tick, succeeding the test and taking [cleanup]'s players off the server
- * whichever way it goes.
+ * tick and its countdown, succeeding the test and taking [cleanup]'s players
+ * off the server whichever way it goes.
  */
 private fun GameTestHelper.afterClick(
     player: MessageCapturingPlayer,
@@ -1188,7 +1192,7 @@ private fun GameTestHelper.afterClick(
     assertions: () -> Unit,
 ) {
     player.containerMenu.clicked(slot, 0, ContainerInput.PICKUP, player)
-    runAfterDelay(1) {
+    runAfterDelay(AFTER_COUNTDOWN) {
         try {
             assertions()
             if (cleanup.isNotEmpty()) succeed()

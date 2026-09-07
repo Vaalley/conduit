@@ -29,6 +29,13 @@ _Avoid_: crystal item, teleporter (ambiguous with the embassy anchors)
 The pool of 0–5 teleport charges a player carries, shared by every Teleportation Crystal they own and recharging one point per 15 minutes of play time. Shown to each player as the damage bar of every crystal they see, so the same crystal reads differently for different viewers.
 _Avoid_: charges, durability (the damage bar is a display of Energy, not wear)
 
+**Random Teleport**:
+`/rtp`: a free trip to a random safe surface column in the overworld ring around spawn (`mctraveler/rtp.json`: radius, minDistance, cooldownSeconds), on nobody's region, once per cooldown. Also offered by RTP Signs — signs an Admin marks with `/rtp sign`, right-clicked by players who need not know the command. Overworld only; refused from the Nether, End, and Embassies. Not tied to Energy.
+_Avoid_: wilderness (the crystal menu's unfinished stub)
+
+**Teleport Countdown**:
+The three seconds every teleport — crystal destination, `/spawn1`, accepted request, `/rtp`, RTP Sign — waits before departing, counted on the action bar with a note-block pling per second. Moving more than half a block cancels it, and nothing (Energy, cooldown) is spent for a cancelled trip.
+
 **Admin**:
 A player with vanilla server operator status. The port keeps no separate admin flag; vanilla /op and /deop are the management commands.
 _Avoid_: isAdmin (the Portal's stored flag)

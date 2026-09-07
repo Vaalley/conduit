@@ -1,6 +1,7 @@
 package eu.mctraveler.gametest
 
 import eu.mctraveler.crystal.CrystalEnergy
+import eu.mctraveler.worlds.TeleportCountdown
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.world.level.Level
@@ -146,34 +147,43 @@ class CrystalCommandGameTest {
         }
     }
 
-    @GameTest
+    @GameTest(maxTicks = 200)
     fun spawnCommandsTeleportForFree(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "CrystalSpawnCommands")
-        try {
-            CrystalEnergy.setEnergy(player, 2)
-            player.runCommand("spawn1")
-            helper.assertValueEqual(player.x, 16.5, "spawn1 x")
-            helper.assertValueEqual(player.y, 71.0, "spawn1 y")
-            helper.assertValueEqual(player.z, -15.5, "spawn1 z")
-            helper.assertValueEqual(player.yRot, 180.0f, "spawn1 yaw")
-            helper.assertValueEqual(CrystalEnergy.energyOf(player), 2, "energy after spawn1")
-            helper.assertValueEqual(player.messages.last().string, "SUCCESS Arrived at spawn 1", "spawn1 reply")
-
-            player.runCommand("spawn2")
-            helper.assertValueEqual(
-                player.level().dimension(),
-                Level.OVERWORLD,
-                "spawn2 dimension",
-            )
-            helper.assertValueEqual(player.x, 0.5, "spawn2 x")
-            helper.assertValueEqual(player.y, 67.5, "spawn2 y")
-            helper.assertValueEqual(player.z, 802816.5, "spawn2 z")
-            helper.assertValueEqual(player.yRot, 0.0f, "spawn2 yaw")
-            helper.assertValueEqual(CrystalEnergy.energyOf(player), 2, "energy after spawn2")
-            helper.assertValueEqual(player.messages.last().string, "SUCCESS Arrived at spawn 2", "spawn2 reply")
-            helper.succeed()
-        } finally {
-            player.leave()
+        val afterCountdown = TeleportCountdown.DURATION_TICKS + 1L
+        CrystalEnergy.setEnergy(player, 2)
+        player.runCommand("spawn1")
+        helper.runAfterDelay(afterCountdown) {
+            try {
+                helper.assertValueEqual(player.x, 16.5, "spawn1 x")
+                helper.assertValueEqual(player.y, 71.0, "spawn1 y")
+                helper.assertValueEqual(player.z, -15.5, "spawn1 z")
+                helper.assertValueEqual(player.yRot, 180.0f, "spawn1 yaw")
+                helper.assertValueEqual(CrystalEnergy.energyOf(player), 2, "energy after spawn1")
+                helper.assertValueEqual(player.chatMessages.last().string, "SUCCESS Arrived at spawn 1", "spawn1 reply")
+                player.runCommand("spawn2")
+            } catch (failure: Throwable) {
+                player.leave()
+                throw failure
+            }
+        }
+        helper.runAfterDelay(afterCountdown * 2) {
+            try {
+                helper.assertValueEqual(
+                    player.level().dimension(),
+                    Level.OVERWORLD,
+                    "spawn2 dimension",
+                )
+                helper.assertValueEqual(player.x, 0.5, "spawn2 x")
+                helper.assertValueEqual(player.y, 67.5, "spawn2 y")
+                helper.assertValueEqual(player.z, 802816.5, "spawn2 z")
+                helper.assertValueEqual(player.yRot, 0.0f, "spawn2 yaw")
+                helper.assertValueEqual(CrystalEnergy.energyOf(player), 2, "energy after spawn2")
+                helper.assertValueEqual(player.chatMessages.last().string, "SUCCESS Arrived at spawn 2", "spawn2 reply")
+                helper.succeed()
+            } finally {
+                player.leave()
+            }
         }
     }
 }

@@ -3,10 +3,12 @@ package eu.mctraveler.worlds
 import eu.mctraveler.MCTraveler
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents
 
 /**
- * Wiring for what is left of the Worlds subsystem: `/switch`, and the merge
- * artifact it reads.
+ * Wiring for what is left of the Worlds subsystem: `/switch`, the merge
+ * artifact it reads, and the [TeleportCountdown] every teleport goes through.
  *
  * There used to be a Worlds service here — the two-World topology, Travel, the
  * Per-World Bucket, and a login hook that routed every arriving player into the
@@ -38,5 +40,8 @@ object WorldsFeature {
         CommandRegistrationCallback.EVENT.register { dispatcher, _, _ ->
             SwitchCommand.register(dispatcher) { checkNotNull(bankedPositions) }
         }
+        ServerTickEvents.END_SERVER_TICK.register(TeleportCountdown::tick)
+        ServerPlayConnectionEvents.DISCONNECT.register { handler, _ -> TeleportCountdown.forget(handler.player.uuid) }
+        ServerLifecycleEvents.SERVER_STOPPED.register { TeleportCountdown.clear() }
     }
 }
