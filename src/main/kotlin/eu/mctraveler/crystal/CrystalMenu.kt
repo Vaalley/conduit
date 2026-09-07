@@ -2,6 +2,7 @@ package eu.mctraveler.crystal
 
 import eu.mctraveler.embassy.EmbassiesFeature
 import eu.mctraveler.passport.PassportFeature
+import eu.mctraveler.rtp.RtpFeature
 import eu.mctraveler.text.Paint
 import eu.mctraveler.worlds.Landing
 import eu.mctraveler.worlds.TeleportCountdown
@@ -131,7 +132,8 @@ object CrystalMenu {
                 Destination(
                     name = "Wilderness",
                     icon = Items.GRASS_BLOCK,
-                    lore = listOf("Coming soon"),
+                    lore = listOf("Random teleport somewhere far away", "free, once every few minutes"),
+                    free = true,
                     resolve = { player, _ -> wilderness(player) },
                 ),
             )
@@ -339,9 +341,13 @@ object CrystalMenu {
         return Landing(level, 0.5, 1.0, 0.5, 0.0f, 0.0f)
     }
 
-    /** The stub that is the feature (spec story 32, and Out of Scope). */
+    /**
+     * `/rtp` by another door: the same gates, countdown, pick, cooldown and
+     * replies as the command (spec story 32 retired). [RtpFeature] runs the
+     * whole trip itself, so as far as the menu is concerned the click is over.
+     */
     private fun wilderness(player: ServerPlayer): Landing? {
-        player.sendSystemMessage(Paint.error("Sorry, this feature is not available yet"))
+        RtpFeature.teleport(player)?.let(player::sendSystemMessage)
         return null
     }
 
