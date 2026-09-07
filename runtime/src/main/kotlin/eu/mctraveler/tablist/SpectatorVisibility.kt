@@ -16,8 +16,8 @@ import net.minecraft.world.level.GameType
  * exactly when an admin is spectating them. Vanilla builds one identical packet (from the
  * live `GameType`) and broadcasts it unchanged to every connection, so hiding the tell from
  * non-admins means substituting a different packet for
- * their connection specifically — [SpectatorVisibilityMixin][eu.mctraveler.mixin
- * .SpectatorVisibilityMixin] does that per outgoing packet; this object decides *what* to
+ * their connection specifically — [OutboundPacketMixin][eu.mctraveler.mixin
+ * .OutboundPacketMixin] does that per outgoing packet; this object decides *what* to
  * send.
  *
  * Two independent things get masked, since Creative and Spectator each have their own tell:

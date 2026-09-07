@@ -13,12 +13,11 @@
     "PlayerDataStorageMixin",
     "CommandsMixin",
     "ServerGamePacketListenerImplMixin",
-    "SpectatorVisibilityMixin",
+    "OutboundPacketMixin",
     "VanishTrackingMixin",
     "ClientboundPlayerInfoUpdatePacketAccessor",
     "RegionSignEditMixin",
     "DonatorSignMarkdownMixin",
-    "SignNameDisplayMixin",
     "SignTokenRegistryMixin",
     "RegionContainerSessionMixin",
     "RegionContainerClickMixin",
@@ -42,9 +41,7 @@
     "RegionBucketMixin",
     "EmbassyOriginMixin",
     "CrystalCraftingGuardMixin",
-    "CrystalDamageDisplayMixin",
-    "CrystalAcceptCommandMixin",
-    "NoRainWeatherMixin"
+    "CrystalAcceptCommandMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -43,6 +43,9 @@ object TabListFeature {
      */
     const val HEALTH_OBJECTIVE = "mctraveler_health"
 
+    /** The header never changes; build it once. */
+    private val HEADER: Component = header()
+
     fun register() {
         ServerLifecycleEvents.SERVER_STARTED.reloadable.register(::ensureHealthObjective)
         // The objective is server (world-save) state, so it survives a hot reload on its own;
@@ -128,5 +131,5 @@ object TabListFeature {
         else min(20.0, 1_000_000_000.0 / averageTickTimeNanos)
 
     private fun headerFooterPacket(server: MinecraftServer): ClientboundTabListPacket =
-        ClientboundTabListPacket(header(), footer(tps(server.averageTickTimeNanos)))
+        ClientboundTabListPacket(HEADER, footer(tps(server.averageTickTimeNanos)))
 }

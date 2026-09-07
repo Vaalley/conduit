@@ -57,7 +57,7 @@ class SignNameTokenGameTest {
 
         val viewer = MessageCapturingPlayer.join(helper, "SignNameViewer")
         val original: ClientboundBlockEntityDataPacket = sign.updatePacket
-        val personalized = Hooks.personalizeSignsForViewer(viewer, original)
+        val personalized = Hooks.packetForViewer(viewer, original)
         helper.assertTrue(personalized === original, "a non-Donator's <name> must not be rewritten")
 
         traveler.leave()
@@ -80,7 +80,7 @@ class SignNameTokenGameTest {
 
     /** The first line of the sign as [viewer] would render it, via the outgoing packet seam. */
     private fun renderedFirstLine(sign: SignBlockEntity, viewer: ServerPlayer): String {
-        val packet = Hooks.personalizeSignsForViewer(viewer, sign.updatePacket) as ClientboundBlockEntityDataPacket
+        val packet = Hooks.packetForViewer(viewer, sign.updatePacket) as ClientboundBlockEntityDataPacket
         val ops = viewer.level().registryAccess().createSerializationContext(NbtOps.INSTANCE)
         val front = SignText.DIRECT_CODEC.parse(ops, packet.tag.getCompoundOrEmpty("front_text")).orThrow
         return front.getMessage(0, false).string

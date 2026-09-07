@@ -1,6 +1,7 @@
 package eu.mctraveler.mixin;
 
 import eu.mctraveler.bootstrap.Hooks;
+import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.SleepStatus;
@@ -38,9 +39,22 @@ public abstract class SleepRequirementMixin {
     }
 
     private static List<ServerPlayer> mctraveler$withoutAway(List<ServerPlayer> players) {
-        if (players.stream().noneMatch(Hooks::isAway)) {
+        boolean anyAway = false;
+        for (ServerPlayer player : players) {
+            if (Hooks.isAway(player)) {
+                anyAway = true;
+                break;
+            }
+        }
+        if (!anyAway) {
             return players;
         }
-        return players.stream().filter(player -> !Hooks.isAway(player)).toList();
+        List<ServerPlayer> awake = new ArrayList<>(players.size());
+        for (ServerPlayer player : players) {
+            if (!Hooks.isAway(player)) {
+                awake.add(player);
+            }
+        }
+        return awake;
     }
 }

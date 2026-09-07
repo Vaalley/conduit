@@ -57,10 +57,13 @@ object CrystalEnergy {
         // nothing (a clamped spend, setting the energy someone already has)
         // touches no disk.
         if (proposed == current) return current
-        store.setCrystalEnergy(uuid, proposed)
-        if (current == MAX_ENERGY && proposed < MAX_ENERGY && nextRegenAt(store, uuid) == null) {
-            store.setCrystalNextRegenAt(uuid, playTimeTicks + RECHARGE_TICKS)
+        val pending = nextRegenAt(store, uuid)
+        val next = if (current == MAX_ENERGY && proposed < MAX_ENERGY && pending == null) {
+            playTimeTicks + RECHARGE_TICKS
+        } else {
+            pending
         }
+        store.setCrystalState(uuid, proposed, next)
         return proposed
     }
 
@@ -76,12 +79,12 @@ object CrystalEnergy {
         if (current >= MAX_ENERGY) return false
         val threshold = nextRegenAt(store, uuid)
         if (threshold != null && playTimeTicks < threshold) return false
-        modify(store, uuid, 1, playTimeTicks)
-        if (current >= MAX_ENERGY - 1) {
-            store.setCrystalNextRegenAt(uuid, null)
-        } else {
-            store.setCrystalNextRegenAt(uuid, playTimeTicks + RECHARGE_TICKS)
-        }
+        val granted = current + 1
+        store.setCrystalState(
+            uuid,
+            granted,
+            if (granted >= MAX_ENERGY) null else playTimeTicks + RECHARGE_TICKS,
+        )
         return true
     }
 

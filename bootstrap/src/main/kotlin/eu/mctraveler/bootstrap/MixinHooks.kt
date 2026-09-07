@@ -6,8 +6,6 @@ import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.network.chat.Component
 import net.minecraft.network.protocol.Packet
-import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket
-import net.minecraft.network.protocol.game.ClientboundSetScorePacket
 import net.minecraft.network.protocol.status.ServerStatus
 import net.minecraft.resources.ResourceKey
 import net.minecraft.server.MinecraftServer
@@ -58,11 +56,8 @@ interface MixinHooks {
     /** Null means "leave vanilla's tab name alone". */
     fun tabDisplayName(player: ServerPlayer): Component?
 
-    /** Null means "send the packet unmasked". */
-    fun maskSpectators(viewer: ServerPlayer, packet: ClientboundPlayerInfoUpdatePacket): ClientboundPlayerInfoUpdatePacket?
-
-    /** Null means "send the packet unmasked". */
-    fun maskHealthScore(viewer: ServerPlayer, packet: ClientboundSetScorePacket): ClientboundSetScorePacket?
+    /** [packet] as [viewer] should receive it — [packet] itself when nothing about it is viewer-specific. */
+    fun packetForViewer(viewer: ServerPlayer, packet: Packet<*>): Packet<*>
 
     /** Issue #47: whether [target]'s entity must be hidden from [viewer] right now (vanished). */
     fun isVanishedFromViewer(target: ServerPlayer, viewer: ServerPlayer): Boolean
@@ -73,13 +68,6 @@ interface MixinHooks {
      * carries no markdown perk — meaning leave the vanilla-built line alone.
      */
     fun markdownLineFor(editor: ServerPlayer, raw: String): Component?
-
-    /**
-     * The `<name>` sign token: [packet] re-serialised with [viewer]'s own name
-     * where a token stands (or [packet] itself when nothing needs rewriting).
-     * Handles both the sign block-entity packet and the chunk packet.
-     */
-    fun personalizeSignsForViewer(viewer: ServerPlayer, packet: Packet<*>): Packet<*>
 
     /** Registers whether the chunk at [pos] holds a `<name>` sign (called once the sign is in-world). */
     fun onSignLoadedOrChanged(level: Level, pos: BlockPos, sign: SignBlockEntity)
@@ -99,8 +87,6 @@ interface MixinHooks {
         craftSlots: CraftingContainer,
         resultSlots: ResultContainer,
     )
-    fun crystalDamageForViewer(viewer: ServerPlayer, packet: Packet<*>): Packet<*>
-    fun weatherForViewer(viewer: ServerPlayer, packet: Packet<*>): Packet<*>
 
     // Region protection
     fun isModOwnedMenu(menu: AbstractContainerMenu): Boolean
@@ -173,24 +159,14 @@ object Hooks {
 
     @JvmStatic fun tabDisplayName(player: ServerPlayer): Component? = impl?.tabDisplayName(player)
 
-    @JvmStatic fun maskSpectators(
-        viewer: ServerPlayer,
-        packet: ClientboundPlayerInfoUpdatePacket,
-    ): ClientboundPlayerInfoUpdatePacket? = impl?.maskSpectators(viewer, packet)
-
-    @JvmStatic fun maskHealthScore(
-        viewer: ServerPlayer,
-        packet: ClientboundSetScorePacket,
-    ): ClientboundSetScorePacket? = impl?.maskHealthScore(viewer, packet)
+    @JvmStatic fun packetForViewer(viewer: ServerPlayer, packet: Packet<*>): Packet<*> =
+        impl?.packetForViewer(viewer, packet) ?: packet
 
     @JvmStatic fun isVanishedFromViewer(target: ServerPlayer, viewer: ServerPlayer): Boolean =
         impl?.isVanishedFromViewer(target, viewer) ?: false
 
     @JvmStatic fun markdownLineFor(editor: ServerPlayer, raw: String): Component? =
         impl?.markdownLineFor(editor, raw)
-
-    @JvmStatic fun personalizeSignsForViewer(viewer: ServerPlayer, packet: Packet<*>): Packet<*> =
-        impl?.personalizeSignsForViewer(viewer, packet) ?: packet
 
     @JvmStatic fun onSignLoadedOrChanged(level: Level, pos: BlockPos, sign: SignBlockEntity) {
         impl?.onSignLoadedOrChanged(level, pos, sign)
@@ -219,11 +195,6 @@ object Hooks {
         impl?.crystalCraftingGuard(menu, player, craftSlots, resultSlots)
     }
 
-    @JvmStatic fun crystalDamageForViewer(viewer: ServerPlayer, packet: Packet<*>): Packet<*> =
-        impl?.crystalDamageForViewer(viewer, packet) ?: packet
-
-    @JvmStatic fun weatherForViewer(viewer: ServerPlayer, packet: Packet<*>): Packet<*> =
-        impl?.weatherForViewer(viewer, packet) ?: packet
 
     @JvmStatic fun isModOwnedMenu(menu: AbstractContainerMenu): Boolean = impl?.isModOwnedMenu(menu) ?: false
     @JvmStatic fun isPersonalEnderChestMenu(menu: AbstractContainerMenu): Boolean =
