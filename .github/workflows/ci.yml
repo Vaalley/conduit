@@ -6,48 +6,26 @@ on:
   pull_request:
 
 jobs:
-  test:
+  unit:
     runs-on: ubuntu-latest
     env:
       MCA_SELECTOR_JAR: ${{ github.workspace }}/.tools/mcaselector-2.8-mctraveler1.jar
     steps:
+      # Local actions must be checked out before GitHub can load them.
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Unit tests
+        run: ./gradlew test --no-daemon -PmcaSelectorJar="$MCA_SELECTOR_JAR" -Pmctraveler.testForks="$(nproc)"
 
-      # The unit test task stages the patched MCA Selector jar (gradle/merge-worlds.gradle.kts),
-      # so build it once from the pinned tag + patch and cache it by patch content.
-      - name: Restore MCA Selector
-        id: mcaselector
-        uses: actions/cache@v4
-        with:
-          path: .tools/mcaselector-2.8-mctraveler1.jar
-          key: mcaselector-2.8-${{ hashFiles('gradle/mcaselector/2.8-mctraveler1.patch') }}
-
-      - name: Set up JDK 21 (MCA Selector build)
-        if: steps.mcaselector.outputs.cache-hit != 'true'
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 21
-
-      - name: Build MCA Selector
-        if: steps.mcaselector.outputs.cache-hit != 'true'
-        run: |
-          git clone --depth 1 --branch 2.8 https://github.com/Querz/mcaselector.git "$RUNNER_TEMP/mcaselector"
-          git -C "$RUNNER_TEMP/mcaselector" apply "$GITHUB_WORKSPACE/gradle/mcaselector/2.8-mctraveler1.patch"
-          "$RUNNER_TEMP/mcaselector/gradlew" -p "$RUNNER_TEMP/mcaselector" --no-daemon shadowJar
-          mkdir -p "$(dirname "$MCA_SELECTOR_JAR")"
-          cp "$RUNNER_TEMP/mcaselector/build/libs/mcaselector-2.8-all.jar" "$MCA_SELECTOR_JAR"
-
-      - name: Set up JDK 25
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 25
-
-      - uses: gradle/actions/setup-gradle@v4
-
-      - name: Build (unit tests + gametests)
-        run: ./gradlew build --no-daemon -PmcaSelectorJar="$MCA_SELECTOR_JAR"
-
+  gametest:
+    runs-on: ubuntu-latest
+    env:
+      MCA_SELECTOR_JAR: ${{ github.workspace }}/.tools/mcaselector-2.8-mctraveler1.jar
+    steps:
+      # Local actions must be checked out before GitHub can load them.
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Build (gametests)
+        run: ./gradlew build -x test --no-daemon -PmcaSelectorJar="$MCA_SELECTOR_JAR"
       - name: Production smoke
         run: ./gradlew prodServer --no-daemon -PmcaSelectorJar="$MCA_SELECTOR_JAR"

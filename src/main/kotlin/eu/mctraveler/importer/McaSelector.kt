@@ -31,6 +31,8 @@ import java.nio.file.Path
  * wrong on its own.
  */
 open class McaSelector(private val jar: Path, private val java: Path = currentJava()) {
+    private val jvmFlags: List<String> =
+        System.getProperty(JVM_FLAGS_PROPERTY)?.split(' ')?.filter { it.isNotBlank() } ?: emptyList()
 
     /**
      * The chunks under [from] that vanilla has finished generating, written to
@@ -120,7 +122,7 @@ open class McaSelector(private val jar: Path, private val java: Path = currentJa
      * here is what abandons the merge (ticket 02).
      */
     private fun run(what: String, vararg arguments: String): String {
-        val command = listOf(java.toString(), "-jar", jar.toString()) + arguments
+        val command = listOf(java.toString()) + jvmFlags + listOf("-jar", jar.toString()) + arguments
         val process = ProcessBuilder(command).redirectErrorStream(true).start()
         val output = process.inputStream.bufferedReader().use { it.readText() }
         val status = process.waitFor()
@@ -140,6 +142,9 @@ open class McaSelector(private val jar: Path, private val java: Path = currentJa
 
         /** Where the build tells the merge it put the verified jar; see gradle/merge-worlds.gradle.kts. */
         const val JAR_PROPERTY = "mctraveler.mcaSelectorJar"
+
+        /** Optional JVM flags for test-only MCA Selector subprocesses. */
+        const val JVM_FLAGS_PROPERTY = "mctraveler.mcaSelectorJvmFlags"
 
         /**
          * The tool as the build resolved it.

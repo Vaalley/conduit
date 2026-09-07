@@ -63,7 +63,10 @@ fabricApi {
 
 tasks.test {
     useJUnitPlatform()
-    maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(1)
+    maxParallelForks = providers.gradleProperty("mctraveler.testForks").map(String::toInt)
+        .getOrElse((Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(1))
+    // MCA Selector test fixtures are tiny; startup dominates each subprocess.
+    systemProperty("mctraveler.mcaSelectorJvmFlags", "-XX:TieredStopAtLevel=1 -XX:+UseSerialGC -Xshare:auto")
     testLogging {
         exceptionFormat = TestExceptionFormat.FULL
     }

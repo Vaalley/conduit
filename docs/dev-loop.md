@@ -75,10 +75,12 @@ What hot-swaps and what doesn't:
   slow part of Fabric builds is gone.
 - `gradle.properties` enables the **configuration cache**, **build cache**, **parallel
   execution**, **VFS watching**, and **Kotlin incremental compilation** (K2 daemon).
-- `tasks.test.maxParallelForks` uses half the available processors, which keeps the
+- `tasks.test.maxParallelForks` uses half the available processors by default, or the
+  `-Pmctraveler.testForks=...` override in CI and local experiments, which keeps the
   MCA Selector subprocess tests from running serially.
-- Measured on 8 cores: a cold-ish `build` is ~3m07s, with `:test` at ~2m42s dominated
-  by the MCA Selector subprocess tests. After a gametest run, a no-op `build` takes
-  ~3s because the up-to-date marker skips `runGameTest`.
+- Measured on 8 cores: a cold-ish `build` is ~3m07s, with `:test` at ~2m08s on the
+  default four forks, dominated by the MCA Selector subprocess tests. Eight forks
+  measured ~1m36s. After a gametest run, a no-op `build` takes ~3s because the
+  up-to-date marker skips `runGameTest`.
 
 Treat regressions of the warm loop as build bugs — profile with `./gradlew build --profile`.
