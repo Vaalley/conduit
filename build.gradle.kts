@@ -99,15 +99,6 @@ tasks.named<JavaExec>("runGameTest") {
     inputs.property("filter", providers.gradleProperty("mctraveler.gametestFilter").orElse(""))
     outputs.file(gameTestMarker)
     val marker = gameTestMarker
-    val gametestSourceRoot = layout.projectDirectory.dir("src/gametest").asFile
-    // Gradle content snapshots do not notice an mtime-only touch of a gametest source.
-    outputs.upToDateWhen {
-        val markerFile = marker.get().asFile
-        markerFile.exists() &&
-            markerFile.lastModified() >= (gametestSourceRoot.walkTopDown()
-                .filter { it.isFile }
-                .maxOfOrNull(File::lastModified) ?: 0L)
-    }
     providers.gradleProperty("mctraveler.gametestFilter").orNull?.let {
         systemProperty("fabric-api.gametest.filter", it)
     }
