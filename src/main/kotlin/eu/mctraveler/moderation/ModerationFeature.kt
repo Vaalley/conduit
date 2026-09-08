@@ -224,9 +224,8 @@ object ModerationFeature {
         source.server.playerList.getPlayer(resolved.first)?.connection?.disconnect(
             checkNotNull(loginDenial(NameAndId(resolved.first, resolved.second))),
         )
-        source.sendSuccess(
-            { Paint.success("Banned ", Paint.green(resolved.second), " ", Paint.gray("(${durationText(parsed.duration)})"), ": ", parsed.reason) },
-            false,
+        source.sendSystemMessage(
+            Paint.success("Banned ", Paint.green(resolved.second), " ", Paint.gray("(${durationText(parsed.duration)})"), ": ", parsed.reason),
         )
         return punishment.id
     }
@@ -240,9 +239,8 @@ object ModerationFeature {
             PunishmentType.MUTE, resolved.first, resolved.second, staff, staffName, parsed.reason,
             parsed.duration?.let { System.currentTimeMillis() + it },
         )
-        source.sendSuccess(
-            { Paint.success("Muted ", Paint.green(resolved.second), " ", Paint.gray("(${durationText(parsed.duration)})"), ": ", parsed.reason) },
-            false,
+        source.sendSystemMessage(
+            Paint.success("Muted ", Paint.green(resolved.second), " ", Paint.gray("(${durationText(parsed.duration)})"), ": ", parsed.reason),
         )
         return 1
     }
@@ -255,7 +253,7 @@ object ModerationFeature {
                 source.sendFailure(Paint.error("No active ${type.name.lowercase()} for ", Paint.red(resolved.second)))
                 return 0
             }
-        source.sendSuccess({ Paint.success("Lifted ", type.name, " for ", Paint.green(lifted.targetName)) }, false)
+        source.sendSystemMessage(Paint.success("Lifted ", type.name, " for ", Paint.green(lifted.targetName)))
         return 1
     }
 
@@ -271,7 +269,7 @@ object ModerationFeature {
         val (staff, staffName) = staff(source)
         store().add(PunishmentType.KICK, resolved.first, resolved.second, staff, staffName, reason, null, active = false)
         target.connection.disconnect(Paint("Kicked: ", reason))
-        source.sendSuccess({ Paint.success("Kicked ", Paint.green(resolved.second), ": ", reason) }, false)
+        source.sendSystemMessage(Paint.success("Kicked ", Paint.green(resolved.second), ": ", reason))
         return 1
     }
 
@@ -282,7 +280,7 @@ object ModerationFeature {
         val (staff, staffName) = staff(source)
         store().add(PunishmentType.WARN, resolved.first, resolved.second, staff, staffName, text, null)
         source.server.playerList.getPlayer(resolved.first)?.sendSystemMessage(Paint.error("You have been warned: ", text))
-        source.sendSuccess({ Paint.success("Warned ", Paint.green(resolved.second), ": ", text) }, false)
+        source.sendSystemMessage(Paint.success("Warned ", Paint.green(resolved.second), ": ", text))
         return 1
     }
 
@@ -291,11 +289,11 @@ object ModerationFeature {
         val resolved = resolve(source, name) ?: return 0
         val warnings = store().history(resolved.first).filter { it.type == PunishmentType.WARN && it.active }
         if (warnings.isEmpty()) {
-            source.sendSuccess({ Paint.gray("No active warnings for ${resolved.second}") }, false)
+            source.sendSystemMessage(Paint.gray("No active warnings for ${resolved.second}"))
             return 1
         }
         warnings.forEach {
-            source.sendSuccess({ Paint.gray("#${it.id} ${dateFormat.format(Instant.ofEpochMilli(it.createdAt))} by ${it.staffName}: ${it.reason}") }, false)
+            source.sendSystemMessage(Paint.gray("#${it.id} ${dateFormat.format(Instant.ofEpochMilli(it.createdAt))} by ${it.staffName}: ${it.reason}"))
         }
         return 1
     }
@@ -308,7 +306,7 @@ object ModerationFeature {
             return 0
         }
         store().deactivate(id, staff(source).second)
-        source.sendSuccess({ Paint.success("Warning ", id, " lifted") }, false)
+        source.sendSystemMessage(Paint.success("Warning ", id, " lifted"))
         return 1
     }
 
@@ -317,13 +315,12 @@ object ModerationFeature {
         val resolved = resolve(source, name) ?: return 0
         val history = store().history(resolved.first)
         if (history.isEmpty()) {
-            source.sendSuccess({ Paint.gray("No history for ${resolved.second}") }, false)
+            source.sendSystemMessage(Paint.gray("No history for ${resolved.second}"))
             return 1
         }
         history.forEach { punishment ->
-            source.sendSuccess(
-                { Paint.gray("#${punishment.id} ${punishment.type.name} ${dateFormat.format(Instant.ofEpochMilli(punishment.createdAt))} by ${punishment.staffName}: ${punishment.reason} [${status(punishment)}]") },
-                false,
+            source.sendSystemMessage(
+                Paint.gray("#${punishment.id} ${punishment.type.name} ${dateFormat.format(Instant.ofEpochMilli(punishment.createdAt))} by ${punishment.staffName}: ${punishment.reason} [${status(punishment)}]"),
             )
         }
         return 1
@@ -334,7 +331,7 @@ object ModerationFeature {
         val resolved = resolve(source, name) ?: return 0
         val (staff, staffName) = staff(source)
         store().add(PunishmentType.NOTE, resolved.first, resolved.second, staff, staffName, text, null)
-        source.sendSuccess({ Paint.success("Added note for ", Paint.green(resolved.second)) }, false)
+        source.sendSystemMessage(Paint.success("Added note for ", Paint.green(resolved.second)))
         return 1
     }
 
@@ -343,13 +340,12 @@ object ModerationFeature {
         val bans = store().activeBans()
         val pageEntries = bans.drop((page - 1) * 10).take(10)
         if (pageEntries.isEmpty()) {
-            source.sendSuccess({ Paint.gray("No active bans") }, false)
+            source.sendSystemMessage(Paint.gray("No active bans"))
             return 1
         }
         pageEntries.forEach {
-            source.sendSuccess(
-                { Paint.gray("#${it.id} ${it.targetName} — ${it.reason} (by ${it.staffName}, ${expiryLine(it.expiresAt)})") },
-                false,
+            source.sendSystemMessage(
+                Paint.gray("#${it.id} ${it.targetName} — ${it.reason} (by ${it.staffName}, ${expiryLine(it.expiresAt)})"),
             )
         }
         return 1

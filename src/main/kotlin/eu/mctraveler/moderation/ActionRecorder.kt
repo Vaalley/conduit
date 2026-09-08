@@ -157,7 +157,10 @@ object ActionRecorder {
             Commands.literal("lookup").requires(gate)
                 .then(
                     Commands.argument("tail", StringArgumentType.greedyString())
-                        .executes { context -> lookupTail(context.source, StringArgumentType.getString(context, "tail")) },
+                        .suggests(lookupTargetSuggestions)
+                        .executes { context ->
+                            lookupTail(context.source, StringArgumentType.getString(context, "tail"))
+                        },
                 ),
         )
     }
@@ -231,14 +234,14 @@ object ActionRecorder {
             action?.lowercase() != "bucket" || it.type == ActionType.BUCKET_FILL || it.type == ActionType.BUCKET_EMPTY
         }
         if (matching.isEmpty()) {
-            source.sendSuccess({ Paint.gray("No matching actions") }, false)
+            source.sendSystemMessage(Paint.gray("No matching actions"))
             return 1
         }
         matching.take(15).forEach {
-            source.sendSuccess({ Paint.gray("${relative(it.t)} ${it.playerName} ${verb(it.type)} ${it.block} at ${it.x} ${it.y} ${it.z}") }, false)
+            source.sendSystemMessage(Paint.gray("${relative(it.t)} ${it.playerName} ${verb(it.type)} ${it.block} at ${it.x} ${it.y} ${it.z}"))
         }
         if (matching.size > 15) {
-            source.sendSuccess({ Paint.gray("… and ${matching.size - 15} more") }, false)
+            source.sendSystemMessage(Paint.gray("… and ${matching.size - 15} more"))
         }
         return 1
     }

@@ -41,7 +41,7 @@ object WhoisCommand {
         val (uuid, displayName) = resolved
         val online = source.server.playerList.getPlayer(uuid)
         val players = MCTraveler.persistence?.players ?: return 0
-        source.sendSuccess({ Paint.aqua.bold("Whois: $displayName") }, false)
+        source.sendSystemMessage(Paint.aqua.bold("Whois: $displayName"))
         line(source, "Name", displayName)
         line(source, "UUID", uuid)
         line(source, "Rank", online?.let { RankFeature.rankOf(it) } ?: players.rank(uuid) ?: "N/A")
@@ -75,9 +75,8 @@ object WhoisCommand {
         val (uuid, displayName) = resolved
         val online = source.server.playerList.getPlayer(uuid)
         if (online != null) {
-            source.sendSuccess(
-                { Paint("$displayName is online for ${relative(MCTraveler.persistence?.players?.lastLoginAt(uuid))} in ${RegionWorlds.legacyName(online.level().dimension())} at ${blockPosition(online.blockPosition())}") },
-                false,
+            source.sendSystemMessage(
+                Paint("$displayName is online for ${relative(MCTraveler.persistence?.players?.lastLoginAt(uuid))} in ${RegionWorlds.legacyName(online.level().dimension())} at ${blockPosition(online.blockPosition())}"),
             )
             return 1
         }
@@ -87,9 +86,8 @@ object WhoisCommand {
             source.sendFailure(Paint.error("Player ", Paint.red(displayName), " has never joined"))
             return 0
         }
-        source.sendSuccess(
-            { Paint("$displayName was last seen ${relative(logout)} (${dateTime(logout)}) in ${players.lastLocationWorld(uuid) ?: "unknown"} at ${position(players.lastX(uuid), players.lastY(uuid), players.lastZ(uuid))}") },
-            false,
+        source.sendSystemMessage(
+            Paint("$displayName was last seen ${relative(logout)} (${dateTime(logout)}) in ${players.lastLocationWorld(uuid) ?: "unknown"} at ${position(players.lastX(uuid), players.lastY(uuid), players.lastZ(uuid))}"),
         )
         return 1
     }
@@ -118,7 +116,7 @@ object WhoisCommand {
     }
 
     private fun line(source: CommandSourceStack, label: String, value: Any?) {
-        source.sendSuccess({ Paint(Paint.gray("$label: "), value ?: "N/A") }, false)
+        source.sendSystemMessage(Paint(Paint.gray("$label: "), value ?: "N/A"))
     }
 
     private fun position(x: Double?, y: Double?, z: Double?): String =

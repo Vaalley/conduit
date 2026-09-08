@@ -7,6 +7,7 @@ import java.util.UUID
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.server.players.NameAndId
+import net.minecraft.world.level.gamerules.GameRules
 
 class ModerationGameTest {
 
@@ -198,6 +199,28 @@ class ModerationGameTest {
             helper.assertTrue("ModSuggestTarget" in whoisSuggestions, "whois suggestions were $whoisSuggestions")
             helper.assertTrue("ModSuggestTarget" in banSuggestions, "ban suggestions were $banSuggestions")
             cleanup(admin)
+            helper.succeed()
+        }
+    }
+
+    @GameTest(maxTicks = 100)
+    fun whoisOutputIgnoresCommandFeedbackRule(helper: GameTestHelper) {
+        val server = helper.level.server
+        val admin = TestPlayer.join(server, "ModWhoisFeedbackAdmin").also { op(server, it) }
+        val previous = server.gameRules.get(GameRules.SEND_COMMAND_FEEDBACK)
+        server.gameRules.set(GameRules.SEND_COMMAND_FEEDBACK, false, server)
+
+        helper.runAfterDelay(2) {
+            try {
+                admin.runCommand("whois ModWhoisFeedbackAdmin")
+                helper.assertTrue(
+                    admin.systemMessages().any { it.string == "Online: true" },
+                    "whois output was ${admin.systemMessages()}",
+                )
+            } finally {
+                server.gameRules.set(GameRules.SEND_COMMAND_FEEDBACK, previous, server)
+                cleanup(admin)
+            }
             helper.succeed()
         }
     }
