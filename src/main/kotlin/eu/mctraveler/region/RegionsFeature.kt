@@ -120,6 +120,7 @@ object RegionsFeature {
         // The region-flags GUI is the mod's own menu (deviation 16, same as
         // the Teleportation Crystal's).
         RegionProtection.exemptMenu { it is RegionFlagsMenu.RegionFlagsChestMenu }
+        RegionProtection.exemptMenu { it is eu.mctraveler.passport.PassportMenu.PassportChestMenu }
         // The Portal kept start markers per connection; dropping them on
         // disconnect preserves that lifetime.
         ServerPlayConnectionEvents.DISCONNECT.register { handler, _ ->

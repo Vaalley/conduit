@@ -24,6 +24,22 @@ object PassportCommand {
                 Commands.literal("passport")
                     .executes { context -> show(context, context.source.playerOrException.gameProfile.name) }
                     .then(
+                        Commands.literal("text")
+                            .executes { context -> showText(context, context.source.playerOrException.gameProfile.name) }
+                            .then(
+                                Commands.argument("player", StringArgumentType.word())
+                                    .suggests { context, builder ->
+                                        SharedSuggestionProvider.suggest(
+                                            context.source.server.playerList.players.map { it.gameProfile.name },
+                                            builder,
+                                        )
+                                    }
+                                    .executes { context ->
+                                        showText(context, StringArgumentType.getString(context, "player"))
+                                    },
+                            ),
+                    )
+                    .then(
                         Commands.argument("player", StringArgumentType.word())
                             .suggests { context, builder ->
                                 SharedSuggestionProvider.suggest(
@@ -31,15 +47,29 @@ object PassportCommand {
                                     builder,
                                 )
                             }
-                            .executes { context ->
-                                show(context, StringArgumentType.getString(context, "player"))
-                            },
+                            .executes { context -> show(context, StringArgumentType.getString(context, "player")) },
                     ),
             )
         }
     }
 
     private fun show(context: CommandContext<CommandSourceStack>, requested: String): Int {
+        val server = context.source.server
+        val persistence = MCTraveler.persistence ?: return 0
+        val uuid = server.playerList.getPlayerByName(requested)?.uuid ?: persistence.names.uuidFor(requested)
+        if (uuid == null) {
+            context.source.sendFailure(Paint.error("Unknown player ", Paint.red(requested)))
+            return 0
+        }
+        if (persistence.passports.get(uuid) == null) {
+            context.source.sendFailure(Paint.error("No passport found for ", Paint.red(requested)))
+            return 0
+        }
+        PassportMenu.open(context.source.playerOrException, uuid)
+        return Command.SINGLE_SUCCESS
+    }
+
+    private fun showText(context: CommandContext<CommandSourceStack>, requested: String): Int {
         val server = context.source.server
         val persistence = MCTraveler.persistence ?: return 0
         val uuid = server.playerList.getPlayerByName(requested)?.uuid
