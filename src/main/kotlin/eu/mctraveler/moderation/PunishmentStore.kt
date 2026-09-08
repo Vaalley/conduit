@@ -81,8 +81,10 @@ class PunishmentStore(private val file: Path) {
 
     fun byId(id: Int): Punishment? = punishments.firstOrNull { it.id == id }
 
-    fun history(target: UUID): List<Punishment> =
-        punishments.filter { it.target == target }.sortedByDescending { it.createdAt }
+    fun history(target: UUID): List<Punishment> {
+        expire()
+        return punishments.filter { it.target == target }.sortedByDescending { it.createdAt }
+    }
 
     fun activeBans(): List<Punishment> {
         expire()
