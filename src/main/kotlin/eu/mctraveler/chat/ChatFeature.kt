@@ -1,7 +1,9 @@
 package eu.mctraveler.chat
 
 import com.mojang.brigadier.CommandDispatcher
+import com.mojang.brigadier.arguments.StringArgumentType
 import eu.mctraveler.geo.GeoIpFeature
+import eu.mctraveler.region.RegionTracker
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.text.Paint
 import eu.mctraveler.vanish.VanishFeature
@@ -15,6 +17,7 @@ import net.fabricmc.fabric.api.message.v1.ServerMessageEvents
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
+import net.minecraft.commands.SharedSuggestionProvider
 import net.minecraft.core.registries.Registries
 import net.minecraft.network.chat.ChatType
 import net.minecraft.network.chat.Component
@@ -119,7 +122,7 @@ object ChatFeature {
                 .then(
                     Commands.literal("region").executes { context ->
                         val player = context.source.playerOrException
-                        val region = eu.mctraveler.region.RegionTracker.regionOf(player)
+                        val region = RegionTracker.regionOf(player)
                         if (region == null ||
                             (!region.isResident(player.uuid) && !RegionsFeature.isAdmin(player))
                         ) {
@@ -132,15 +135,15 @@ object ChatFeature {
                     },
                 )
                 .then(
-                    Commands.argument("players", com.mojang.brigadier.arguments.StringArgumentType.word())
+                    Commands.argument("players", StringArgumentType.word())
                         .suggests { context, builder ->
-                            net.minecraft.commands.SharedSuggestionProvider.suggest(
+                            SharedSuggestionProvider.suggest(
                                 context.source.onlinePlayerNames, builder,
                             )
                         }
                         .executes { context ->
                             val sender = context.source.playerOrException
-                            val raw = com.mojang.brigadier.arguments.StringArgumentType.getString(context, "players")
+                            val raw = StringArgumentType.getString(context, "players")
                             val names = ChatSelector.parsePlayers(raw)
                             val resolved = mutableListOf<Pair<String, UUID>>()
                             for (name in names) {
@@ -208,7 +211,7 @@ object ChatFeature {
                 (recipients + sender).distinctBy { it.uuid }.forEach { it.sendSystemMessage(line) }
             }
             ChatSelector.Mode.REGION -> {
-                val region = eu.mctraveler.region.RegionTracker.regionOf(sender)
+                val region = RegionTracker.regionOf(sender)
                 if (region == null ||
                     (!region.isResident(sender.uuid) && !RegionsFeature.isAdmin(sender))
                 ) {

@@ -20,6 +20,7 @@ import net.minecraft.world.entity.player.Player
 import net.minecraft.world.inventory.ChestMenu
 import net.minecraft.world.inventory.ContainerInput
 import net.minecraft.world.inventory.MenuType
+import net.minecraft.world.item.Item
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 import net.minecraft.world.item.component.ItemLore
@@ -113,7 +114,7 @@ object PassportMenu {
     private fun stampItem(stamp: Stamp, unlockedAt: Long?): ItemStack {
         val unlocked = unlockedAt != null
         val icon = if (unlocked) {
-            Items.PLAYER_HEAD
+            Items.PAPER
         } else {
             net.minecraft.core.registries.BuiltInRegistries.ITEM.get(
                 net.minecraft.resources.Identifier.fromNamespaceAndPath("minecraft", "gray_dye"),
@@ -128,17 +129,16 @@ object PassportMenu {
                     else listOf(Paint.red("Locked"), stamp.description),
                 ),
             )
-            hideProfileTooltip(this)
         }
     }
 
-    private fun item(icon: net.minecraft.world.item.Item, title: String, description: String): ItemStack =
+    private fun item(icon: Item, title: String, description: String): ItemStack =
         ItemStack(icon).apply {
             set(DataComponents.CUSTOM_NAME, nameComponent(title))
             set(DataComponents.LORE, lore(listOf(description)))
         }
 
-    private fun button(icon: net.minecraft.world.item.Item, title: String, description: String): ItemStack =
+    private fun button(icon: Item, title: String, description: String): ItemStack =
         item(icon, title, description)
 
     private fun nameComponent(text: String): Component =

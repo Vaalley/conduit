@@ -119,7 +119,7 @@ object MixinHooksImpl : MixinHooks {
     ) = CrystalCrafting.guard(menu, player, craftSlots, resultSlots)
 
     override fun isModOwnedMenu(menu: AbstractContainerMenu): Boolean =
-        RegionProtection.isModOwnedMenu(menu) || menu is eu.mctraveler.passport.PassportMenu.PassportChestMenu
+        RegionProtection.isModOwnedMenu(menu)
     override fun isPersonalEnderChestMenu(menu: AbstractContainerMenu): Boolean =
         RegionProtection.isPersonalEnderChestMenu(menu)
     override fun isWorkstationMenu(menu: AbstractContainerMenu): Boolean =

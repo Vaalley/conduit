@@ -7,6 +7,7 @@ import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.builder.LiteralArgumentBuilder
 import com.mojang.brigadier.context.CommandContext
 import com.mojang.brigadier.suggestion.SuggestionProvider
+import eu.mctraveler.rank.RankFeature
 import eu.mctraveler.text.Paint
 import java.util.UUID
 import kotlin.math.abs
@@ -374,7 +375,7 @@ object RegionCommands {
         return if (RegionsFeature.isAdmin(player)) {
             Paint("${region.title} is ${width}x${depth} = ${area} blocks (no limit for admins)")
         } else {
-            val cap = eu.mctraveler.rank.RankFeature.rankOf(player).regionAreaCap
+            val cap = RankFeature.rankOf(player).regionAreaCap
             Paint("${region.title} is ${width}x${depth} = ${area} blocks (limit ${cap} blocks)")
         }
     }
