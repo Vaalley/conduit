@@ -25,6 +25,9 @@ class NameCache(private val file: Path) {
     /** The last username seen for [uuid], or null if never seen. */
     fun usernameFor(uuid: UUID): String? = names[uuid.toString()]
 
+    /** Every username recorded in the cache, including names of offline players. */
+    fun knownUsernames(): Collection<String> = names.values.toList()
+
     /** The most recently recorded UUID for [username], or null if never seen. */
     fun uuidFor(username: String): UUID? =
         latestOwner[username.lowercase(Locale.ROOT)]?.let(UUID::fromString)

@@ -7,6 +7,7 @@ import java.util.UUID
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.server.players.NameAndId
+import net.minecraft.world.level.gamerules.GameRules
 
 class ModerationGameTest {
 
@@ -180,6 +181,46 @@ class ModerationGameTest {
             helper.assertTrue(lines.any { it.startsWith("Rank: ") }, "whois rank lines were $lines")
             helper.assertTrue(lines.any { it == "Online: true" }, "whois online lines were $lines")
             cleanup(admin)
+            helper.succeed()
+        }
+    }
+
+    @GameTest(maxTicks = 100)
+    fun adminCommandsSuggestKnownPlayerNames(helper: GameTestHelper) {
+        val server = helper.level.server
+        val admin = TestPlayer.join(server, "ModSuggestAdmin").also { op(server, it) }
+        TestPlayer.join(server, "ModSuggestTarget")
+
+        helper.runAfterDelay(2) {
+            val dispatcher = server.commands.dispatcher
+            val source = admin.player.createCommandSourceStack()
+            val whoisSuggestions = dispatcher.getCompletionSuggestions(dispatcher.parse("whois ModSugg", source)).join().list.map { it.text }
+            val banSuggestions = dispatcher.getCompletionSuggestions(dispatcher.parse("ban ModSugg", source)).join().list.map { it.text }
+            helper.assertTrue("ModSuggestTarget" in whoisSuggestions, "whois suggestions were $whoisSuggestions")
+            helper.assertTrue("ModSuggestTarget" in banSuggestions, "ban suggestions were $banSuggestions")
+            cleanup(admin)
+            helper.succeed()
+        }
+    }
+
+    @GameTest(maxTicks = 100)
+    fun whoisOutputIgnoresCommandFeedbackRule(helper: GameTestHelper) {
+        val server = helper.level.server
+        val admin = TestPlayer.join(server, "ModWhoisFeedbackAdmin").also { op(server, it) }
+        val previous = server.gameRules.get(GameRules.SEND_COMMAND_FEEDBACK)
+        server.gameRules.set(GameRules.SEND_COMMAND_FEEDBACK, false, server)
+
+        helper.runAfterDelay(2) {
+            try {
+                admin.runCommand("whois ModWhoisFeedbackAdmin")
+                helper.assertTrue(
+                    admin.systemMessages().any { it.string == "Online: true" },
+                    "whois output was ${admin.systemMessages()}",
+                )
+            } finally {
+                server.gameRules.set(GameRules.SEND_COMMAND_FEEDBACK, previous, server)
+                cleanup(admin)
+            }
             helper.succeed()
         }
     }

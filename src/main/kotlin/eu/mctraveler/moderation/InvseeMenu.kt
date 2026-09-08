@@ -38,6 +38,7 @@ object InvseeMenu {
             Commands.literal("invsee").requires(gate)
                 .then(
                     Commands.argument("player", StringArgumentType.word())
+                        .suggests(ModerationFeature.playerSuggestions)
                         .executes { context ->
                             val viewer = context.source.playerOrException
                             if (!ModerationFeature.authorized(context.source)) return@executes 0

@@ -1,6 +1,7 @@
 package eu.mctraveler.moderation
 
 import com.mojang.brigadier.arguments.StringArgumentType
+import com.mojang.brigadier.suggestion.SuggestionProvider
 import eu.mctraveler.MCTraveler
 import eu.mctraveler.region.RegionWorlds
 import eu.mctraveler.region.RegionsFeature
@@ -24,6 +25,14 @@ import net.minecraft.world.level.Level
 import net.minecraft.world.phys.BlockHitResult
 
 object ActionRecorder {
+    private val lookupTargetSuggestions = SuggestionProvider<CommandSourceStack> { context, builder ->
+        if (builder.remaining.startsWith("r:")) {
+            builder.buildFuture()
+        } else {
+            ModerationFeature.playerSuggestions.getSuggestions(context, builder)
+        }
+    }
+
     private val inspecting = mutableSetOf<java.util.UUID>()
     private data class PendingPlacement(
         val player: ServerPlayer,
@@ -148,7 +157,10 @@ object ActionRecorder {
             Commands.literal("lookup").requires(gate)
                 .then(
                     Commands.argument("tail", StringArgumentType.greedyString())
-                        .executes { context -> lookupTail(context.source, StringArgumentType.getString(context, "tail")) },
+                        .suggests(lookupTargetSuggestions)
+                        .executes { context ->
+                            lookupTail(context.source, StringArgumentType.getString(context, "tail"))
+                        },
                 ),
         )
     }
@@ -222,14 +234,14 @@ object ActionRecorder {
             action?.lowercase() != "bucket" || it.type == ActionType.BUCKET_FILL || it.type == ActionType.BUCKET_EMPTY
         }
         if (matching.isEmpty()) {
-            source.sendSuccess({ Paint.gray("No matching actions") }, false)
+            source.sendSystemMessage(Paint.gray("No matching actions"))
             return 1
         }
         matching.take(15).forEach {
-            source.sendSuccess({ Paint.gray("${relative(it.t)} ${it.playerName} ${verb(it.type)} ${it.block} at ${it.x} ${it.y} ${it.z}") }, false)
+            source.sendSystemMessage(Paint.gray("${relative(it.t)} ${it.playerName} ${verb(it.type)} ${it.block} at ${it.x} ${it.y} ${it.z}"))
         }
         if (matching.size > 15) {
-            source.sendSuccess({ Paint.gray("… and ${matching.size - 15} more") }, false)
+            source.sendSystemMessage(Paint.gray("… and ${matching.size - 15} more"))
         }
         return 1
     }
