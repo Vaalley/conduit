@@ -51,7 +51,9 @@ object RegionCommands {
         Paint.gray(" - "), Paint.white("/rg remove <player>"), "\n",
         Paint.gray(" - "), Paint.white("/rg delete"), "\n",
         Paint.gray(" - "), Paint.white("/rg start"), " ", Paint.gray("+ "), Paint.white("/rg end"), "\n",
+        Paint.gray(" - "), Paint.white("/rg size"), "\n",
         Paint.gray(" - "), Paint.white("/rg extend <distance>"), "\n",
+        Paint.gray(" - "), Paint.white("/rg shrink <distance>"), "\n",
         Paint.gray(" - "), Paint.white("/rg flags"), "\n",
         Paint.gray(" - "), Paint.white("/rg locate <name>"),
     )
@@ -121,11 +123,22 @@ object RegionCommands {
             .then(Commands.literal("end").executes { ctx -> reply(ctx) { end(it) } })
             .then(
                 Commands.literal("extend")
-                    .executes { ctx -> reply(ctx) { Paint.usage("/$alias extend <distance>") } }
+                    .executes { ctx -> reply(ctx) { size(it) } }
                     .then(
                         Commands.argument("distance", IntegerArgumentType.integer())
                             .executes { ctx ->
                                 reply(ctx) { extend(it, IntegerArgumentType.getInteger(ctx, "distance")) }
+                            },
+                    ),
+            )
+            .then(Commands.literal("size").executes { ctx -> reply(ctx) { size(it) } })
+            .then(
+                Commands.literal("shrink")
+                    .executes { ctx -> reply(ctx) { Paint.usage("/$alias shrink <distance>") } }
+                    .then(
+                        Commands.argument("distance", IntegerArgumentType.integer())
+                            .executes { ctx ->
+                                reply(ctx) { shrink(it, IntegerArgumentType.getInteger(ctx, "distance")) }
                             },
                     ),
             )
@@ -346,6 +359,68 @@ object RegionCommands {
         return Paint.success(
             "Extended ", Paint.green(region.title),
             " ", Paint.white(distance), " blocks ", Paint.white(facing.getName()),
+        )
+    }
+
+    private fun size(player: ServerPlayer): Component {
+        val region = RegionTracker.regionOf(player)
+            ?: return Paint.error("You must stand in the region you want to view size for")
+        if (!region.isResident(player.uuid) && !RegionsFeature.isAdmin(player)) {
+            return Paint.error("You are not a member of this region")
+        }
+        val width = region.maxX - region.minX + 1
+        val depth = region.maxZ - region.minZ + 1
+        val area = width.toLong() * depth.toLong()
+        return if (RegionsFeature.isAdmin(player)) {
+            Paint("${region.title} is ${width}x${depth} = ${area} blocks (no limit for admins)")
+        } else {
+            val cap = eu.mctraveler.rank.RankFeature.rankOf(player).regionAreaCap
+            Paint("${region.title} is ${width}x${depth} = ${area} blocks (limit ${cap} blocks)")
+        }
+    }
+
+    private fun shrink(player: ServerPlayer, distance: Int): Component {
+        val region = RegionTracker.regionOf(player)
+            ?: return Paint.error("You must stand in the region you want to shrink")
+        if (!region.isResident(player.uuid) && !RegionsFeature.isAdmin(player)) {
+            return Paint.error("You are not a member of this region")
+        }
+        if (distance < 1) return Paint.usage("/rg shrink <distance>")
+        if (Region.EMBASSY_FLAG in region.flags) {
+            return Paint.error("You cannot shrink an embassy")
+        }
+
+        var minX = region.minX
+        var maxX = region.maxX
+        var minZ = region.minZ
+        var maxZ = region.maxZ
+        val facing = player.direction
+        when (facing) {
+            Direction.NORTH -> minZ += distance
+            Direction.SOUTH -> maxZ -= distance
+            Direction.WEST -> minX += distance
+            Direction.EAST -> maxX -= distance
+            else -> return Paint.usage("/rg shrink <distance>")
+        }
+        if (maxX < minX || maxZ < minZ) return Paint.error("Region too small")
+        val area = (maxX - minX + 1).toLong() * (maxZ - minZ + 1).toLong()
+        if (area <= 9L) return Paint.error("Region too small")
+        region.subRegions.firstOrNull {
+            it.minX < minX || it.maxX > maxX || it.minZ < minZ || it.maxZ > maxZ
+        }?.let {
+            return Paint.error(
+                "You cannot shrink ", Paint.red(region.title), " past its sub-region ", Paint.red(it.title),
+            )
+        }
+        region.startX = minX
+        region.endX = maxX
+        region.startZ = minZ
+        region.endZ = maxZ
+        RegionsFeature.requireService().save()
+        RegionTracker.afterBoundsChange(player.level().server)
+        return Paint.success(
+            "Shrunk ", Paint.green(region.title), " ", Paint.white(distance),
+            " blocks ", Paint.white(facing.getName()),
         )
     }
 

@@ -1,5 +1,6 @@
 package eu.mctraveler.gametest
 
+import eu.mctraveler.region.Region
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.text.Paint
 import kotlin.math.floor
@@ -27,7 +28,9 @@ class RegionCommandGameTest {
         Paint.gray(" - "), Paint.white("/rg remove <player>"), "\n",
         Paint.gray(" - "), Paint.white("/rg delete"), "\n",
         Paint.gray(" - "), Paint.white("/rg start"), " ", Paint.gray("+ "), Paint.white("/rg end"), "\n",
+        Paint.gray(" - "), Paint.white("/rg size"), "\n",
         Paint.gray(" - "), Paint.white("/rg extend <distance>"), "\n",
+        Paint.gray(" - "), Paint.white("/rg shrink <distance>"), "\n",
         Paint.gray(" - "), Paint.white("/rg flags"), "\n",
         Paint.gray(" - "), Paint.white("/rg locate <name>"),
     )
@@ -523,10 +526,11 @@ class RegionCommandGameTest {
     @GameTest
     fun bareRgExtendShowsUsage(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "T12ExtUse")
+        player.standAt(helper, 100.0, 1.0, 100.0)
         player.runCommand("rg extend")
         helper.assertValueEqual(
             player.messages.last(),
-            Paint.usage("/rg extend <distance>"),
+            Paint.error("You must stand in the region you want to view size for"),
             "the bare /rg extend reply",
         )
         player.leave()
@@ -564,6 +568,103 @@ class RegionCommandGameTest {
         )
         alice.leave()
         bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aResidentCanViewRegionSize(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T12SizeA")
+        createRegion(helper, alice, 0.0 to 0.0, 7.0 to 4.0)
+        alice.runCommand("rg size")
+        helper.assertValueEqual(
+            alice.messages.last(),
+            Paint("T12SizeA's Place is 8x5 = 40 blocks (limit 5000 blocks)"),
+            "the resident /rg size reply",
+        )
+        alice.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aNonMemberCannotViewRegionSize(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T12SizeB")
+        createRegion(helper, alice, 0.0 to 0.0, 7.0 to 4.0)
+        val bob = MessageCapturingPlayer.join(helper, "T12SizeC")
+        bob.standAt(helper, 3.0, 1.0, 2.0)
+        bob.runCommand("rg size")
+        helper.assertValueEqual(
+            bob.messages.last(),
+            Paint.error("You are not a member of this region"),
+            "the non-member /rg size reply",
+        )
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun bareExtendShowsRegionSize(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T12SizeD")
+        createRegion(helper, alice, 0.0 to 0.0, 7.0 to 4.0)
+        alice.runCommand("rg extend")
+        helper.assertValueEqual(
+            alice.messages.last(),
+            Paint("T12SizeD's Place is 8x5 = 40 blocks (limit 5000 blocks)"),
+            "the bare /rg extend reply",
+        )
+        alice.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun shrinkMovesTheFacedEdgeInward(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T12ShrinkA")
+        val region = createRegion(helper, alice, 0.0 to 0.0, 7.0 to 7.0)
+        val northEdge = region.minZ
+        alice.face(Direction.NORTH)
+        alice.runCommand("rg shrink 2")
+        helper.assertValueEqual(
+            alice.messages.last(),
+            Paint.success(
+                "Shrunk ", Paint.green(region.title), " ", Paint.white(2), " blocks ", Paint.white("north"),
+            ),
+            "the /rg shrink success reply",
+        )
+        helper.assertValueEqual(region.minZ, northEdge + 2, "the inward north edge")
+        alice.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun shrinkRefusesTooSmallResults(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T12ShrinkB")
+        val region = createRegion(helper, alice, 0.0 to 0.0, 3.0 to 2.0)
+        val northEdge = region.minZ
+        alice.face(Direction.NORTH)
+        alice.runCommand("rg shrink 1")
+        helper.assertValueEqual(alice.messages.last(), Paint.error("Region too small"), "the too-small shrink reply")
+        helper.assertValueEqual(region.minZ, northEdge, "the refused shrink left bounds unchanged")
+        alice.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun shrinkCannotPassASubRegion(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T12ShrinkC")
+        val region = createRegion(helper, alice, 0.0 to 0.0, 7.0 to 7.0)
+        val child = Region("Child", region.world, 0, 2, 4, 4)
+        child.members.add(alice.uuid)
+        RegionsFeature.requireService().add(child, region)
+        alice.face(Direction.NORTH)
+        alice.runCommand("rg shrink 3")
+        helper.assertValueEqual(
+            alice.messages.last(),
+            Paint.error(
+                "You cannot shrink ", Paint.red(region.title), " past its sub-region ", Paint.red(child.title),
+            ),
+            "the sub-region shrink refusal",
+        )
+        alice.leave()
         helper.succeed()
     }
 
