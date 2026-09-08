@@ -40,6 +40,7 @@ interface MixinHooks {
 
     // Orphaned-save claim
     fun claimSaveBefore(nameAndId: NameAndId)
+    fun loginDenial(nameAndId: NameAndId): Component?
 
     // Notepad
     fun notepadHasSession(player: ServerPlayer): Boolean
@@ -136,6 +137,9 @@ object Hooks {
     @JvmStatic fun claimSaveBefore(nameAndId: NameAndId) {
         impl?.claimSaveBefore(nameAndId)
     }
+
+    @JvmStatic fun loginDenial(nameAndId: NameAndId): Component? =
+        impl?.loginDenial(nameAndId)
 
     @JvmStatic fun notepadHasSession(player: ServerPlayer): Boolean = impl?.notepadHasSession(player) ?: false
 

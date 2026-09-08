@@ -4,6 +4,7 @@ import com.mojang.brigadier.CommandDispatcher
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.suggestion.SuggestionProvider
 import eu.mctraveler.command.CommandTree
+import eu.mctraveler.moderation.ModerationFeature
 import eu.mctraveler.text.Paint
 import java.util.UUID
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback
@@ -87,6 +88,7 @@ object PrivateMessages {
             sender.sendSystemMessage(Paint.error("You can't send a message to yourself"))
             return 0
         }
+        if (!ModerationFeature.allowMuted(sender)) return 0
         replyPartners[target.uuid] = sender.uuid
         replyPartners[sender.uuid] = target.uuid
         deliver(sender, target, message)
@@ -105,6 +107,7 @@ object PrivateMessages {
             sender.sendSystemMessage(Paint.error("The player you were messaging is no longer online"))
             return 0
         }
+        if (!ModerationFeature.allowMuted(sender)) return 0
         deliver(sender, target, message)
         return 1
     }

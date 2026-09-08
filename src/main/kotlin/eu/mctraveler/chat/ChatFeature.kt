@@ -1,8 +1,11 @@
 package eu.mctraveler.chat
 
 import com.mojang.brigadier.CommandDispatcher
+import com.mojang.brigadier.arguments.StringArgumentType
 import eu.mctraveler.geo.GeoIpFeature
+import eu.mctraveler.region.RegionTracker
 import eu.mctraveler.region.RegionsFeature
+import eu.mctraveler.moderation.ModerationFeature
 import eu.mctraveler.text.Paint
 import eu.mctraveler.vanish.VanishFeature
 import java.net.InetAddress
@@ -15,6 +18,7 @@ import net.fabricmc.fabric.api.message.v1.ServerMessageEvents
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
+import net.minecraft.commands.SharedSuggestionProvider
 import net.minecraft.core.registries.Registries
 import net.minecraft.network.chat.ChatType
 import net.minecraft.network.chat.Component
@@ -67,6 +71,7 @@ object ChatFeature {
             !isVanillaPresenceMessage(message)
         }
         ServerPlayConnectionEvents.JOIN.register { handler, _, _ ->
+            ChatSelector.set(handler.player.uuid, ChatSelector.Mode.DEFAULT)
             val address = handler.getRemoteAddress() as? InetSocketAddress
             val country = address?.address
                 ?.takeUnless(::isPrivateAddress)
@@ -75,6 +80,7 @@ object ChatFeature {
             pendingJoins += PendingJoin(handler.player.uuid, country)
         }
         ServerPlayConnectionEvents.DISCONNECT.register { handler, server ->
+            ChatSelector.clear(handler.player.uuid)
             pendingJoins.removeIf { it.uuid == handler.player.uuid }
             if (announced.remove(handler.player.uuid)) {
                 val line = leaveLine(handler.player.gameProfile.name)
@@ -91,9 +97,73 @@ object ChatFeature {
         }
         ServerTickEvents.END_SERVER_TICK.register(::flushPendingJoins)
         CommandRegistrationCallback.EVENT.register { dispatcher, _, _ ->
+            registerSelector(dispatcher)
             registerEmote(dispatcher, "shrug", SHRUG)
             registerEmote(dispatcher, "tableflip", TABLEFLIP)
         }
+    }
+
+    private fun registerSelector(dispatcher: CommandDispatcher<CommandSourceStack>) {
+        dispatcher.register(
+            Commands.literal("chat")
+                .executes { context ->
+                    val player = context.source.playerOrException
+                    ChatSelector.set(player.uuid, ChatSelector.Mode.DEFAULT)
+                    player.sendSystemMessage(Paint.success("Chat mode: everyone"))
+                    1
+                }
+                .then(
+                    Commands.literal("server").executes { context ->
+                        val player = context.source.playerOrException
+                        ChatSelector.set(player.uuid, ChatSelector.Mode.SERVER)
+                        player.sendSystemMessage(Paint.success("Chat mode: server only (not mirrored to Discord)"))
+                        1
+                    },
+                )
+                .then(
+                    Commands.literal("region").executes { context ->
+                        val player = context.source.playerOrException
+                        val region = RegionTracker.regionOf(player)
+                        if (region == null ||
+                            (!region.isResident(player.uuid) && !RegionsFeature.isAdmin(player))
+                        ) {
+                            player.sendSystemMessage(Paint.error("You must stand in a region you are a member of"))
+                            return@executes 1
+                        }
+                        ChatSelector.set(player.uuid, ChatSelector.Mode.REGION)
+                        player.sendSystemMessage(Paint.success("Chat mode: region ", region.title))
+                        1
+                    },
+                )
+                .then(
+                    Commands.argument("players", StringArgumentType.word())
+                        .suggests { context, builder ->
+                            SharedSuggestionProvider.suggest(
+                                context.source.onlinePlayerNames, builder,
+                            )
+                        }
+                        .executes { context ->
+                            val sender = context.source.playerOrException
+                            val raw = StringArgumentType.getString(context, "players")
+                            val names = ChatSelector.parsePlayers(raw)
+                            val resolved = mutableListOf<Pair<String, UUID>>()
+                            for (name in names) {
+                                val target = sender.level().server.playerList.getPlayerByName(name)
+                                if (target == null) {
+                                    sender.sendSystemMessage(Paint.gray("Player ", Paint.red(name), " not found or is offline"))
+                                    return@executes 1
+                                }
+                                resolved += target.gameProfile.name to target.uuid
+                            }
+                            val recipients = resolved.filter { it.second != sender.uuid }
+                            ChatSelector.set(sender.uuid, ChatSelector.Mode.PLAYERS(recipients.map { it.second }.toSet()))
+                            sender.sendSystemMessage(
+                                Paint.success("Chat mode: private to ", recipients.joinToString(", ") { it.first }),
+                            )
+                            1
+                        },
+                ),
+        )
     }
 
     /**
@@ -105,6 +175,7 @@ object ChatFeature {
         dispatcher.register(
             Commands.literal(name).executes { context ->
                 val player = context.source.playerOrException
+                if (!ModerationFeature.allowMuted(player)) return@executes 0
                 context.source.server.playerList
                     .broadcastChatMessage(PlayerChatMessage.system(emoticon), player, chatBound(player))
                 1
@@ -124,7 +195,44 @@ object ChatFeature {
         bound: ChatType.Bound,
     ): Boolean {
         if (bound.chatType().unwrapKey().orElse(null) != ChatType.CHAT) return true
-        sender.level().server.playerList.broadcastChatMessage(message, sender, chatBound(sender))
+        if (!ModerationFeature.allowMuted(sender)) return false
+        when (val mode = ChatSelector.modeOf(sender.uuid)) {
+            ChatSelector.Mode.DEFAULT, ChatSelector.Mode.SERVER -> {
+                sender.level().server.playerList.broadcastChatMessage(message, sender, chatBound(sender))
+            }
+            is ChatSelector.Mode.PLAYERS -> {
+                val recipients = mode.recipients.mapNotNull(sender.level().server.playerList::getPlayer)
+                if (recipients.isEmpty()) {
+                    sender.sendSystemMessage(Paint.error("None of your chat recipients are online"))
+                    return false
+                }
+                val names = recipients.joinToString(", ") { it.gameProfile.name }
+                val line = Paint(
+                    Paint.green(sender.gameProfile.name), " ", Paint.gray("→"), " ",
+                    Paint.green(names), ": ", message.decoratedContent(),
+                )
+                (recipients + sender).distinctBy { it.uuid }.forEach { it.sendSystemMessage(line) }
+            }
+            ChatSelector.Mode.REGION -> {
+                val region = RegionTracker.regionOf(sender)
+                if (region == null ||
+                    (!region.isResident(sender.uuid) && !RegionsFeature.isAdmin(sender))
+                ) {
+                    sender.sendSystemMessage(
+                        Paint.error("You are not in a region you are a member of — message not sent"),
+                    )
+                    return false
+                }
+                val recipients = sender.level().server.playerList.players.filter {
+                    region.isResident(it.uuid)
+                }
+                val line = Paint(
+                    Paint.darkGray("["), Paint.yellow(region.title), Paint.darkGray("]"), " ",
+                    Paint.green(sender.gameProfile.name), ": ", message.decoratedContent(),
+                )
+                (recipients + sender).distinctBy { it.uuid }.forEach { it.sendSystemMessage(line) }
+            }
+        }
         return false
     }
 

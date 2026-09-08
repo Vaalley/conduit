@@ -13,6 +13,7 @@ import net.minecraft.world.entity.monster.EnderMan
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.Blocks
+import net.minecraft.world.level.block.CropBlock
 import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import net.minecraft.world.phys.BlockHitResult
 import net.minecraft.world.phys.Vec3
@@ -269,6 +270,24 @@ class RegionEnvironmentGameTest {
         helper.level.destroyBlock(helper.absolutePos(TARGET_AT), true, ravager)
 
         helper.assertBlockPresent(Blocks.DIRT, TARGET_AT)
+        alice.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aVillagerMayHarvestCropsButOtherMobsCannotChangeRegionBlocks(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T15CropA")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(TARGET_AT, Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, CropBlock.MAX_AGE))
+        val villager = helper.spawnWithNoFreeWill(EntityTypes.VILLAGER, BlockPos(2, 2, 2))
+        val harvested = helper.level.destroyBlock(helper.absolutePos(TARGET_AT), true, villager)
+        helper.assertTrue(harvested, "the villager crop harvest was refused")
+        helper.assertBlockNotPresent(Blocks.WHEAT, TARGET_AT)
+        helper.setBlock(TARGET_AT, Blocks.OAK_DOOR)
+        val zombie = helper.spawnWithNoFreeWill(EntityTypes.ZOMBIE, BlockPos(1, 2, 1))
+        val smashed = helper.level.destroyBlock(helper.absolutePos(TARGET_AT), true, zombie)
+        helper.assertFalse(smashed, "a zombie changed a protected region door")
+        helper.assertBlockPresent(Blocks.OAK_DOOR, TARGET_AT)
         alice.leave()
         helper.succeed()
     }

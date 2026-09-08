@@ -26,6 +26,7 @@ object ChatBridge {
 
 	fun register() {
 		ServerMessageEvents.CHAT_MESSAGE.register { message, sender, _ ->
+			if (ChatSelector.modeOf(sender.uuid) == ChatSelector.Mode.SERVER) return@register
 			val playerMessage = message as? PlayerChatMessage ?: return@register
 			val content = sanitize(playerMessage.decoratedContent())
 			if (content.isNotEmpty()) {
