@@ -3,7 +3,9 @@ package eu.mctraveler.moderation
 import com.mojang.brigadier.arguments.IntegerArgumentType
 import com.mojang.brigadier.arguments.StringArgumentType
 import eu.mctraveler.MCTraveler
+import eu.mctraveler.command.CommandTree
 import eu.mctraveler.region.RegionsFeature
+import eu.mctraveler.region.RegionWorlds
 import eu.mctraveler.text.Paint
 import java.time.Instant
 import java.time.ZoneOffset
@@ -51,7 +53,6 @@ object ModerationFeature {
         ServerPlayConnectionEvents.JOIN.register { handler, _, _ ->
             val ip = (handler.getRemoteAddress() as? InetSocketAddress)?.address?.hostAddress
             pendingLogins += PendingLogin(handler.player.uuid, System.currentTimeMillis(), ip)
-            MCTraveler.persistence?.names?.record(handler.player.uuid, handler.player.gameProfile.name)
         }
         ServerTickEvents.END_SERVER_TICK.register {
             val players = MCTraveler.persistence?.players ?: return@register
@@ -67,8 +68,9 @@ object ModerationFeature {
         ServerLifecycleEvents.SERVER_STOPPING.register {
             MCTraveler.persistence?.actions?.flush()
         }
+        ActionRecorder.register()
         CommandRegistrationCallback.EVENT.register { dispatcher, _, _ ->
-            ActionRecorder.register()
+            CommandTree.removeRootCommands(dispatcher, "ban", "banlist", "kick", "pardon")
             registerCommands(dispatcher)
         }
     }
@@ -113,6 +115,10 @@ object ModerationFeature {
                 .then(target("player").executes { context -> lift(context.source, target(context), PunishmentType.BAN) }),
         )
         dispatcher.register(
+            Commands.literal("pardon").requires(gate)
+                .then(target("player").executes { context -> lift(context.source, target(context), PunishmentType.BAN) }),
+        )
+        dispatcher.register(
             Commands.literal("banlist").requires(gate)
                 .executes { context -> banList(context.source, 1) }
                 .then(
@@ -131,7 +137,7 @@ object ModerationFeature {
         )
         dispatcher.register(
             Commands.literal("kick").requires(gate)
-                .then(target("player").then(tail("reason").executes { context -> kick(context.source, target(context), tail(context)) }))
+                .then(target("player").then(tail("tail").executes { context -> kick(context.source, target(context), tail(context)) }))
                 .then(target("player").executes { context -> kick(context.source, target(context), null) }),
         )
         dispatcher.register(
@@ -275,7 +281,12 @@ object ModerationFeature {
     private fun warnings(source: CommandSourceStack, name: String): Int {
         if (!authorized(source)) return 0
         val resolved = resolve(source, name) ?: return 0
-        store().history(resolved.first).filter { it.type == PunishmentType.WARN && it.active }.forEach {
+        val warnings = store().history(resolved.first).filter { it.type == PunishmentType.WARN && it.active }
+        if (warnings.isEmpty()) {
+            source.sendSuccess({ Paint.gray("No active warnings for ${resolved.second}") }, false)
+            return 1
+        }
+        warnings.forEach {
             source.sendSuccess({ Paint.gray("#${it.id} ${dateFormat.format(Instant.ofEpochMilli(it.createdAt))} by ${it.staffName}: ${it.reason}") }, false)
         }
         return 1
@@ -296,7 +307,12 @@ object ModerationFeature {
     private fun history(source: CommandSourceStack, name: String): Int {
         if (!authorized(source)) return 0
         val resolved = resolve(source, name) ?: return 0
-        store().history(resolved.first).forEach { punishment ->
+        val history = store().history(resolved.first)
+        if (history.isEmpty()) {
+            source.sendSuccess({ Paint.gray("No history for ${resolved.second}") }, false)
+            return 1
+        }
+        history.forEach { punishment ->
             source.sendSuccess(
                 { Paint.gray("#${punishment.id} ${punishment.type.name} ${dateFormat.format(Instant.ofEpochMilli(punishment.createdAt))} by ${punishment.staffName}: ${punishment.reason} [${status(punishment)}]") },
                 false,
@@ -317,7 +333,12 @@ object ModerationFeature {
     private fun banList(source: CommandSourceStack, page: Int): Int {
         if (!authorized(source)) return 0
         val bans = store().activeBans()
-        bans.drop((page - 1) * 10).take(10).forEach {
+        val pageEntries = bans.drop((page - 1) * 10).take(10)
+        if (pageEntries.isEmpty()) {
+            source.sendSuccess({ Paint.gray("No active bans") }, false)
+            return 1
+        }
+        pageEntries.forEach {
             source.sendSuccess(
                 { Paint.gray("#${it.id} ${it.targetName} — ${it.reason} (by ${it.staffName}, ${expiryLine(it.expiresAt)})") },
                 false,

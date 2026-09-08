@@ -2,7 +2,6 @@ package eu.mctraveler.moderation
 
 import com.mojang.brigadier.arguments.StringArgumentType
 import eu.mctraveler.MCTraveler
-import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.text.Paint
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents
 import net.minecraft.commands.CommandSourceStack
@@ -41,7 +40,7 @@ object InvseeMenu {
                     Commands.argument("player", StringArgumentType.word())
                         .executes { context ->
                             val viewer = context.source.playerOrException
-                            if (!RegionsFeature.isAdmin(viewer)) return@executes 0
+                            if (!ModerationFeature.authorized(context.source)) return@executes 0
                             val name = StringArgumentType.getString(context, "player")
                             val target = context.source.server.playerList.getPlayerByName(name)
                             if (target == null) {
@@ -58,13 +57,6 @@ object InvseeMenu {
     private fun open(viewer: ServerPlayer, target: ServerPlayer) {
         if (viewer.containerMenu is InvseeChestMenu) return
         val contents = SimpleContainer(SIZE)
-        val menu = InvseeChestMenu(
-            0,
-            viewer.inventory,
-            contents,
-            target,
-            viewer,
-        )
         fill(contents, target)
         viewer.openMenu(
             SimpleMenuProvider(

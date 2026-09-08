@@ -21,9 +21,19 @@ import net.minecraft.world.Container
 import net.minecraft.world.InteractionResult
 import net.minecraft.world.item.BucketItem
 import net.minecraft.world.level.Level
+import net.minecraft.world.phys.BlockHitResult
 
 object ActionRecorder {
     private val inspecting = mutableSetOf<java.util.UUID>()
+    private data class PendingPlacement(
+        val player: ServerPlayer,
+        val level: Level,
+        val clicked: net.minecraft.core.BlockPos,
+        val target: net.minecraft.core.BlockPos,
+        val beforeClicked: net.minecraft.world.level.block.state.BlockState,
+        val beforeTarget: net.minecraft.world.level.block.state.BlockState,
+    )
+    private val pendingPlacements = mutableListOf<PendingPlacement>()
 
     fun register() {
         PlayerBlockBreakEvents.AFTER.register { level, player, pos, state, _ ->
@@ -47,14 +57,7 @@ object ActionRecorder {
                 }
                 record(player, type, level, hit.blockPos, level.getBlockState(hit.blockPos).block)
             } else {
-                val target = hit.blockPos.relative(hit.direction)
-                val before = level.getBlockState(target)
-                level.server?.execute {
-                    val after = level.getBlockState(target)
-                    if (before != after && after.block !== net.minecraft.world.level.block.Blocks.AIR) {
-                        record(player, ActionType.PLACE, level, target, after.block)
-                    }
-                }
+                queuePlacement(player, level, hit)
             }
             InteractionResult.PASS
         }
@@ -75,11 +78,53 @@ object ActionRecorder {
             }
         }
         ServerPlayConnectionEvents.DISCONNECT.register { handler, _ -> clear(handler.player.uuid) }
-        ServerTickEvents.END_SERVER_TICK.register { server -> MCTraveler.persistence?.actions?.flush() }
+        ServerTickEvents.END_SERVER_TICK.register {
+            flushPendingPlacements()
+            MCTraveler.persistence?.actions?.flush()
+        }
     }
 
     fun clear(uuid: java.util.UUID) {
         inspecting.remove(uuid)
+    }
+
+    fun queuePlacement(player: ServerPlayer, level: Level, hit: BlockHitResult) {
+        val clicked = hit.blockPos
+        val target = clicked.relative(hit.direction)
+        pendingPlacements += PendingPlacement(
+            player,
+            level,
+            clicked,
+            target,
+            level.getBlockState(clicked),
+            level.getBlockState(target),
+        )
+    }
+
+    fun flushPendingPlacements() {
+        val pending = pendingPlacements.toList()
+        pendingPlacements.clear()
+        pending.forEach { placement ->
+            val candidates = if (placement.beforeClicked.canBeReplaced()) {
+                listOf(placement.clicked to placement.beforeClicked, placement.target to placement.beforeTarget)
+            } else {
+                listOf(placement.target to placement.beforeTarget, placement.clicked to placement.beforeClicked)
+            }
+            candidates.firstOrNull { (pos, before) ->
+                val after = placement.level.getBlockState(pos)
+                before.block != after.block &&
+                    !after.isAir &&
+                    (before.isAir || before.canBeReplaced())
+            }?.let { (pos, _) ->
+                record(
+                    placement.player,
+                    ActionType.PLACE,
+                    placement.level,
+                    pos,
+                    placement.level.getBlockState(pos).block,
+                )
+            }
+        }
     }
 
     fun registerCommands(
@@ -102,27 +147,15 @@ object ActionRecorder {
         dispatcher.register(
             Commands.literal("lookup").requires(gate)
                 .then(
-                    Commands.argument("target", StringArgumentType.word())
-                        .executes { context -> lookup(context.source, StringArgumentType.getString(context, "target"), null, null) }
-                        .then(
-                            Commands.argument("time", StringArgumentType.word())
-                                .executes { context ->
-                                    lookup(context.source, StringArgumentType.getString(context, "target"), StringArgumentType.getString(context, "time"), null)
-                                }
-                                .then(
-                                    Commands.argument("action", StringArgumentType.word())
-                                        .executes { context ->
-                                            lookup(
-                                                context.source,
-                                                StringArgumentType.getString(context, "target"),
-                                                StringArgumentType.getString(context, "time"),
-                                                StringArgumentType.getString(context, "action"),
-                                            )
-                                        },
-                                ),
-                        ),
+                    Commands.argument("tail", StringArgumentType.greedyString())
+                        .executes { context -> lookupTail(context.source, StringArgumentType.getString(context, "tail")) },
                 ),
         )
+    }
+
+    private fun lookupTail(source: CommandSourceStack, raw: String): Int {
+        val args = raw.trim().split(Regex("\\s+"), limit = 3)
+        return lookup(source, args[0], args.getOrNull(1), args.getOrNull(2))
     }
 
     private fun record(player: ServerPlayer, type: ActionType, level: Level, pos: net.minecraft.core.BlockPos, block: net.minecraft.world.level.block.Block) {
@@ -177,7 +210,7 @@ object ActionRecorder {
                     return 0
                 }
         } else null
-        val all = MCTraveler.persistence?.actions?.all(since, type).orEmpty().filter {
+        val matching = MCTraveler.persistence?.actions?.all(since, type).orEmpty().filter {
             if (raw.startsWith("r:")) {
                 val radius = raw.removePrefix("r:").toDoubleOrNull() ?: return@filter false
                 val world = RegionWorlds.legacyName(player.level().dimension())
@@ -187,9 +220,16 @@ object ActionRecorder {
             }
         }.filter {
             action?.lowercase() != "bucket" || it.type == ActionType.BUCKET_FILL || it.type == ActionType.BUCKET_EMPTY
-        }.take(15)
-        all.forEach {
+        }
+        if (matching.isEmpty()) {
+            source.sendSuccess({ Paint.gray("No matching actions") }, false)
+            return 1
+        }
+        matching.take(15).forEach {
             source.sendSuccess({ Paint.gray("${relative(it.t)} ${it.playerName} ${verb(it.type)} ${it.block} at ${it.x} ${it.y} ${it.z}") }, false)
+        }
+        if (matching.size > 15) {
+            source.sendSuccess({ Paint.gray("… and ${matching.size - 15} more") }, false)
         }
         return 1
     }

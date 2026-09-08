@@ -6,6 +6,7 @@ import eu.mctraveler.crystal.CrystalEnergy
 import eu.mctraveler.passport.Passport
 import eu.mctraveler.rank.RankFeature
 import eu.mctraveler.region.Region
+import eu.mctraveler.region.RegionWorlds
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.text.Paint
 import eu.mctraveler.vanish.VanishFeature
@@ -46,8 +47,8 @@ object WhoisCommand {
         line(source, "Rank", online?.let { RankFeature.rankOf(it) } ?: players.rank(uuid) ?: "N/A")
         line(source, "Online", online != null)
         if (online != null) {
-            line(source, "World", online.level().dimension().identifier())
-            line(source, "Position", "${online.x} ${online.y} ${online.z}")
+            line(source, "World", RegionWorlds.legacyName(online.level().dimension()))
+            line(source, "Position", blockPosition(online.blockPosition()))
             line(source, "Vanished", VanishFeature.isVanished(online))
         } else {
             line(source, "Last seen", players.lastLogoutAt(uuid)?.let(::relative) ?: "N/A")
@@ -75,7 +76,7 @@ object WhoisCommand {
         val online = source.server.playerList.getPlayer(uuid)
         if (online != null) {
             source.sendSuccess(
-                { Paint("$displayName is online (since ${relative(MCTraveler.persistence?.players?.lastLoginAt(uuid))}) in ${online.level().dimension().identifier()} at ${online.x} ${online.y} ${online.z}") },
+                { Paint("$displayName is online for ${relative(MCTraveler.persistence?.players?.lastLoginAt(uuid))} in ${RegionWorlds.legacyName(online.level().dimension())} at ${blockPosition(online.blockPosition())}") },
                 false,
             )
             return 1
@@ -87,7 +88,7 @@ object WhoisCommand {
             return 0
         }
         source.sendSuccess(
-            { Paint("$displayName was last seen ${relative(logout)} ago (${dateTime(logout)}) in ${players.lastLocationWorld(uuid) ?: "unknown"} at ${position(players.lastX(uuid), players.lastY(uuid), players.lastZ(uuid))}") },
+            { Paint("$displayName was last seen ${relative(logout)} (${dateTime(logout)}) in ${players.lastLocationWorld(uuid) ?: "unknown"} at ${position(players.lastX(uuid), players.lastY(uuid), players.lastZ(uuid))}") },
             false,
         )
         return 1
@@ -121,7 +122,10 @@ object WhoisCommand {
     }
 
     private fun position(x: Double?, y: Double?, z: Double?): String =
-        if (x == null || y == null || z == null) "N/A" else "$x $y $z"
+        if (x == null || y == null || z == null) "N/A" else "${x.toInt()} ${y.toInt()} ${z.toInt()}"
+
+    private fun blockPosition(position: net.minecraft.core.BlockPos): String =
+        "${position.x} ${position.y} ${position.z}"
 
     private fun date(value: Long): String = dateFormat.format(Instant.ofEpochMilli(value))
     private fun dateTime(value: Long): String = Instant.ofEpochMilli(value).toString()

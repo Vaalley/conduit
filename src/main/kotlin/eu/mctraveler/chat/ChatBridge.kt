@@ -24,7 +24,7 @@ object ChatBridge {
 
 	private val messages = ConcurrentLinkedDeque<ChatMessage>()
 
-fun register() {
+	fun register() {
 		ServerMessageEvents.CHAT_MESSAGE.register { message, sender, _ ->
 			if (ChatSelector.modeOf(sender.uuid) == ChatSelector.Mode.SERVER) return@register
 			val playerMessage = message as? PlayerChatMessage ?: return@register
