@@ -8,9 +8,11 @@ import net.minecraft.world.entity.EntityTypes
 import net.minecraft.world.entity.LivingEntity
 import net.minecraft.world.entity.monster.Creeper
 import net.minecraft.world.entity.monster.Enemy
+import net.minecraft.world.entity.npc.villager.Villager
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.entity.projectile.Projectile
 import net.minecraft.world.entity.vehicle.VehicleEntity
+import net.minecraft.world.level.block.CropBlock
 import net.minecraft.world.level.Level
 
 /**
@@ -227,11 +229,12 @@ object RegionEnvironment {
 
     /**
      * Whether [creature] may change the block at [pos] — false for anything
-     * alive that is not a player, anywhere inside a region.
+     * alive that is not a player, anywhere inside a region. Villagers may harvest
+     * crops, but no other creature block change is admitted.
      *
      * This is the mob-griefing rule: a creeper, a ravager, a wither, a zombie
-     * at a door, a villager harvesting, an enderman helping itself. There is no
-     * flag; a region owner cannot invite the mobs in.
+     * at a door, or an enderman helping itself. Farmer villagers may harvest
+     * crops; there is no flag for any other mob griefing.
      *
      * Two things are deliberately *not* creatures here. A player is judged by
      * [RegionProtection] instead, which knows about membership and answers with
@@ -246,6 +249,7 @@ object RegionEnvironment {
     fun allowsCreatureBlockChange(level: Level, pos: BlockPos, creature: Entity?): Boolean {
         val responsible = if (creature is Projectile) creature.owner else creature
         if (responsible == null || responsible is Player) return true
-        return RegionsFeature.regionAt(level, pos) == null
+        if (RegionsFeature.regionAt(level, pos) == null) return true
+        return responsible is Villager && level.getBlockState(pos).block is CropBlock
     }
 }
