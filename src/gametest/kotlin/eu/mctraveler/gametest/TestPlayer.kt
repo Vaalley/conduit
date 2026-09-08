@@ -36,11 +36,14 @@ class TestPlayer private constructor(
     val name: String get() = player.gameProfile.name
 
     /** Everything sent to this player's client, with bundle packets flattened. */
-    fun clientboundPackets(): List<Packet<*>> = channel.outboundMessages().flatMap { message ->
-        when (message) {
-            is ClientboundBundlePacket -> message.subPackets().toList()
-            is Packet<*> -> listOf(message)
-            else -> emptyList()
+    fun clientboundPackets(): List<Packet<*>> {
+        channel.flush()
+        return channel.outboundMessages().flatMap { message ->
+            when (message) {
+                is ClientboundBundlePacket -> message.subPackets().toList()
+                is Packet<*> -> listOf(message)
+                else -> emptyList()
+            }
         }
     }
 
