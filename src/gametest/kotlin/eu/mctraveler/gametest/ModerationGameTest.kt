@@ -185,6 +185,24 @@ class ModerationGameTest {
     }
 
     @GameTest(maxTicks = 100)
+    fun adminCommandsSuggestKnownPlayerNames(helper: GameTestHelper) {
+        val server = helper.level.server
+        val admin = TestPlayer.join(server, "ModSuggestAdmin").also { op(server, it) }
+        TestPlayer.join(server, "ModSuggestTarget")
+
+        helper.runAfterDelay(2) {
+            val dispatcher = server.commands.dispatcher
+            val source = admin.player.createCommandSourceStack()
+            val whoisSuggestions = dispatcher.getCompletionSuggestions(dispatcher.parse("whois ModSugg", source)).join().list.map { it.text }
+            val banSuggestions = dispatcher.getCompletionSuggestions(dispatcher.parse("ban ModSugg", source)).join().list.map { it.text }
+            helper.assertTrue("ModSuggestTarget" in whoisSuggestions, "whois suggestions were $whoisSuggestions")
+            helper.assertTrue("ModSuggestTarget" in banSuggestions, "ban suggestions were $banSuggestions")
+            cleanup(admin)
+            helper.succeed()
+        }
+    }
+
+    @GameTest(maxTicks = 100)
     fun moderationCommandsAreUnavailableToNonOperators(helper: GameTestHelper) {
         val server = helper.level.server
         val player = TestPlayer.join(server, "ModNonOp")

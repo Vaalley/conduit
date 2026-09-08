@@ -1,6 +1,7 @@
 package eu.mctraveler.moderation
 
 import com.mojang.brigadier.arguments.StringArgumentType
+import com.mojang.brigadier.suggestion.SuggestionProvider
 import eu.mctraveler.MCTraveler
 import eu.mctraveler.region.RegionWorlds
 import eu.mctraveler.region.RegionsFeature
@@ -24,6 +25,14 @@ import net.minecraft.world.level.Level
 import net.minecraft.world.phys.BlockHitResult
 
 object ActionRecorder {
+    private val lookupTargetSuggestions = SuggestionProvider<CommandSourceStack> { context, builder ->
+        if (builder.remaining.startsWith("r:")) {
+            builder.buildFuture()
+        } else {
+            ModerationFeature.playerSuggestions.getSuggestions(context, builder)
+        }
+    }
+
     private val inspecting = mutableSetOf<java.util.UUID>()
     private data class PendingPlacement(
         val player: ServerPlayer,

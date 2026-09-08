@@ -23,13 +23,13 @@ object WhoisCommand {
     fun register(dispatcher: com.mojang.brigadier.CommandDispatcher<CommandSourceStack>, gate: (CommandSourceStack) -> Boolean) {
         dispatcher.register(
             Commands.literal("whois").requires(gate)
-                .then(Commands.argument("player", StringArgumentType.word()).executes { context ->
+                .then(Commands.argument("player", StringArgumentType.word()).suggests(ModerationFeature.playerSuggestions).executes { context ->
                     show(context.source, StringArgumentType.getString(context, "player"))
                 }),
         )
         dispatcher.register(
             Commands.literal("seen").requires(gate)
-                .then(Commands.argument("player", StringArgumentType.word()).executes { context ->
+                .then(Commands.argument("player", StringArgumentType.word()).suggests(ModerationFeature.playerSuggestions).executes { context ->
                     seen(context.source, StringArgumentType.getString(context, "player"))
                 }),
         )

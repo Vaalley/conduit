@@ -2,6 +2,7 @@ package eu.mctraveler.moderation
 
 import com.mojang.brigadier.arguments.IntegerArgumentType
 import com.mojang.brigadier.arguments.StringArgumentType
+import com.mojang.brigadier.suggestion.SuggestionProvider
 import eu.mctraveler.MCTraveler
 import eu.mctraveler.command.CommandTree
 import eu.mctraveler.region.RegionsFeature
@@ -18,12 +19,19 @@ import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents
 import java.net.InetSocketAddress
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
+import net.minecraft.commands.SharedSuggestionProvider
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.PlayerChatMessage
 import net.minecraft.server.players.NameAndId
 import net.minecraft.server.level.ServerPlayer
 
 object ModerationFeature {
+    val playerSuggestions: SuggestionProvider<CommandSourceStack> = SuggestionProvider { context, builder ->
+        val online = context.source.server.playerList.players.map { it.gameProfile.name }
+        val known = MCTraveler.persistence?.names?.knownUsernames().orEmpty()
+        SharedSuggestionProvider.suggest((online + known).distinct(), builder)
+    }
+
     private val dateFormat = DateTimeFormatter.ISO_LOCAL_DATE.withZone(ZoneOffset.UTC)
     private data class PendingLogin(val uuid: java.util.UUID, val at: Long, val ip: String?)
     private val pendingLogins = ArrayDeque<PendingLogin>()
@@ -179,7 +187,7 @@ object ModerationFeature {
     }
 
     private fun target(name: String) =
-        Commands.argument(name, StringArgumentType.word())
+        Commands.argument(name, StringArgumentType.word()).suggests(playerSuggestions)
 
     private fun tail(name: String) =
         Commands.argument(name, StringArgumentType.greedyString())
