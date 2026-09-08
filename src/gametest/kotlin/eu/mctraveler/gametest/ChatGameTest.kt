@@ -78,6 +78,104 @@ class ChatGameTest {
     }
 
     @GameTest
+    fun serverChatStillBroadcastsInGameButIsNotBridged(helper: GameTestHelper) {
+        val server = helper.level.server
+        val speaker = TestPlayer.join(server, "SelectorServerA")
+        val listener = TestPlayer.join(server, "SelectorServerB")
+        helper.runAfterDelay(2) {
+            speaker.runCommand("chat server")
+            speaker.chat("selector server ${speaker.player.uuid}")
+        }
+        helper.succeedWhen {
+            val content = "selector server ${speaker.player.uuid}"
+            if (listener.chatPackets().none { it.body().content() == content }) {
+                throw helper.assertionException("server-mode chat was not broadcast in game")
+            }
+            if (eu.mctraveler.chat.ChatBridge.poll(0).any { it.content == content }) {
+                throw helper.assertionException("server-mode chat was mirrored to ChatBridge")
+            }
+        }
+    }
+
+    @GameTest
+    fun privateChatReachesOnlyTheSelectedPlayers(helper: GameTestHelper) {
+        val server = helper.level.server
+        val speaker = TestPlayer.join(server, "SelectorPrivateA")
+        val recipient = TestPlayer.join(server, "SelectorPrivateB")
+        val stranger = TestPlayer.join(server, "SelectorPrivateC")
+        helper.runAfterDelay(2) {
+            speaker.runCommand("chat ${recipient.name}")
+            speaker.chat("selector private ${speaker.player.uuid}")
+        }
+        helper.succeedWhen {
+            val content = "selector private ${speaker.player.uuid}"
+            if (recipient.systemMessages().none { it.string.contains(content) }) {
+                throw helper.assertionException("selected recipient did not receive private chat")
+            }
+            if (speaker.systemMessages().none { it.string.contains(content) }) {
+                throw helper.assertionException("sender did not receive private chat")
+            }
+            if (stranger.systemMessages().any { it.string.contains(content) }) {
+                throw helper.assertionException("unselected player received private chat")
+            }
+        }
+    }
+
+    @GameTest
+    fun resettingChatSelectorRestoresTheNormalBroadcast(helper: GameTestHelper) {
+        val server = helper.level.server
+        val speaker = TestPlayer.join(server, "SelectorResetA")
+        val listener = TestPlayer.join(server, "SelectorResetB")
+        helper.runAfterDelay(2) {
+            speaker.runCommand("chat ${listener.name}")
+            speaker.runCommand("chat")
+            speaker.chat("selector reset ${speaker.player.uuid}")
+        }
+        helper.succeedWhen {
+            val content = "selector reset ${speaker.player.uuid}"
+            if (listener.chatPackets().none { it.body().content() == content }) {
+                throw helper.assertionException("reset chat mode did not restore broadcast")
+            }
+        }
+    }
+
+    @GameTest
+    fun regionChatReachesResidentsOnly(helper: GameTestHelper) {
+        val server = helper.level.server
+        val speaker = TestPlayer.join(server, "SelectorRegionA")
+        val member = TestPlayer.join(server, "SelectorRegionB")
+        val stranger = TestPlayer.join(server, "SelectorRegionC")
+        eu.mctraveler.rank.RankFeature.setRank(
+            speaker.player,
+            eu.mctraveler.rank.Rank.TRAVELER,
+        )
+        speaker.moveTo(server.overworld(), 0.0, 1.0, 0.0)
+        speaker.runCommand("rg start")
+        speaker.moveTo(server.overworld(), 7.0, 1.0, 7.0)
+        speaker.runCommand("rg end")
+        eu.mctraveler.region.RegionsFeature.requireService()
+            .regionAt("world", 3, 1, 3)!!
+            .members
+            .add(member.player.uuid)
+        member.moveTo(server.overworld(), 3.0, 1.0, 3.0)
+        stranger.moveTo(server.overworld(), 20.0, 1.0, 20.0)
+        speaker.moveTo(server.overworld(), 3.0, 1.0, 3.0)
+        helper.runAfterDelay(2) {
+            speaker.runCommand("chat region")
+            speaker.chat("selector region ${speaker.player.uuid}")
+        }
+        helper.succeedWhen {
+            val content = "selector region ${speaker.player.uuid}"
+            if (member.systemMessages().none { it.string.contains(content) }) {
+                throw helper.assertionException("region member did not receive region chat")
+            }
+            if (stranger.systemMessages().any { it.string.contains(content) }) {
+                throw helper.assertionException("non-member received region chat")
+            }
+        }
+    }
+
+    @GameTest
     fun leaveBroadcastsPortalLineAndSuppressesVanilla(helper: GameTestHelper) {
         val server = helper.level.server
         val observer = TestPlayer.join(server, "LeaveEve")
