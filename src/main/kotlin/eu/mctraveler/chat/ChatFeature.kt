@@ -5,6 +5,7 @@ import com.mojang.brigadier.arguments.StringArgumentType
 import eu.mctraveler.geo.GeoIpFeature
 import eu.mctraveler.region.RegionTracker
 import eu.mctraveler.region.RegionsFeature
+import eu.mctraveler.moderation.ModerationFeature
 import eu.mctraveler.text.Paint
 import eu.mctraveler.vanish.VanishFeature
 import java.net.InetAddress
@@ -174,6 +175,7 @@ object ChatFeature {
         dispatcher.register(
             Commands.literal(name).executes { context ->
                 val player = context.source.playerOrException
+                if (!ModerationFeature.allowMuted(player)) return@executes 0
                 context.source.server.playerList
                     .broadcastChatMessage(PlayerChatMessage.system(emoticon), player, chatBound(player))
                 1
@@ -193,6 +195,7 @@ object ChatFeature {
         bound: ChatType.Bound,
     ): Boolean {
         if (bound.chatType().unwrapKey().orElse(null) != ChatType.CHAT) return true
+        if (!ModerationFeature.allowMuted(sender)) return false
         when (val mode = ChatSelector.modeOf(sender.uuid)) {
             ChatSelector.Mode.DEFAULT, ChatSelector.Mode.SERVER -> {
                 sender.level().server.playerList.broadcastChatMessage(message, sender, chatBound(sender))

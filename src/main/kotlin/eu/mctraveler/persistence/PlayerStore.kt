@@ -84,4 +84,15 @@ interface PlayerStore {
 
     /** The legacy Portal first-seen timestamp, or null when absent/malformed. */
     fun firstJoin(uuid: UUID): Long?
+
+    fun lastLoginAt(uuid: UUID): Long?
+    fun lastLogoutAt(uuid: UUID): Long?
+    fun lastLocationWorld(uuid: UUID): String?
+    fun lastX(uuid: UUID): Double?
+    fun lastY(uuid: UUID): Double?
+    fun lastZ(uuid: UUID): Double?
+    fun lastIp(uuid: UUID): String?
+
+    fun setLoginMetadata(uuid: UUID, at: Long, ip: String?)
+    fun setLogoutMetadata(uuid: UUID, at: Long, world: String, x: Double, y: Double, z: Double)
 }

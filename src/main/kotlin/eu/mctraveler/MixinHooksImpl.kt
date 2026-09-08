@@ -62,6 +62,9 @@ object MixinHooksImpl : MixinHooks {
 
     override fun claimSaveBefore(nameAndId: NameAndId) = OrphanedSaveClaimFeature.claimBefore(nameAndId)
 
+    override fun loginDenial(nameAndId: NameAndId): Component? =
+        eu.mctraveler.moderation.ModerationFeature.loginDenial(nameAndId)
+
     override fun notepadHasSession(player: ServerPlayer): Boolean = NotepadFeature.hasSession(player)
 
     override fun notepadCompleteSession(player: ServerPlayer, pages: List<String>) =

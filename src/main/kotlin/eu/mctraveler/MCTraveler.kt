@@ -73,6 +73,7 @@ object MCTraveler : ModInitializer {
         // After ChatFeature: its DISCONNECT handler must decide the leave line
         // before this one clears the vanish state (issue #47).
         eu.mctraveler.vanish.VanishFeature.register()
+        eu.mctraveler.moderation.ModerationFeature.register()
         // After the regions it publishes: it subscribes to the live service at
         // SERVER_STARTED, and the service is created by the handler above.
         LodewayFeature.register()

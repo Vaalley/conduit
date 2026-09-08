@@ -91,11 +91,55 @@ class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
             null
         }
     }
+
+    override fun lastLoginAt(uuid: UUID): Long? = readLong(uuid, LAST_LOGIN_AT)
+
+    override fun lastLogoutAt(uuid: UUID): Long? = readLong(uuid, LAST_LOGOUT_AT)
+
+    override fun lastLocationWorld(uuid: UUID): String? =
+        read(uuid)[LAST_LOCATION_WORLD]?.let { PortalJson.decodeString(it.rawValue) }
+
+    override fun lastX(uuid: UUID): Double? = readDouble(uuid, LAST_X)
+
+    override fun lastY(uuid: UUID): Double? = readDouble(uuid, LAST_Y)
+
+    override fun lastZ(uuid: UUID): Double? = readDouble(uuid, LAST_Z)
+
+    override fun lastIp(uuid: UUID): String? =
+        read(uuid)[LAST_IP]?.let { PortalJson.decodeString(it.rawValue) }
+            ?: read(uuid)["ipAddress"]?.let { PortalJson.decodeString(it.rawValue) }
+
+    override fun setLoginMetadata(uuid: UUID, at: Long, ip: String?) {
+        val record = read(uuid)
+        record[LAST_LOGIN_AT] = PortalJson.Field(PortalJson.encodeString(LAST_LOGIN_AT), at.toString())
+        if (ip == null) record.remove(LAST_IP)
+        else record[LAST_IP] = PortalJson.Field(PortalJson.encodeString(LAST_IP), PortalJson.encodeString(ip))
+        persist(uuid, record)
+    }
+
+    override fun setLogoutMetadata(uuid: UUID, at: Long, world: String, x: Double, y: Double, z: Double) {
+        val record = read(uuid)
+        record[LAST_LOGOUT_AT] = PortalJson.Field(PortalJson.encodeString(LAST_LOGOUT_AT), at.toString())
+        record[LAST_LOCATION_WORLD] = PortalJson.Field(PortalJson.encodeString(LAST_LOCATION_WORLD), PortalJson.encodeString(world))
+        record[LAST_X] = PortalJson.Field(PortalJson.encodeString(LAST_X), x.toString())
+        record[LAST_Y] = PortalJson.Field(PortalJson.encodeString(LAST_Y), y.toString())
+        record[LAST_Z] = PortalJson.Field(PortalJson.encodeString(LAST_Z), z.toString())
+        persist(uuid, record)
+    }
+
     private fun readInt(uuid: UUID, key: String): Int? =
         read(uuid)[key]?.let { field ->
             field.rawValue.toIntOrNull()
                 ?: throw IllegalArgumentException("\"$key\" is not a whole number: ${field.rawValue}")
         }
+
+    private fun readLong(uuid: UUID, key: String): Long? =
+        read(uuid)[key]?.rawValue?.toLongOrNull()
+            ?: read(uuid)[key]?.let { throw IllegalArgumentException("\"$key\" is not a whole number: ${it.rawValue}") }
+
+    private fun readDouble(uuid: UUID, key: String): Double? =
+        read(uuid)[key]?.rawValue?.toDoubleOrNull()
+            ?: read(uuid)[key]?.let { throw IllegalArgumentException("\"$key\" is not a number: ${it.rawValue}") }
 
     /**
      * The parsed player record, or an empty record for a player with no file.
@@ -172,5 +216,12 @@ class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
 
         // Ranks: Newbie/Traveler/Donator.
         const val RANK = "rank"
+        const val LAST_LOGIN_AT = "lastLoginAt"
+        const val LAST_LOGOUT_AT = "lastLogoutAt"
+        const val LAST_LOCATION_WORLD = "lastWorld"
+        const val LAST_X = "lastX"
+        const val LAST_Y = "lastY"
+        const val LAST_Z = "lastZ"
+        const val LAST_IP = "lastIp"
     }
 }
