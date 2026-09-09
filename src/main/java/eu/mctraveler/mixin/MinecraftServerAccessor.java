@@ -10,6 +10,7 @@ import net.minecraft.world.level.storage.LevelStorageSource;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
+/** Exposes the server state needed to create and remove runtime dimensions. */
 @Mixin(MinecraftServer.class)
 public interface MinecraftServerAccessor {
     @Accessor("levels")

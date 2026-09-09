@@ -9,8 +9,12 @@ import eu.mctraveler.text.Paint
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
 import net.minecraft.commands.SharedSuggestionProvider
+import net.minecraft.network.chat.Component
 import net.minecraft.server.level.ServerPlayer
 
+/**
+ * Brigadier command tree for entering, sharing, leaving, and resetting fights.
+ */
 object DragonFightCommands {
     fun register(dispatcher: CommandDispatcher<CommandSourceStack>, service: () -> DragonFightService) {
         val target = StringArgumentType.word()
@@ -92,10 +96,10 @@ object DragonFightCommands {
 
     private inline fun reply(
         context: CommandContext<CommandSourceStack>,
-        handler: (ServerPlayer) -> net.minecraft.network.chat.Component?,
+        handler: (ServerPlayer) -> Component?,
     ): Int = reply(context.source.playerOrException, handler)
 
-    private inline fun reply(player: ServerPlayer, handler: (ServerPlayer) -> net.minecraft.network.chat.Component?): Int {
+    private inline fun reply(player: ServerPlayer, handler: (ServerPlayer) -> Component?): Int {
         handler(player)?.let(player::sendSystemMessage)
         return Command.SINGLE_SUCCESS
     }

@@ -9,12 +9,13 @@ import java.util.UUID
 import net.minecraft.core.BlockPos
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.core.Direction
+import net.minecraft.network.chat.Component
+import net.minecraft.resources.Identifier
 import net.minecraft.server.MinecraftServer
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.stats.Stats
 import net.minecraft.world.entity.Entity
-import net.minecraft.resources.Identifier
 import net.minecraft.world.entity.EntityType
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
@@ -25,6 +26,9 @@ import net.minecraft.world.level.levelgen.feature.EndPlatformFeature
 import net.minecraft.world.level.levelgen.feature.EndPodiumFeature
 import net.minecraft.world.level.portal.TeleportTransition
 
+/**
+ * Owns the runtime arenas, command flow, and cleanup work for dragon fights.
+ */
 class DragonFightService(
     private val server: MinecraftServer,
     val state: DragonFightState,
@@ -42,7 +46,7 @@ class DragonFightService(
     private val gatewayMessages = HashMap<UUID, Int>()
     private val pendingEggs = HashMap<UUID, ItemStack>()
 
-    fun requirementsGate(player: ServerPlayer): net.minecraft.network.chat.Component? {
+    fun requirementsGate(player: ServerPlayer): Component? {
         val settings = DragonFightConfig.settings()
         val endermen = player.stats.getValue(Stats.ENTITY_KILLED.get(entityType("enderman")))
         val blazes = player.stats.getValue(Stats.ENTITY_KILLED.get(entityType("blaze")))
@@ -59,7 +63,7 @@ class DragonFightService(
         )
     }
 
-    fun start(player: ServerPlayer): net.minecraft.network.chat.Component? {
+    fun start(player: ServerPlayer): Component? {
         val currentOwner = ArenaLevels.owner(player.level().dimension())
         if (currentOwner != null) {
             return if (currentOwner == player.uuid) {
@@ -70,8 +74,7 @@ class DragonFightService(
         }
         val own = arenas[player.uuid]
         if (own != null) {
-            enter(player, own)
-            return null
+            return enter(player, own)
         }
         if (state.isCompleted(player.uuid)) {
             return Paint.error("You have already freed the End. Try /rtp end")
@@ -96,7 +99,7 @@ class DragonFightService(
         return null
     }
 
-    fun confirm(player: ServerPlayer): net.minecraft.network.chat.Component? {
+    fun confirm(player: ServerPlayer): Component? {
         val started = pendingConfirm[player.uuid]
             ?: return Paint.usage("/dragonfight")
         pendingConfirm.remove(player.uuid)
@@ -121,7 +124,7 @@ class DragonFightService(
         return null
     }
 
-    fun enter(player: ServerPlayer, arena: Arena): net.minecraft.network.chat.Component? {
+    fun enter(player: ServerPlayer, arena: Arena): Component? {
         val currentOwner = ArenaLevels.owner(player.level().dimension())
         if (currentOwner != null) return Paint.error("Leave this dragon fight first")
         if (player.uuid != arena.owner && player.uuid !in arena.guests) {
@@ -133,15 +136,14 @@ class DragonFightService(
         return null
     }
 
-    fun leave(player: ServerPlayer): net.minecraft.network.chat.Component? {
-        val owner = ArenaLevels.owner(player.level().dimension())
+    fun leave(player: ServerPlayer): Component? {
+        ArenaLevels.owner(player.level().dimension())
             ?: return Paint.error("You are not in a dragon fight")
         respawn(player)
-        if (owner == player.uuid) return null
         return null
     }
 
-    fun invite(owner: ServerPlayer, target: ServerPlayer): net.minecraft.network.chat.Component? {
+    fun invite(owner: ServerPlayer, target: ServerPlayer): Component? {
         val arena = arenas[owner.uuid] ?: return Paint.error("You do not have a dragon fight")
         if (target.uuid == owner.uuid) return Paint.error("You cannot invite yourself")
         arena.guests += target.uuid
@@ -156,7 +158,7 @@ class DragonFightService(
         return Paint.success("Invited ", Paint.green(target.gameProfile.name))
     }
 
-    fun join(player: ServerPlayer, ownerName: String): net.minecraft.network.chat.Component? {
+    fun join(player: ServerPlayer, ownerName: String): Component? {
         val owner = server.playerList.getPlayerByName(ownerName)?.uuid
             ?: MCTraveler.persistence?.names?.uuidFor(ownerName)
             ?: return Paint.error("Unknown player ", Paint.red(ownerName))
@@ -165,7 +167,7 @@ class DragonFightService(
         return enter(player, arena)
     }
 
-    fun reset(admin: ServerPlayer, name: String): net.minecraft.network.chat.Component {
+    fun reset(admin: ServerPlayer, name: String): Component {
         val target = server.playerList.getPlayerByName(name)
         val uuid = target?.uuid ?: MCTraveler.persistence?.names?.uuidFor(name)
             ?: return Paint.error("Unknown player ", Paint.red(name))
@@ -190,8 +192,8 @@ class DragonFightService(
     fun exitPortal(level: ServerLevel, entity: Entity): TeleportTransition? {
         if (entity !is ServerPlayer) return null
         val owner = ArenaLevels.owner(level.dimension()) ?: return null
-        val arena = arenas[owner] ?: return entity.findRespawnPositionAndUseSpawnBlock(false, TeleportTransition.DO_NOTHING)
         val transition = entity.findRespawnPositionAndUseSpawnBlock(false, TeleportTransition.DO_NOTHING)
+        if (arenas[owner] == null) return transition
         if (entity.uuid != owner) return transition
         state.markCompleted(owner)
         takeDragonEgg(level, entity)

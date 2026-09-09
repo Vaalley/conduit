@@ -8,6 +8,9 @@ import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.level.portal.TeleportTransition
 
+/**
+ * Registers dragon-fight commands and hooks the service into server lifecycle events.
+ */
 object DragonFightFeature {
     const val NAME = "dragonfight"
     const val STATE_FILE = "dragonfight-state.json"

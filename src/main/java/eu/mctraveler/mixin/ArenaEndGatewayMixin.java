@@ -11,6 +11,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+/** Keeps the temporary arena's gateways from reaching the shared End. */
 @Mixin(EndGatewayBlock.class)
 public abstract class ArenaEndGatewayMixin {
     @Inject(method = "getPortalDestination", at = @At("HEAD"), cancellable = true)

@@ -11,6 +11,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+/** Sends arena players home through the private fight's exit portal. */
 @Mixin(EndPortalBlock.class)
 public abstract class ArenaEndPortalMixin {
     @Inject(method = "getPortalDestination", at = @At("HEAD"), cancellable = true)

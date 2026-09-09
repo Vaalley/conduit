@@ -8,6 +8,9 @@ import java.nio.file.Files
 import java.nio.file.Path
 import net.fabricmc.loader.api.FabricLoader
 
+/**
+ * The persistent knobs for private dragon fights, with safe defaults for new servers.
+ */
 object DragonFightConfig {
     const val CONFIG_FILE = "dragonfight.json"
 

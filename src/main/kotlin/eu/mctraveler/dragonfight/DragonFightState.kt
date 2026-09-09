@@ -8,6 +8,9 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
 
+/**
+ * Synchronously persists completed players and the short-lived arena records.
+ */
 class DragonFightState(private val file: Path) {
     data class ArenaRecord(val createdAt: Long, val guests: Set<UUID>)
 

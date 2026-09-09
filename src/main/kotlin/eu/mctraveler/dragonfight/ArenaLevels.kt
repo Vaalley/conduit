@@ -7,8 +7,8 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
 import net.minecraft.core.registries.Registries
-import net.minecraft.resources.ResourceKey
 import net.minecraft.resources.Identifier
+import net.minecraft.resources.ResourceKey
 import net.minecraft.server.MinecraftServer
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.level.Level
@@ -16,6 +16,9 @@ import net.minecraft.world.level.dimension.LevelStem
 import net.minecraft.world.level.biome.BiomeManager
 import net.minecraft.world.level.storage.DerivedLevelData
 
+/**
+ * Creates and removes the temporary End levels used by dragon fights.
+ */
 object ArenaLevels {
     private const val NAMESPACE = MCTraveler.MOD_ID
     private const val PREFIX = "arena_"
