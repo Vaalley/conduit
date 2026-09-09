@@ -1,8 +1,10 @@
 package eu.mctraveler.gametest
 
 import eu.mctraveler.embassy.EmbassiesFeature
+import eu.mctraveler.dragonfight.DragonFightFeature
 import eu.mctraveler.rtp.RtpConfig
 import eu.mctraveler.rtp.RtpCooldown
+import eu.mctraveler.rtp.RtpKind
 import eu.mctraveler.rtp.RtpSigns
 import eu.mctraveler.worlds.TeleportCountdown
 import kotlin.math.hypot
@@ -130,6 +132,47 @@ class RtpGameTest {
             helper.assertTrue(!TeleportCountdown.isCounting(player.uuid), "a refused rtp started a count")
             helper.succeed()
         } finally {
+            player.leave()
+        }
+    }
+
+    @GameTest
+    fun rtpEndIsRefusedBeforeTheDragonFightIsCompleted(helper: GameTestHelper) {
+        val player = MessageCapturingPlayer.join(helper, "RtpEndLocked")
+        try {
+            player.messages.clear()
+            player.chatMessages.clear()
+            player.runCommand("rtp end")
+            helper.assertValueEqual(
+                player.replies(),
+                listOf("ERROR Free the End first (/dragonfight)"),
+                "the completion gate",
+            )
+            helper.assertTrue(!TeleportCountdown.isCounting(player.uuid), "a refused End rtp started a count")
+            helper.succeed()
+        } finally {
+            player.leave()
+        }
+    }
+
+    @GameTest
+    fun completedPlayersCanStartRtpEndCountdown(helper: GameTestHelper) {
+        val player = MessageCapturingPlayer.join(helper, "RtpEndUnlocked")
+        try {
+            DragonFightFeature.state!!.markCompleted(player.uuid)
+            player.messages.clear()
+            player.chatMessages.clear()
+            player.runCommand("rtp end")
+            helper.assertValueEqual(
+                player.actionBarMessages.map { it.string },
+                listOf("Teleporting in 3..."),
+                "the End teleport countdown",
+            )
+            helper.succeed()
+        } finally {
+            TeleportCountdown.forget(player.uuid)
+            RtpCooldown.forget(player.uuid, RtpKind.END)
+            DragonFightFeature.state!!.forgetCompleted(player.uuid)
             player.leave()
         }
     }

@@ -45,7 +45,8 @@
       "eu.mctraveler.gametest.SleepRequirementGameTest",
       "eu.mctraveler.gametest.RankGameTest",
       "eu.mctraveler.gametest.SignNameTokenGameTest",
-      "eu.mctraveler.gametest.RtpGameTest"
+      "eu.mctraveler.gametest.RtpGameTest",
+      "eu.mctraveler.gametest.DragonFightGameTest"
     ],
     "server": [
       {

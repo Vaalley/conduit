@@ -34,6 +34,15 @@ class RtpCooldownTest {
     }
 
     @Test
+    fun `overworld and End waits are independent`() {
+        RtpCooldown.start(player, now = 100, durationTicks = 6000)
+        RtpCooldown.start(player, now = 100, durationTicks = 12_000, kind = RtpKind.END)
+
+        assertEquals(6000, RtpCooldown.remaining(player, now = 100))
+        assertEquals(12_000, RtpCooldown.remaining(player, now = 100, kind = RtpKind.END))
+    }
+
+    @Test
     fun `the wait is spelled out in whole seconds rounded up`() {
         assertEquals("1s", RtpCooldown.format(1))
         assertEquals("12s", RtpCooldown.format(12 * 20))

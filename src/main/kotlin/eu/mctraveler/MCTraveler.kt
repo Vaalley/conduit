@@ -79,6 +79,7 @@ object MCTraveler : ModInitializer {
         LodewayFeature.register()
         CrystalFeature.register()
         eu.mctraveler.rtp.RtpFeature.register()
+        eu.mctraveler.dragonfight.DragonFightFeature.register()
         HttpApi.register()
         MapCommand.register()
         MapItemGuard.register()

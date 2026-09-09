@@ -34,6 +34,7 @@ import net.minecraft.network.protocol.game.ClientboundSetScorePacket
 import net.minecraft.network.protocol.status.ServerStatus
 import net.minecraft.resources.ResourceKey
 import net.minecraft.server.MinecraftServer
+import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.server.players.NameAndId
 import net.minecraft.world.damagesource.DamageSource
@@ -46,6 +47,7 @@ import net.minecraft.world.inventory.CraftingContainer
 import net.minecraft.world.inventory.ResultContainer
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.state.BlockState
+import net.minecraft.world.level.portal.TeleportTransition
 
 /** The pure delegation table from mixins into the features. */
 object MixinHooksImpl : MixinHooks {
@@ -109,6 +111,15 @@ object MixinHooksImpl : MixinHooks {
 
     override fun beforeTeleport(player: ServerPlayer, destination: ResourceKey<Level>) =
         EmbassyOrigins.beforeTeleport(player, destination)
+
+    override fun isArena(level: ServerLevel): Boolean =
+        eu.mctraveler.dragonfight.DragonFightFeature.isArena(level)
+
+    override fun arenaExitPortal(level: ServerLevel, entity: Entity): TeleportTransition? =
+        eu.mctraveler.dragonfight.DragonFightFeature.arenaExitPortal(level, entity)
+
+    override fun arenaGatewayBlocked(level: ServerLevel, entity: Entity) =
+        eu.mctraveler.dragonfight.DragonFightFeature.arenaGatewayBlocked(level, entity)
 
     override fun isCrystalAcceptCommand(command: String): Boolean = CrystalRequests.isAcceptCommand(command)
 

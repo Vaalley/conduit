@@ -3,6 +3,7 @@ package eu.mctraveler.rtp
 import com.mojang.brigadier.Command
 import com.mojang.brigadier.CommandDispatcher
 import com.mojang.brigadier.context.CommandContext
+import eu.mctraveler.dragonfight.DragonFightFeature
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.text.Paint
 import eu.mctraveler.worlds.TeleportCountdown
@@ -51,6 +52,10 @@ object RtpFeature {
                 .then(
                     Commands.literal("sign")
                         .executes { ctx -> reply(ctx, ::toggleSign) },
+                )
+                .then(
+                    Commands.literal("end")
+                        .executes { ctx -> reply(ctx, ::teleportEnd) },
                 ),
         )
     }
@@ -76,7 +81,15 @@ object RtpFeature {
             return Paint.error("You are already teleporting")
         }
         TeleportCountdown.begin(player) {
-            val landing = RtpPicker.pick(player, level, settings)
+            val spawn = level.respawnData.pos()
+            val landing = RtpPicker.pick(
+                player,
+                level,
+                settings.overworldRing,
+                RtpPicker.MAX_ATTEMPTS,
+                spawn.x,
+                spawn.z,
+            )
             if (landing == null) {
                 player.sendSystemMessage(Paint.error("No safe spot was found, please try again"))
                 return@begin
@@ -84,6 +97,57 @@ object RtpFeature {
             if (!landing.send(player)) return@begin
             player.resetFallDistance()
             if (!admin) RtpCooldown.start(player.uuid, level.server.tickCount, settings.cooldownTicks)
+            player.sendSystemMessage(
+                Paint.success(
+                    "Teleported to ",
+                    Paint.green(Mth.floor(landing.x)),
+                    ", ",
+                    Paint.green(Mth.floor(landing.z)),
+                ),
+            )
+        }
+        return null
+    }
+
+    fun teleportEnd(player: ServerPlayer): Component? {
+        if (DragonFightFeature.state?.isCompleted(player.uuid) != true) {
+            return Paint.error("Free the End first (/dragonfight)")
+        }
+        val level = player.level()
+        if (level.dimension() != Level.OVERWORLD && level.dimension() != Level.END) {
+            return Paint.error("/rtp end only works from the overworld or the End")
+        }
+        val settings = RtpConfig.settings()
+        val now = level.server.tickCount
+        val admin = RegionsFeature.isAdmin(player)
+        val waiting = RtpCooldown.remaining(player.uuid, now, RtpKind.END)
+        if (!admin && waiting > 0) {
+            return Paint.error("You can use /rtp end again in ", Paint.gold(RtpCooldown.format(waiting)))
+        }
+        if (TeleportCountdown.isCounting(player.uuid)) {
+            return Paint.error("You are already teleporting")
+        }
+        TeleportCountdown.begin(player) {
+            val destination = level.server.getLevel(Level.END)
+            if (destination == null) {
+                player.sendSystemMessage(Paint.error("No safe spot was found, please try again"))
+                return@begin
+            }
+            val landing = RtpPicker.pick(
+                player,
+                destination,
+                settings.endRing,
+                RtpPicker.END_MAX_ATTEMPTS,
+                0,
+                0,
+            )
+            if (landing == null) {
+                player.sendSystemMessage(Paint.error("No safe spot was found, please try again"))
+                return@begin
+            }
+            if (!landing.send(player)) return@begin
+            player.resetFallDistance()
+            if (!admin) RtpCooldown.start(player.uuid, level.server.tickCount, settings.endCooldownTicks, RtpKind.END)
             player.sendSystemMessage(
                 Paint.success(
                     "Teleported to ",

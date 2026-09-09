@@ -5,6 +5,7 @@ import kotlin.math.hypot
 import kotlin.random.Random
 import net.minecraft.world.level.block.Blocks
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
@@ -22,7 +23,7 @@ class RtpPickerTest {
     fun `every candidate lies in the ring around the centre`() {
         val random = Random(42)
         repeat(10_000) {
-            val (x, z) = RtpPicker.candidate(random, settings, centerX = 500, centerZ = -300)
+            val (x, z) = RtpPicker.candidate(random, settings.overworldRing, centerX = 500, centerZ = -300)
             val distance = hypot((x - 500).toDouble(), (z + 300).toDouble())
             // Truncation to whole blocks may shave a block off either edge.
             assertTrue(distance >= settings.minDistance - 1, "$x,$z is inside the hole ($distance)")
@@ -34,11 +35,28 @@ class RtpPickerTest {
     fun `candidates favour the outer ring in proportion to its area`() {
         val random = Random(7)
         val far = (1..20_000).count {
-            val (x, z) = RtpPicker.candidate(random, settings, 0, 0)
+            val (x, z) = RtpPicker.candidate(random, settings.overworldRing, 0, 0)
             hypot(x.toDouble(), z.toDouble()) > 700
         }
         // The band 700..1000 holds (1000² − 700²) / (1000² − 200²) ≈ 53% of the ring.
         assertTrue(far in 10_000..11_300, "$far of 20 000 landed past 700")
+    }
+
+    @Test
+    fun `end candidates lie in the distant ring around zero`() {
+        val settings = RtpConfig.DEFAULTS
+        val random = Random(19)
+        repeat(10_000) {
+            val (x, z) = RtpPicker.candidate(random, settings.endRing, 0, 0)
+            val distance = hypot(x.toDouble(), z.toDouble())
+            assertTrue(distance >= settings.endMinDistance - 1, "$x,$z is inside the End hole ($distance)")
+            assertTrue(distance <= settings.endRadius + 1, "$x,$z is beyond the End radius ($distance)")
+        }
+    }
+
+    @Test
+    fun `an End void column has no surface`() {
+        assertEquals(null, RtpPicker.surfaceY(-63, -64, 320))
     }
 
     @Test

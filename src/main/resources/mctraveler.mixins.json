@@ -42,7 +42,11 @@
     "RegionBucketMixin",
     "EmbassyOriginMixin",
     "CrystalCraftingGuardMixin",
-    "CrystalAcceptCommandMixin"
+    "CrystalAcceptCommandMixin",
+    "MinecraftServerAccessor",
+    "EnderDragonFightAccessor",
+    "ArenaEndPortalMixin",
+    "ArenaEndGatewayMixin"
   ],
   "injectors": {
     "defaultRequire": 1

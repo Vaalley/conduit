@@ -9,6 +9,7 @@ import net.minecraft.network.protocol.Packet
 import net.minecraft.network.protocol.status.ServerStatus
 import net.minecraft.resources.ResourceKey
 import net.minecraft.server.MinecraftServer
+import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.server.players.NameAndId
 import net.minecraft.world.damagesource.DamageSource
@@ -22,6 +23,7 @@ import net.minecraft.world.inventory.ResultContainer
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.entity.SignBlockEntity
 import net.minecraft.world.level.block.state.BlockState
+import net.minecraft.world.level.portal.TeleportTransition
 
 /** The seam the mixins call into the features through. */
 interface MixinHooks {
@@ -72,6 +74,11 @@ interface MixinHooks {
 
     // Embassies
     fun beforeTeleport(player: ServerPlayer, destination: ResourceKey<Level>)
+
+    // Dragon fight arenas
+    fun isArena(level: ServerLevel): Boolean
+    fun arenaExitPortal(level: ServerLevel, entity: Entity): TeleportTransition?
+    fun arenaGatewayBlocked(level: ServerLevel, entity: Entity)
 
     // Crystal
     fun isCrystalAcceptCommand(command: String): Boolean
@@ -172,6 +179,15 @@ object Hooks {
 
     @JvmStatic fun beforeTeleport(player: ServerPlayer, destination: ResourceKey<Level>) {
         impl?.beforeTeleport(player, destination)
+    }
+
+    @JvmStatic fun isArena(level: ServerLevel): Boolean = impl?.isArena(level) ?: false
+
+    @JvmStatic fun arenaExitPortal(level: ServerLevel, entity: Entity): TeleportTransition? =
+        impl?.arenaExitPortal(level, entity)
+
+    @JvmStatic fun arenaGatewayBlocked(level: ServerLevel, entity: Entity) {
+        impl?.arenaGatewayBlocked(level, entity)
     }
 
     @JvmStatic fun isCrystalAcceptCommand(command: String): Boolean = impl?.isCrystalAcceptCommand(command) ?: false
