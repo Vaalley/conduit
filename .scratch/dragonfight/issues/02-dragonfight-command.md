@@ -6,16 +6,16 @@ flow, gateway sealing, eviction + deletion, TTL sweep.
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `DragonFightConfig` (`dragonfight.json`) and `DragonFightState`
+- [x] `DragonFightConfig` (`dragonfight.json`) and `DragonFightState`
       (`dragonfight-state.json`)
-- [ ] Requirements from vanilla stats with the progress message
-- [ ] Warning + 60 s confirm
-- [ ] Enter / re-enter / already-inside / leave
-- [ ] Invite / join
-- [ ] Exit portal: guest vs owner; completion; egg auto-give; scheduled deletion
+- [x] Requirements from vanilla stats with the progress message
+- [x] Warning + 60 s confirm
+- [x] Enter / re-enter / already-inside / leave
+- [x] Invite / join
+- [x] Exit portal: guest vs owner; completion; egg auto-give; scheduled deletion
       with eviction
-- [ ] Startup wipe, TTL sweep
-- [ ] `/dragonfight reset <player>` (admin)
-- [ ] Gametests for each branch, unit tests for state/config parsing
+- [x] Startup wipe, TTL sweep
+- [x] `/dragonfight reset <player>` (admin)
+- [x] Gametests for each branch, unit tests for state/config parsing

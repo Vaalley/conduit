@@ -5,10 +5,10 @@ ring and cooldown bucket.
 
 **Blocked by:** 02 (the completed flag)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `rtp.json`: `endRadius`, `endMinDistance`, `endCooldownSeconds`
-- [ ] `RtpCooldown` keyed by `(uuid, RtpKind)`; existing calls default to OVERWORLD
-- [ ] `RtpPicker.pick` takes a ring + attempts; End void columns rejected
-- [ ] `/rtp end` gate, countdown, messages
-- [ ] Gametest: refused before completion; unit test for the End ring candidate
+- [x] `rtp.json`: `endRadius`, `endMinDistance`, `endCooldownSeconds`
+- [x] `RtpCooldown` keyed by `(uuid, RtpKind)`; existing calls default to OVERWORLD
+- [x] `RtpPicker.pick` takes a ring + attempts; End void columns rejected
+- [x] `/rtp end` gate, countdown, messages
+- [x] Gametest: refused before completion; unit test for the End ring candidate

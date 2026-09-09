@@ -5,13 +5,13 @@ runtime, with its world border and dragon fight, plus the two portal mixins.
 
 **Blocked by:** nothing.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `MinecraftServerAccessor` mixin (`levels` map, `executor`)
-- [ ] `ArenaLevels.create(server, owner)` / `ArenaLevels.delete(server, level)` /
+- [x] `MinecraftServerAccessor` mixin (`levels` map, `executor`)
+- [x] `ArenaLevels.create(server, owner)` / `ArenaLevels.delete(server, level)` /
       startup folder sweep
-- [ ] `EndPortalBlock.getPortalDestination` and `EndGatewayBlock.getPortalDestination`
+- [x] `EndPortalBlock.getPortalDestination` and `EndGatewayBlock.getPortalDestination`
       HEAD injections → `Hooks.arenaExitPortal` / `Hooks.arenaGatewayBlocked`
-- [ ] Gametest: an arena level exists in `server.levelKeys()`, has a non-null
+- [x] Gametest: an arena level exists in `server.levelKeys()`, has a non-null
       `getDragonFight()`, border size `2 * borderRadius`; after delete the key is
       gone and the folder is gone

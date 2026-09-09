@@ -7,19 +7,25 @@ import java.util.UUID
  * restart forgives everyone, which for a five-minute wait is the right trade
  * against another file to keep.
  */
+enum class RtpKind {
+    OVERWORLD,
+    END,
+}
+
 object RtpCooldown {
 
-    private val readyAt = HashMap<UUID, Int>()
+    private val readyAt = HashMap<Pair<UUID, RtpKind>, Int>()
 
     /** Ticks [uuid] still has to wait at [now], or 0 when they may go. */
-    fun remaining(uuid: UUID, now: Int): Int = ((readyAt[uuid] ?: 0) - now).coerceAtLeast(0)
+    fun remaining(uuid: UUID, now: Int, kind: RtpKind = RtpKind.OVERWORLD): Int =
+        ((readyAt[uuid to kind] ?: 0) - now).coerceAtLeast(0)
 
-    fun start(uuid: UUID, now: Int, durationTicks: Int) {
-        readyAt[uuid] = now + durationTicks
+    fun start(uuid: UUID, now: Int, durationTicks: Int, kind: RtpKind = RtpKind.OVERWORLD) {
+        readyAt[uuid to kind] = now + durationTicks
     }
 
-    fun forget(uuid: UUID) {
-        readyAt.remove(uuid)
+    fun forget(uuid: UUID, kind: RtpKind = RtpKind.OVERWORLD) {
+        readyAt.remove(uuid to kind)
     }
 
     fun clear() = readyAt.clear()

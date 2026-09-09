@@ -23,14 +23,26 @@ object RtpConfig {
         val minDistance: Int,
         /** How long a player waits between random teleports. */
         val cooldownSeconds: Int,
+        /** Farthest a destination may be from the centre of the End. */
+        val endRadius: Int = 2_000_000,
+        /** Nearest a destination may be from the centre of the End. */
+        val endMinDistance: Int = 200_000,
+        /** How long a player waits between End teleports. */
+        val endCooldownSeconds: Int = 1_800,
     ) {
         init {
             require(radius > 0) { "radius must be positive" }
             require(minDistance in 0 until radius) { "minDistance must be between 0 and radius" }
             require(cooldownSeconds >= 0) { "cooldownSeconds must not be negative" }
+            require(endRadius > 0) { "endRadius must be positive" }
+            require(endMinDistance in 0 until endRadius) { "endMinDistance must be between 0 and endRadius" }
+            require(endCooldownSeconds >= 0) { "endCooldownSeconds must not be negative" }
         }
 
         val cooldownTicks: Int get() = cooldownSeconds * 20
+        val endCooldownTicks: Int get() = endCooldownSeconds * 20
+        val overworldRing: RtpPicker.Ring get() = RtpPicker.Ring(minDistance, radius)
+        val endRing: RtpPicker.Ring get() = RtpPicker.Ring(endMinDistance, endRadius)
     }
 
     val DEFAULTS = Settings(radius = 25_000, minDistance = 1_000, cooldownSeconds = 5 * 60)
@@ -58,6 +70,9 @@ object RtpConfig {
                     radius = int(root, "radius", DEFAULTS.radius),
                     minDistance = int(root, "minDistance", DEFAULTS.minDistance),
                     cooldownSeconds = int(root, "cooldownSeconds", DEFAULTS.cooldownSeconds),
+                    endRadius = int(root, "endRadius", DEFAULTS.endRadius),
+                    endMinDistance = int(root, "endMinDistance", DEFAULTS.endMinDistance),
+                    endCooldownSeconds = int(root, "endCooldownSeconds", DEFAULTS.endCooldownSeconds),
                 )
             }
         } catch (error: Exception) {
@@ -75,6 +90,9 @@ object RtpConfig {
                 addProperty("radius", settings.radius)
                 addProperty("minDistance", settings.minDistance)
                 addProperty("cooldownSeconds", settings.cooldownSeconds)
+                addProperty("endRadius", settings.endRadius)
+                addProperty("endMinDistance", settings.endMinDistance)
+                addProperty("endCooldownSeconds", settings.endCooldownSeconds)
             },
         )
 }

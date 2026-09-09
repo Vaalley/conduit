@@ -24,8 +24,19 @@ class RtpConfigTest {
 
     @Test
     fun `the defaults are the agreed ring and wait`() {
-        assertEquals(RtpConfig.Settings(radius = 25_000, minDistance = 1_000, cooldownSeconds = 300), RtpConfig.DEFAULTS)
+        assertEquals(
+            RtpConfig.Settings(
+                radius = 25_000,
+                minDistance = 1_000,
+                cooldownSeconds = 300,
+                endRadius = 2_000_000,
+                endMinDistance = 200_000,
+                endCooldownSeconds = 1800,
+            ),
+            RtpConfig.DEFAULTS,
+        )
         assertEquals(6000, RtpConfig.DEFAULTS.cooldownTicks)
+        assertEquals(36_000, RtpConfig.DEFAULTS.endCooldownTicks)
     }
 
     @Test
@@ -33,7 +44,10 @@ class RtpConfigTest {
         val file = tempDir.resolve(RtpConfig.CONFIG_FILE)
         Files.writeString(file, """{ "radius": 4000, "cooldownSeconds": 30 }""")
 
-        assertEquals(RtpConfig.Settings(radius = 4000, minDistance = 1_000, cooldownSeconds = 30), RtpConfig.load(file))
+        assertEquals(
+            RtpConfig.Settings(radius = 4000, minDistance = 1_000, cooldownSeconds = 30),
+            RtpConfig.load(file),
+        )
     }
 
     @Test

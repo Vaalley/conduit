@@ -25,6 +25,9 @@ import net.minecraft.world.level.levelgen.Heightmap
 object RtpPicker {
 
     const val MAX_ATTEMPTS = 10
+    const val END_MAX_ATTEMPTS = 25
+
+    data class Ring(val minDistance: Int, val radius: Int)
 
     /** Blocks that are ground you can stand on but would rather not land on. */
     private val hostileGround = setOf(
@@ -44,10 +47,17 @@ object RtpPicker {
      * A landing for [player] somewhere new in [level], keeping their facing, or
      * null when [MAX_ATTEMPTS] columns were all unfit.
      */
-    fun pick(player: ServerPlayer, level: ServerLevel, settings: RtpConfig.Settings, random: Random = Random): Landing? {
-        val spawn = level.respawnData.pos()
-        repeat(MAX_ATTEMPTS) {
-            val (x, z) = candidate(random, settings, spawn.x, spawn.z)
+    fun pick(
+        player: ServerPlayer,
+        level: ServerLevel,
+        ring: Ring,
+        attempts: Int,
+        centerX: Int,
+        centerZ: Int,
+        random: Random = Random,
+    ): Landing? {
+        repeat(attempts) {
+            val (x, z) = candidate(random, ring, centerX, centerZ)
             val y = surfaceAt(level, x, z) ?: return@repeat
             if (!isSafeColumn(level, x, y, z)) return@repeat
             if (isClaimed(level, x, y, z)) return@repeat
@@ -61,9 +71,9 @@ object RtpPicker {
      * ([centerX], [centerZ]) — uniform over area, so the outer, larger part of
      * the ring is not under-visited.
      */
-    fun candidate(random: Random, settings: RtpConfig.Settings, centerX: Int, centerZ: Int): Pair<Int, Int> {
-        val min = settings.minDistance.toDouble()
-        val max = settings.radius.toDouble()
+    fun candidate(random: Random, ring: Ring, centerX: Int, centerZ: Int): Pair<Int, Int> {
+        val min = ring.minDistance.toDouble()
+        val max = ring.radius.toDouble()
         val distance = sqrt(random.nextDouble() * (max * max - min * min) + min * min)
         val angle = random.nextDouble() * 2 * Math.PI
         return (centerX + (cos(angle) * distance).toInt()) to (centerZ + (sin(angle) * distance).toInt())
@@ -78,8 +88,11 @@ object RtpPicker {
         if (!level.worldBorder.isWithinBounds(x.toDouble(), z.toDouble())) return null
         val chunk = level.getChunk(x shr 4, z shr 4)
         val y = chunk.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x and 15, z and 15) + 1
-        return y.takeIf { it > level.minY + 1 && it < level.maxY - 1 }
+        return surfaceY(y, level.minY, level.maxY)
     }
+
+    fun surfaceY(y: Int, minY: Int, maxY: Int): Int? =
+        y.takeIf { it > minY + 1 && it < maxY - 1 }
 
     private fun isSafeColumn(level: ServerLevel, x: Int, y: Int, z: Int): Boolean =
         isSafeGround(
