@@ -16,6 +16,7 @@ object PassportJson {
         val regions: List<RegionSummary>,
         val distance: DistanceSummary,
         val crystalTrips: Int,
+        val rtpUses: Int,
         val deaths: Int,
         val postcards: Int,
         val stamps: List<StampSummary>,
@@ -96,6 +97,7 @@ object PassportJson {
                 total = passport.distance.total.roundToLong(),
             ),
             crystalTrips = passport.crystalTrips,
+            rtpUses = passport.rtpUses,
             deaths = passport.deaths,
             postcards = passport.postcards,
             stamps = passport.stamps.mapNotNull { (id, at) ->

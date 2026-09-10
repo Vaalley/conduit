@@ -6,7 +6,9 @@ import eu.mctraveler.region.RegionService
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
+import net.minecraft.stats.Stats
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -163,6 +165,44 @@ class PassportTest {
             setOf("three_worlds", "veteran"),
             Stamps.evaluate(context).map { it.id }.toSet(),
         )
+    }
+
+    @Test
+    fun `stamps unlock distance buckets, counters and stats`() {
+        val passport = Passport(0L)
+        passport.distance.walk = 43_000.0
+        passport.distance.ride = 26_000.0
+        passport.distance.swim = 11_000.0
+        passport.deaths = 1
+        passport.rtpUses = 25
+        val context = StampContext(
+            passport,
+            embassies = 0,
+            overworldBiomeTotal = 0,
+            now = 1000L,
+            regions = 100,
+        ) { id -> if (id == Stats.JUMP) 10_000 else 0 }
+
+        val unlocked = Stamps.evaluate(context).map { it.id }.toSet()
+        assertEquals(
+            setOf(
+                "first_steps", "wanderer", "marathon", "pony_express", "channel_swimmer",
+                "sightseer", "trespasser", "wormhole", "roulette_regular", "first_blood", "leg_day",
+            ),
+            unlocked,
+        )
+    }
+
+    @Test
+    fun `event stamps are granted once and never evaluate`() {
+        val passport = Passport(0L)
+        assertEquals("storm_chaser", Stamps.grant(passport, "storm_chaser", 7L)?.id)
+        assertNull(Stamps.grant(passport, "storm_chaser", 8L))
+        assertNull(Stamps.grant(passport, "unknown_stamp", 9L))
+        assertEquals(7L, passport.stamps["storm_chaser"])
+
+        val context = StampContext(passport, 0, 0, 1000L, regions = 1000) { 10_000_000 }
+        assertTrue(Stamps.evaluate(context).none { it.id in setOf("ashes_to_ashes", "into_the_void", "terminal_velocity", "storm_chaser") })
     }
 
     @Test
