@@ -384,7 +384,7 @@ object HttpApi {
             sendResponse(exchange, 400, "Missing 'by'")
             return
         }
-        if (by !in setOf("distance", "biomes", "embassies", "stamps")) {
+        if (by !in setOf("distance", "biomes", "embassies", "stamps", "mined")) {
             sendResponse(exchange, 400, "Bad 'by'")
             return
         }
@@ -406,6 +406,7 @@ object HttpApi {
                             "distance" -> passport.distance.total.roundToLong()
                             "biomes" -> passport.biomes.size.toLong()
                             "stamps" -> passport.stamps.size.toLong()
+                            "mined" -> passport.blocksMined.toLong()
                             else -> PassportJson.embassyCount(passport, regionService).toLong()
                         }
                         name to value
@@ -457,7 +458,7 @@ object HttpApi {
 
     private fun rankFor(uuid: UUID, regions: RegionService): Rank {
         val passports = MCTraveler.persistence?.passports?.all().orEmpty()
-        val target = passports.firstOrNull { it.first == uuid }?.second ?: return Rank(1, 1, 1, 1)
+        val target = passports.firstOrNull { it.first == uuid }?.second ?: return Rank(1, 1, 1, 1, 1)
         fun rank(value: (Passport) -> Long): Int =
             1 + passports.count { value(it.second) > value(target) }
         return Rank(
@@ -465,6 +466,7 @@ object HttpApi {
             biomes = rank { it.biomes.size.toLong() },
             embassies = rank { PassportJson.embassyCount(it, regions).toLong() },
             stamps = rank { it.stamps.size.toLong() },
+            mined = rank { it.blocksMined.toLong() },
         )
     }
 

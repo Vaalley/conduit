@@ -110,7 +110,10 @@ object PassportCommand {
                 " · Swum ", Paint.green(PassportFormatting.formatDistance(passport.distance.swim))) },
             false,
         )
-        context.source.sendSuccess({ Paint.gray("Deaths: ", Paint.green(passport.deaths)) }, false)
+        context.source.sendSuccess(
+            { Paint.gray("Deaths: ", Paint.green(passport.deaths), " · Mined: ", Paint.green(passport.blocksMined)) },
+            false,
+        )
         val recentStamps = passport.stamps.entries
             .sortedByDescending { it.value }
             .take(3)
