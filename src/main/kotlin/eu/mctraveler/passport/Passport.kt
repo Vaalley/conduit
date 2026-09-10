@@ -13,6 +13,7 @@ data class Passport(
     val regions: LinkedHashMap<String, Long> = LinkedHashMap(),
     val distance: Distance = Distance(),
     var crystalTrips: Int = 0,
+    var rtpUses: Int = 0,
     var deaths: Int = 0,
     var postcards: Int = 0,
     val stamps: LinkedHashMap<String, Long> = LinkedHashMap(),

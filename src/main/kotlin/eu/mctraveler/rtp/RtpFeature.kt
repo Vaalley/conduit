@@ -4,6 +4,7 @@ import com.mojang.brigadier.Command
 import com.mojang.brigadier.CommandDispatcher
 import com.mojang.brigadier.context.CommandContext
 import eu.mctraveler.dragonfight.DragonFightFeature
+import eu.mctraveler.passport.PassportFeature
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.text.Paint
 import eu.mctraveler.worlds.TeleportCountdown
@@ -96,6 +97,7 @@ object RtpFeature {
             }
             if (!landing.send(player)) return@begin
             player.resetFallDistance()
+            PassportFeature.recordRtpUse(player)
             if (!admin) RtpCooldown.start(player.uuid, level.server.tickCount, settings.cooldownTicks)
             player.sendSystemMessage(
                 Paint.success(
@@ -147,6 +149,7 @@ object RtpFeature {
             }
             if (!landing.send(player)) return@begin
             player.resetFallDistance()
+            PassportFeature.recordRtpUse(player)
             if (!admin) RtpCooldown.start(player.uuid, level.server.tickCount, settings.endCooldownTicks, RtpKind.END)
             player.sendSystemMessage(
                 Paint.success(

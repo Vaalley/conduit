@@ -11,6 +11,8 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents
 import net.minecraft.server.MinecraftServer
 import net.minecraft.server.level.ServerPlayer
+import net.minecraft.stats.Stats
+import net.minecraft.world.damagesource.DamageTypes
 import net.minecraft.world.level.GameType
 import net.minecraft.world.phys.Vec3
 import java.util.UUID
@@ -19,11 +21,13 @@ object PassportFeature {
     private const val FLUSH_INTERVAL_TICKS = 1200L
     private const val SAMPLE_INTERVAL_TICKS = 20L
     private const val MAX_TICK_DISTANCE = 100.0
+    private const val FALL_STAMP_BLOCKS = 100.0
     private const val OVERWORLD_BIOME_TOTAL_UNAVAILABLE = 0
 
     private class State(player: ServerPlayer) {
         var lastPos: Vec3 = player.position()
         var lastDimension: String = dimensionOf(player)
+        var fallPeak: Double = 0.0
     }
 
     private val states = HashMap<UUID, State>()
@@ -35,7 +39,7 @@ object PassportFeature {
             states.remove(handler.player.uuid)
             MCTraveler.persistence?.passports?.flushDirty()
         }
-        ServerLivingEntityEvents.AFTER_DEATH.register { entity, _ ->
+        ServerLivingEntityEvents.AFTER_DEATH.register { entity, source ->
             val player = entity as? ServerPlayer ?: return@register
             val persistence = MCTraveler.persistence ?: return@register
             val passport = persistence.passports.getOrCreate(
@@ -43,7 +47,14 @@ object PassportFeature {
                 persistence.players.firstJoin(player.uuid) ?: System.currentTimeMillis(),
             )
             passport.deaths++
+            when (dimensionOf(player)) {
+                "minecraft:the_nether" -> grantStamp(player, passport, "ashes_to_ashes")
+                "minecraft:the_end" -> if (source.`is`(DamageTypes.FELL_OUT_OF_WORLD)) {
+                    grantStamp(player, passport, "into_the_void")
+                }
+            }
             persistence.passports.markDirty(player.uuid)
+            unlockStamps(player, passport)
         }
         ServerTickEvents.END_SERVER_TICK.register(::onEndServerTick)
         ServerLifecycleEvents.SERVER_STOPPING.register {
@@ -111,6 +122,20 @@ object PassportFeature {
             state.lastPos = pos
             state.lastDimension = dimension
 
+            val fall = player.fallDistance
+            if (fall >= state.fallPeak) {
+                state.fallPeak = fall
+            } else {
+                // A fall only counts when it actually ended on the ground (or in
+                // water) — not when a teleport reset fallDistance mid-air.
+                val landed = !delta.isNaN() && delta <= MAX_TICK_DISTANCE &&
+                    player.isAlive && (player.onGround() || player.isInWater)
+                if (state.fallPeak >= FALL_STAMP_BLOCKS && landed) {
+                    grantStamp(player, passport, "terminal_velocity")
+                }
+                state.fallPeak = fall
+            }
+
             if (tick % SAMPLE_INTERVAL_TICKS == 0L) {
                 var changed = passport.dimensions.putIfAbsent(dimension, System.currentTimeMillis()) == null
                 val biome = biomeOf(player)
@@ -125,6 +150,10 @@ object PassportFeature {
                     )
                 ) {
                     changed = true
+                }
+                val level = player.level()
+                if (level.isThundering && level.isRainingAt(player.blockPosition())) {
+                    grantStamp(player, passport, "storm_chaser")
                 }
                 unlockStamps(player, passport)
                 if (changed) persistence.passports.markDirty(player.uuid)
@@ -145,15 +174,23 @@ object PassportFeature {
 
     fun unlockStamps(player: ServerPlayer, passport: Passport) {
         val now = System.currentTimeMillis()
+        val regionService = RegionsFeature.requireService()
         val unlocked = Stamps.evaluate(
             StampContext(
                 passport = passport,
-                embassies = PassportJson.embassyCount(passport, RegionsFeature.requireService()),
+                embassies = PassportJson.embassyCount(passport, regionService),
                 overworldBiomeTotal = overworldBiomeTotal,
                 now = now,
+                regions = passport.regions.keys.count { regionService.byStableId(it) != null },
+                stat = { id -> player.stats.getValue(Stats.CUSTOM.get(id)) },
             ),
         )
-        for (stamp in unlocked) {
+        announceStamps(player, unlocked, now)
+        if (unlocked.isNotEmpty()) MCTraveler.persistence?.passports?.markDirty(player.uuid)
+    }
+
+    private fun announceStamps(player: ServerPlayer, stamps: List<Stamp>, at: Long) {
+        for (stamp in stamps) {
             player.sendSystemMessage(
                 Paint.info(
                     "Stamp unlocked: ",
@@ -163,13 +200,19 @@ object PassportFeature {
             )
             PassportEvents.record(
                 StampEvent(
-                    at = now,
+                    at = at,
                     player = player.gameProfile.name,
                     stamp = StampRef(stamp.id, stamp.title, stamp.description, stamp.icon),
                 ),
             )
         }
-        if (unlocked.isNotEmpty()) MCTraveler.persistence?.passports?.markDirty(player.uuid)
+    }
+
+    private fun grantStamp(player: ServerPlayer, passport: Passport, stampId: String) {
+        val now = System.currentTimeMillis()
+        val stamp = Stamps.grant(passport, stampId, now) ?: return
+        announceStamps(player, listOf(stamp), now)
+        MCTraveler.persistence?.passports?.markDirty(player.uuid)
     }
 
     fun recordCrystalTrip(player: ServerPlayer) {
@@ -179,6 +222,17 @@ object PassportFeature {
             persistence.players.firstJoin(player.uuid) ?: System.currentTimeMillis(),
         )
         passport.crystalTrips++
+        persistence.passports.markDirty(player.uuid)
+        unlockStamps(player, passport)
+    }
+
+    fun recordRtpUse(player: ServerPlayer) {
+        val persistence = MCTraveler.persistence ?: return
+        val passport = persistence.passports.getOrCreate(
+            player.uuid,
+            persistence.players.firstJoin(player.uuid) ?: System.currentTimeMillis(),
+        )
+        passport.rtpUses++
         persistence.passports.markDirty(player.uuid)
         unlockStamps(player, passport)
     }
