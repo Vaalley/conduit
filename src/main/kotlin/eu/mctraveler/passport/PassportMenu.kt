@@ -84,6 +84,7 @@ object PassportMenu {
         contents.setItem(15, item(Items.ELYTRA, "Flown", "Flown: ${PassportFormatting.formatDistance(passport.distance.fly)}"))
         contents.setItem(16, item(Items.WATER_BUCKET, "Swum", "Swum: ${PassportFormatting.formatDistance(passport.distance.swim)}"))
         contents.setItem(19, item(Items.SKELETON_SKULL, "Deaths", "Deaths: ${passport.deaths}"))
+        contents.setItem(20, item(Items.IRON_PICKAXE, "Mined", "Mined: ${passport.blocksMined} blocks"))
         contents.setItem(22, item(Items.NAME_TAG, "Stamps", "Stamps: ${passport.stamps.size}/${Stamps.ALL.size}"))
     }
 

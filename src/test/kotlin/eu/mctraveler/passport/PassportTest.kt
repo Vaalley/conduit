@@ -33,6 +33,7 @@ class PassportTest {
         passport.biomes["minecraft:plains"] = 2000L
         passport.distance.walk = 12.5
         passport.deaths = 2
+        passport.blocksMined = 42
         store.markDirty(uuid)
         store.flushDirty()
 
@@ -49,6 +50,7 @@ class PassportTest {
 
         assertEquals(0, passport.crystalTrips)
         assertEquals(0, passport.postcards)
+        assertEquals(0, passport.blocksMined)
         assertTrue(passport.stamps.isEmpty())
     }
 
@@ -175,6 +177,7 @@ class PassportTest {
         passport.distance.swim = 11_000.0
         passport.deaths = 1
         passport.rtpUses = 25
+        passport.blocksMined = 10_000
         val context = StampContext(
             passport,
             embassies = 0,
@@ -187,7 +190,8 @@ class PassportTest {
         assertEquals(
             setOf(
                 "first_steps", "wanderer", "marathon", "pony_express", "channel_swimmer",
-                "sightseer", "trespasser", "wormhole", "roulette_regular", "first_blood", "leg_day",
+                "sightseer", "trespasser", "wormhole", "roulette_regular", "digger", "excavator",
+                "first_blood", "leg_day",
             ),
             unlocked,
         )

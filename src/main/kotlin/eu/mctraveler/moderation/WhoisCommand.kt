@@ -62,7 +62,7 @@ object WhoisCommand {
         line(source, "Regions", regions.joinToString(", ").ifEmpty { "None" })
         val passport = MCTraveler.persistence?.passports?.get(uuid)
         if (passport != null) {
-            line(source, "Passport", "${passport.biomes.size} biomes, ${passport.dimensions.size} dimensions, ${passport.regions.size} regions, ${passport.deaths} deaths, ${passport.stamps.size} stamps")
+            line(source, "Passport", "${passport.biomes.size} biomes, ${passport.dimensions.size} dimensions, ${passport.regions.size} regions, ${passport.deaths} deaths, ${passport.blocksMined} mined, ${passport.stamps.size} stamps")
         }
         val history = MCTraveler.persistence?.punishments?.history(uuid).orEmpty()
         line(source, "Active punishments", "${history.count { it.type == PunishmentType.BAN && it.active }} bans, ${history.count { it.type == PunishmentType.MUTE && it.active }} mutes, ${history.count { it.type == PunishmentType.WARN && it.active }} warns, ${history.count { it.type == PunishmentType.NOTE && it.active }} notes")

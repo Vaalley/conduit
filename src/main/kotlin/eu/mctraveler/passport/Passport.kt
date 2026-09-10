@@ -16,6 +16,7 @@ data class Passport(
     var rtpUses: Int = 0,
     var deaths: Int = 0,
     var postcards: Int = 0,
+    var blocksMined: Int = 0,
     val stamps: LinkedHashMap<String, Long> = LinkedHashMap(),
 ) {
     constructor() : this(0L)

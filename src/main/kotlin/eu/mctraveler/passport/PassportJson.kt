@@ -19,6 +19,7 @@ object PassportJson {
         val rtpUses: Int,
         val deaths: Int,
         val postcards: Int,
+        val blocksMined: Int,
         val stamps: List<StampSummary>,
         val rank: Rank,
     )
@@ -52,6 +53,7 @@ object PassportJson {
         val biomes: Int,
         val embassies: Int,
         val stamps: Int,
+        val mined: Int,
     )
 
     /**
@@ -65,7 +67,7 @@ object PassportJson {
         regions: RegionService,
         nameFor: (UUID) -> String?,
         biomeTotal: Int = 0,
-        rank: Rank = Rank(0, 0, 0, 0),
+        rank: Rank = Rank(0, 0, 0, 0, 0),
     ): Summary {
         val visited = passport.regions.mapNotNull { (id, at) ->
             val region = regions.byStableId(id) ?: return@mapNotNull null
@@ -100,6 +102,7 @@ object PassportJson {
             rtpUses = passport.rtpUses,
             deaths = passport.deaths,
             postcards = passport.postcards,
+            blocksMined = passport.blocksMined,
             stamps = passport.stamps.mapNotNull { (id, at) ->
                 Stamps.byId(id)?.let { stamp ->
                     StampSummary(stamp.id, stamp.title, stamp.description, stamp.icon, at)

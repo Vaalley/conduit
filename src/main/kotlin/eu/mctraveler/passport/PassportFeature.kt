@@ -8,6 +8,7 @@ import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents
+import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents
 import net.minecraft.server.MinecraftServer
 import net.minecraft.server.level.ServerPlayer
@@ -55,6 +56,9 @@ object PassportFeature {
             }
             persistence.passports.markDirty(player.uuid)
             unlockStamps(player, passport)
+        }
+        PlayerBlockBreakEvents.AFTER.register { _, player, _, _, _ ->
+            (player as? ServerPlayer)?.let(::recordBlockMined)
         }
         ServerTickEvents.END_SERVER_TICK.register(::onEndServerTick)
         ServerLifecycleEvents.SERVER_STOPPING.register {
@@ -213,6 +217,17 @@ object PassportFeature {
         val stamp = Stamps.grant(passport, stampId, now) ?: return
         announceStamps(player, listOf(stamp), now)
         MCTraveler.persistence?.passports?.markDirty(player.uuid)
+    }
+
+    fun recordBlockMined(player: ServerPlayer) {
+        val persistence = MCTraveler.persistence ?: return
+        val passport = persistence.passports.getOrCreate(
+            player.uuid,
+            persistence.players.firstJoin(player.uuid) ?: System.currentTimeMillis(),
+        )
+        passport.blocksMined++
+        persistence.passports.markDirty(player.uuid)
+        unlockStamps(player, passport)
     }
 
     fun recordCrystalTrip(player: ServerPlayer) {

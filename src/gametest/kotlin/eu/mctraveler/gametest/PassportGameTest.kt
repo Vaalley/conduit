@@ -7,9 +7,11 @@ import eu.mctraveler.passport.PostcardEvent
 import eu.mctraveler.passport.StampEvent
 import eu.mctraveler.region.Region
 import eu.mctraveler.region.RegionsFeature
+import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.core.BlockPos
 import net.minecraft.gametest.framework.GameTestHelper
+import net.minecraft.world.level.block.Blocks
 import net.minecraft.core.component.DataComponents
 import net.minecraft.world.inventory.ContainerInput
 import net.minecraft.network.protocol.game.ClientboundOpenScreenPacket
@@ -90,6 +92,35 @@ class PassportGameTest {
         helper.runAfterDelay(20) {
             val distance = checkNotNull(MCTraveler.persistence?.passports?.get(player.uuid)).distance.walk
             helper.assertTrue(distance in 29.0..31.0, "walked distance was $distance")
+            player.leave()
+            helper.succeed()
+        }
+    }
+
+    @GameTest(maxTicks = 80)
+    fun miningCountsBlocksAndUnlocksStamps(helper: GameTestHelper) {
+        PassportEvents.clear()
+        val player = MessageCapturingPlayer.join(helper, "PassportMiner")
+        val passport = checkNotNull(MCTraveler.persistence?.passports?.get(player.uuid))
+        passport.blocksMined = 999
+        val pos = helper.absolutePos(BlockPos(1, 1, 1))
+        helper.setBlock(pos, Blocks.STONE)
+        helper.runAfterDelay(2) {
+            PlayerBlockBreakEvents.AFTER.invoker().afterBlockBreak(
+                player.level(),
+                player,
+                pos,
+                Blocks.STONE.defaultBlockState(),
+                null,
+            )
+            val updated = checkNotNull(MCTraveler.persistence?.passports?.get(player.uuid))
+            helper.assertTrue(updated.blocksMined == 1000, "blocksMined was ${updated.blocksMined}")
+            helper.assertTrue(updated.stamps["digger"] != null, "digger stamp was not unlocked")
+            helper.assertTrue(
+                PassportEvents.poll(0).filterIsInstance<StampEvent>()
+                    .any { it.player == player.gameProfile.name && it.stamp.id == "digger" },
+                "digger stamp event was not recorded",
+            )
             player.leave()
             helper.succeed()
         }
