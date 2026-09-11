@@ -27,7 +27,7 @@ import org.spongepowered.asm.mixin.injection.ModifyConstant;
 public abstract class ItemMergeMixin {
 
     /** The horizontal (and only) half-extent of the merge scan box. */
-    private static final double MERGE_RADIUS = 2.5;
+    private static final double MERGE_RADIUS = 1.0;
 
     /**
      * In {@code ItemEntity.mergeWithNeighbours} — widens both horizontal
