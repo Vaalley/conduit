@@ -15,7 +15,6 @@ import net.minecraft.server.level.ServerPlayer
 import net.minecraft.stats.Stats
 import net.minecraft.world.damagesource.DamageTypes
 import net.minecraft.world.level.GameType
-import net.minecraft.world.phys.Vec3
 import java.util.UUID
 
 object PassportFeature {
@@ -26,7 +25,11 @@ object PassportFeature {
     private const val OVERWORLD_BIOME_TOTAL_UNAVAILABLE = 0
 
     private class State(player: ServerPlayer) {
-        var lastPos: Vec3 = player.position()
+        // The position components, not the Vec3 — one position() allocation per
+        // player per tick is garbage the distance check does not need.
+        var lastX: Double = player.x
+        var lastY: Double = player.y
+        var lastZ: Double = player.z
         var lastDimension: String = dimensionOf(player)
         var fallPeak: Double = 0.0
     }
@@ -43,10 +46,9 @@ object PassportFeature {
         ServerLivingEntityEvents.AFTER_DEATH.register { entity, source ->
             val player = entity as? ServerPlayer ?: return@register
             val persistence = MCTraveler.persistence ?: return@register
-            val passport = persistence.passports.getOrCreate(
-                player.uuid,
-                persistence.players.firstJoin(player.uuid) ?: System.currentTimeMillis(),
-            )
+            val passport = persistence.passports.getOrCreate(player.uuid) {
+                persistence.players.firstJoin(player.uuid) ?: System.currentTimeMillis()
+            }
             passport.deaths++
             when (dimensionOf(player)) {
                 "minecraft:the_nether" -> grantStamp(player, passport, "ashes_to_ashes")
@@ -83,10 +85,9 @@ object PassportFeature {
 
     private fun onJoin(player: ServerPlayer) {
         val persistence = MCTraveler.persistence ?: return
-        val passport = persistence.passports.getOrCreate(
-            player.uuid,
-            persistence.players.firstJoin(player.uuid) ?: System.currentTimeMillis(),
-        )
+        val passport = persistence.passports.getOrCreate(player.uuid) {
+            persistence.players.firstJoin(player.uuid) ?: System.currentTimeMillis()
+        }
         unlockStamps(player, passport)
         states[player.uuid] = State(player)
     }
@@ -99,19 +100,26 @@ object PassportFeature {
                 onJoin(player)
                 states[player.uuid] ?: continue
             }
-            val passport = persistence.passports.getOrCreate(
-                player.uuid,
-                persistence.players.firstJoin(player.uuid) ?: System.currentTimeMillis(),
-            )
+            val passport = persistence.passports.getOrCreate(player.uuid) {
+                persistence.players.firstJoin(player.uuid) ?: System.currentTimeMillis()
+            }
             if (player.gameMode.gameModeForPlayer == GameType.SPECTATOR) {
-                state.lastPos = player.position()
+                state.lastX = player.x
+                state.lastY = player.y
+                state.lastZ = player.z
                 state.lastDimension = dimensionOf(player)
                 continue
             }
 
-            val pos = player.position()
             val dimension = dimensionOf(player)
-            val delta = if (dimension == state.lastDimension) pos.distanceTo(state.lastPos) else Double.NaN
+            val dx = player.x - state.lastX
+            val dy = player.y - state.lastY
+            val dz = player.z - state.lastZ
+            val delta = if (dimension == state.lastDimension) {
+                Math.sqrt(dx * dx + dy * dy + dz * dz)
+            } else {
+                Double.NaN
+            }
             if (delta > 0.0 && delta <= MAX_TICK_DISTANCE) {
                 passport.distance.add(
                     Distance.bucketFor(
@@ -123,7 +131,9 @@ object PassportFeature {
                 )
                 persistence.passports.markDirty(player.uuid)
             }
-            state.lastPos = pos
+            state.lastX = player.x
+            state.lastY = player.y
+            state.lastZ = player.z
             state.lastDimension = dimension
 
             val fall = player.fallDistance
@@ -177,15 +187,18 @@ object PassportFeature {
     internal fun overworldBiomeTotal(): Int = overworldBiomeTotal
 
     fun unlockStamps(player: ServerPlayer, passport: Passport) {
+        // A passport with nothing left to unlock skips the context — and with
+        // it the region-id count and embassy count its suppliers would build.
+        if (Stamps.allEvaluatableUnlocked(passport)) return
         val now = System.currentTimeMillis()
         val regionService = RegionsFeature.requireService()
         val unlocked = Stamps.evaluate(
             StampContext(
                 passport = passport,
-                embassies = PassportJson.embassyCount(passport, regionService),
+                embassies = { PassportJson.embassyCount(passport, regionService) },
                 overworldBiomeTotal = overworldBiomeTotal,
                 now = now,
-                regions = passport.regions.keys.count { regionService.byStableId(it) != null },
+                regions = { passport.regions.keys.count { regionService.byStableId(it) != null } },
                 stat = { id -> player.stats.getValue(Stats.CUSTOM.get(id)) },
             ),
         )
@@ -221,10 +234,9 @@ object PassportFeature {
 
     fun recordBlockMined(player: ServerPlayer) {
         val persistence = MCTraveler.persistence ?: return
-        val passport = persistence.passports.getOrCreate(
-            player.uuid,
-            persistence.players.firstJoin(player.uuid) ?: System.currentTimeMillis(),
-        )
+        val passport = persistence.passports.getOrCreate(player.uuid) {
+            persistence.players.firstJoin(player.uuid) ?: System.currentTimeMillis()
+        }
         passport.blocksMined++
         persistence.passports.markDirty(player.uuid)
         unlockStamps(player, passport)
@@ -232,10 +244,9 @@ object PassportFeature {
 
     fun recordCrystalTrip(player: ServerPlayer) {
         val persistence = MCTraveler.persistence ?: return
-        val passport = persistence.passports.getOrCreate(
-            player.uuid,
-            persistence.players.firstJoin(player.uuid) ?: System.currentTimeMillis(),
-        )
+        val passport = persistence.passports.getOrCreate(player.uuid) {
+            persistence.players.firstJoin(player.uuid) ?: System.currentTimeMillis()
+        }
         passport.crystalTrips++
         persistence.passports.markDirty(player.uuid)
         unlockStamps(player, passport)
@@ -243,10 +254,9 @@ object PassportFeature {
 
     fun recordRtpUse(player: ServerPlayer) {
         val persistence = MCTraveler.persistence ?: return
-        val passport = persistence.passports.getOrCreate(
-            player.uuid,
-            persistence.players.firstJoin(player.uuid) ?: System.currentTimeMillis(),
-        )
+        val passport = persistence.passports.getOrCreate(player.uuid) {
+            persistence.players.firstJoin(player.uuid) ?: System.currentTimeMillis()
+        }
         passport.rtpUses++
         persistence.passports.markDirty(player.uuid)
         unlockStamps(player, passport)

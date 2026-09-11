@@ -44,6 +44,10 @@ object VanishFeature {
     @JvmStatic
     fun isVanished(player: ServerPlayer): Boolean = player.uuid in vanished
 
+    /** Whether anyone is vanished right now — the per-packet scan's early-out. */
+    @JvmStatic
+    fun anyVanished(): Boolean = vanished.isNotEmpty()
+
     /**
      * Whether [target] should be hidden from [viewer] right now — vanished, and
      * [viewer] is neither an admin nor [target] themselves.

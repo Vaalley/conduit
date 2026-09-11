@@ -177,6 +177,9 @@ object MixinHooksImpl : MixinHooks {
     override fun allowsExplosionDamage(level: Level, pos: BlockPos): Boolean =
         RegionEnvironment.allowsExplosionDamage(level, pos)
 
+    override fun removeExplosionBlockedBlocks(level: Level, exploded: MutableList<BlockPos>) =
+        RegionEnvironment.removeExplosionBlockedBlocks(level, exploded)
+
     override fun allowsFireDamage(level: Level, pos: BlockPos): Boolean =
         RegionEnvironment.allowsFireDamage(level, pos)
 

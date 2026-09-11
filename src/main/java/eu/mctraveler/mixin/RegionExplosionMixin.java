@@ -35,10 +35,6 @@ public abstract class RegionExplosionMixin {
 
     @Inject(method = "calculateExplodedPositions", at = @At("RETURN"))
     private void mctraveler$spareRegionBlocks(CallbackInfoReturnable<List<BlockPos>> cir) {
-        List<BlockPos> exploded = cir.getReturnValue();
-        if (exploded.isEmpty()) {
-            return;
-        }
-        exploded.removeIf(pos -> !Hooks.allowsExplosionDamage(this.level, pos));
+        Hooks.removeExplosionBlockedBlocks(this.level, cir.getReturnValue());
     }
 }

@@ -5,6 +5,9 @@
   "compatibilityLevel": "JAVA_25",
   "mixins": [
     "ExperienceOrbMixin",
+    "ItemMergeMixin",
+    "ArmorStandCollisionMixin",
+    "HopperCooldownMixin",
     "MinecraftServerMixin",
     "ServerPlayerMixin",
     "ServerLoginPacketListenerImplMixin",

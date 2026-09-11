@@ -56,10 +56,9 @@ object PostcardCommand {
         }
 
         val persistence = MCTraveler.persistence ?: return 0
-        val passport = persistence.passports.getOrCreate(
-            player.uuid,
-            persistence.players.firstJoin(player.uuid) ?: now,
-        )
+        val passport = persistence.passports.getOrCreate(player.uuid) {
+            persistence.players.firstJoin(player.uuid) ?: now
+        }
         val level = player.level()
         val biome = PassportFeature.biomeOf(player) ?: "minecraft:plains"
         val region = RegionTracker.regionOf(player)

@@ -275,12 +275,13 @@ object RegionProtection {
                 InteractionResult.PASS
             } else {
                 // A container that opens from this click is judged by the
-                // clicked block's region, wherever the player is standing.
-                rememberContainerBlock(player, level, hit.blockPos)
+                // clicked block's region, wherever the player is standing. One
+                // lookup serves both that bookkeeping and the verdict.
+                val region = RegionsFeature.regionAt(level, hit.blockPos)
+                rememberContainerBlock(player, region)
                 if (!allowsBlockInteract(
                         player,
-                        level,
-                        hit.blockPos,
+                        region,
                         level.getBlockState(hit.blockPos),
                         player.getItemInHand(hand),
                     )
@@ -429,8 +430,7 @@ object RegionProtection {
     }
 
     /** Records the region under the block [player] just right-clicked. */
-    private fun rememberContainerBlock(player: ServerPlayer, level: Level, pos: BlockPos) {
-        val region = RegionsFeature.regionAt(level, pos)
+    private fun rememberContainerBlock(player: ServerPlayer, region: Region?) {
         if (region == null) {
             pendingContainerRegion.remove(player.uuid)
         } else {
@@ -501,17 +501,16 @@ object RegionProtection {
      */
     private fun allowsBlockInteract(
         player: ServerPlayer,
-        level: Level,
-        pos: BlockPos,
+        region: Region?,
         state: BlockState,
         held: ItemStack,
     ): Boolean {
-        restrictingFlagFor(state)?.let { flag ->
-            regionRefusing(player, level, pos, flag)?.let { return refuse(player, it) }
-        }
-
-        val region = RegionsFeature.regionAt(level, pos) ?: return true
+        if (region == null) return true
         if (canModifyRegion(player, region)) return true
+
+        restrictingFlagFor(state)?.let { flag ->
+            if (flag !in region.flags) return refuse(player, region)
+        }
 
         // A feature that owns its own right-click (the Teleportation Crystal)
         // opens over any block; its handler runs after this one and would never
@@ -564,15 +563,7 @@ object RegionProtection {
         else -> null
     }
 
-    /**
-     * The region at [pos] that refuses [player] because it lacks [flag], or
-     * null — no region, a member, or the flag is on.
-     */
-    private fun regionRefusing(player: ServerPlayer, level: Level, pos: BlockPos, flag: String): Region? {
-        val region = RegionsFeature.regionAt(level, pos) ?: return null
-        if (canModifyRegion(player, region)) return null
-        return if (flag !in region.flags) region else null
-    }
+
 
     /**
      * Whether a fall may hurt [player] where they are standing.
@@ -650,27 +641,28 @@ object RegionProtection {
     @JvmStatic
     fun allowsEntityAttack(player: ServerPlayer?, entity: Entity?): Boolean {
         val p = player ?: return true
+        if (entity == null) return true
         if (entity is ServerPlayer) return allowsPvp(p, entity)
-        if (entity != null) {
-            vehicleFlagFor(entity)?.let { flag -> return allowsVehicleUse(p, entity, flag) }
-            alwaysProtectedRegionOf(entity)?.let { region ->
-                return canModifyRegion(p, region) || refuse(p, region)
-            }
+        // One lookup serves the vehicle flag, the always-protected kinds and
+        // the ordinary animal-protection rule below.
+        val region = RegionsFeature.regionAt(entity.level(), entity.blockPosition())
+        vehicleFlagFor(entity)?.let { flag -> return allowsVehicleUse(p, region, flag) }
+        if (isAlwaysProtected(entity) && region != null) {
+            return canModifyRegion(p, region) || refuse(p, region)
         }
-        val region = entityProtectionAround(p, entity) ?: return true
+        val protecting = entityProtectedBy(p, region) ?: return true
         if (isCullableHostile(entity)) return true
-        return refuse(p, region)
+        return refuse(p, protecting)
     }
 
     /**
-     * The region protecting [entity] regardless of any flag — a villager or a
+     * Whether [entity] is protected regardless of any flag — a villager or a
      * chest boat, which no `ANIMAL_PROTECTION`/`BOATS` toggle ever exposes to a
-     * non-member. Null when [entity] is neither, or stands on unclaimed ground.
+     * non-member. Only meaningful where a region was found; unclaimed ground
+     * never counts.
      */
-    private fun alwaysProtectedRegionOf(entity: Entity): Region? {
-        if (entity !is AbstractVillager && entity !is AbstractChestBoat) return null
-        return RegionsFeature.regionAt(entity.level(), entity.blockPosition())
-    }
+    private fun isAlwaysProtected(entity: Entity): Boolean =
+        entity is AbstractVillager || entity is AbstractChestBoat
 
     /** An unnamed hostile: killable by anyone, even inside a region. */
     private fun isCullableHostile(entity: Entity?): Boolean =
@@ -688,13 +680,17 @@ object RegionProtection {
         if (isRegionDecoration(entity)) return allowsDecorationDamage(entity, source)
         val player = playerResponsibleFor(source) ?: return true
         if (entity is ServerPlayer) return allowsPvp(player, entity)
-        vehicleFlagFor(entity)?.let { flag -> return allowsVehicleUse(player, entity, flag) }
-        alwaysProtectedRegionOf(entity)?.let { region ->
+        // One lookup serves the vehicle flag, the always-protected kinds and
+        // the ordinary animal-protection rule below — and the early-outs above
+        // keep mob-versus-mob damage from paying for it at all.
+        val region = RegionsFeature.regionAt(entity.level(), entity.blockPosition())
+        vehicleFlagFor(entity)?.let { flag -> return allowsVehicleUse(player, region, flag) }
+        if (isAlwaysProtected(entity) && region != null) {
             return canModifyRegion(player, region) || refuse(player, region)
         }
-        val region = entityProtectionAround(player, entity) ?: return true
+        val protecting = entityProtectedBy(player, region) ?: return true
         if (isCullableHostile(entity)) return true
-        return refuse(player, region)
+        return refuse(player, protecting)
     }
 
     /**
@@ -728,9 +724,9 @@ object RegionProtection {
         else -> null
     }
 
-    /** Whether [player] may break or damage the vehicle [entity], gated by [flag]. */
-    private fun allowsVehicleUse(player: ServerPlayer, entity: Entity, flag: String): Boolean {
-        val region = RegionsFeature.regionAt(entity.level(), entity.blockPosition()) ?: return true
+    /** Whether [player] may break or damage a vehicle standing in [region], gated by [flag]. */
+    private fun allowsVehicleUse(player: ServerPlayer, region: Region?, flag: String): Boolean {
+        if (region == null) return true
         if (canModifyRegion(player, region)) return true
         if (flag in region.flags) return true
         return refuse(player, region)
@@ -778,47 +774,50 @@ object RegionProtection {
         entity: Entity?
     ): Boolean {
         val p = player ?: return true
+        if (entity == null) return true
+
+        // One lookup serves the villager and chest-boat rules and the ordinary
+        // animal-protection rule below.
+        val region = RegionsFeature.regionAt(entity.level(), entity.blockPosition())
 
         // Villagers and chest boats are protected regardless of ANIMAL_PROTECTION
-        // (which entityProtectionAround honours), so they are handled before it.
+        // (which entityProtectedBy honours), so they are handled before it.
         if (entity is AbstractVillager) {
-            val r = RegionsFeature.regionAt(entity.level(), entity.blockPosition())
-            if (r == null || canModifyRegion(p, r)) return true
+            if (region == null || canModifyRegion(p, region)) return true
             // An empty hand opens the trade screen so a non-member may LOOK;
             // completing a trade is gated separately by allowsVillagerTrade.
             if (p.getItemInHand(hand).isEmpty) return true
-            return if (PUBLIC_VILLAGERS in r.flags) true else refuse(p, r)
+            return if (PUBLIC_VILLAGERS in region.flags) true else refuse(p, region)
         }
         if (entity is AbstractChestBoat) {
-            val r = RegionsFeature.regionAt(entity.level(), entity.blockPosition())
-            return r == null || canModifyRegion(p, r) || refuse(p, r)
+            return region == null || canModifyRegion(p, region) || refuse(p, region)
         }
 
-        val region = entityProtectionAround(p, entity) ?: return true
-        if (entity != null && isRegionDecoration(entity)) return refuse(p, region)
+        val protecting = entityProtectedBy(p, region) ?: return true
+        if (isRegionDecoration(entity)) return refuse(p, protecting)
 
         val emptyHand = p.getItemInHand(hand).isEmpty
         if (entity is AbstractChestedHorse && entity.hasChest()) {
             if (emptyHand && p.isShiftKeyDown) {
-                rememberContainerBlock(p, entity.level(), entity.blockPosition())
+                rememberContainerBlock(p, region)
                 return true
             }
-            return refuse(p, region)
+            return refuse(p, protecting)
         }
         // A leashed rideable mount is off-limits to a passing non-member whether
         // or not they hold something — neither RIDEABLE nor PUBLIC_VILLAGERS'
         // held-item opening hands over a mount someone else has on a lead.
-        if (entity != null && isRideableMount(entity) && entity is Mob && entity.isLeashed) {
-            return refuse(p, region)
+        if (isRideableMount(entity) && entity is Mob && entity.isLeashed) {
+            return refuse(p, protecting)
         }
-        if (entity != null && isRideableMount(entity) && emptyHand && !p.isShiftKeyDown) {
-            if (RIDEABLE in region.flags) return true
-            return refuse(p, region)
+        if (isRideableMount(entity) && emptyHand && !p.isShiftKeyDown) {
+            if (RIDEABLE in protecting.flags) return true
+            return refuse(p, protecting)
         }
 
         if (emptyHand) return true
-        if (PUBLIC_VILLAGERS in region.flags) return true
-        return refuse(p, region)
+        if (PUBLIC_VILLAGERS in protecting.flags) return true
+        return refuse(p, protecting)
     }
 
     /** A mount a `RIDEABLE`-flying region may be ridden in: the horse family, camels, pigs, nautiluses. */
@@ -826,13 +825,12 @@ object RegionProtection {
         entity is AbstractHorse || entity is Camel || entity is Pig || entity is AbstractNautilus
 
     /**
-     * The deepest target region whose entities [player] must leave alone, or
-     * null when they may do as they like — outside a region, inside one they
-     * can modify, or in one without `ANIMAL_PROTECTION`.
+     * [region] when its entities are off-limits to [player], or null when they
+     * may do as they like — outside a region, inside one they can modify, or in
+     * one without `ANIMAL_PROTECTION`.
      */
-    private fun entityProtectionAround(player: ServerPlayer, entity: Entity?): Region? {
-        if (entity == null) return null
-        val region = RegionsFeature.regionAt(entity.level(), entity.blockPosition()) ?: return null
+    private fun entityProtectedBy(player: ServerPlayer, region: Region?): Region? {
+        if (region == null) return null
         if (canModifyRegion(player, region)) return null
         if (ANIMAL_PROTECTION !in region.flags) return null
         return region

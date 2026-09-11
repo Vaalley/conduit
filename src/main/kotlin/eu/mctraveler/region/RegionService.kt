@@ -1,6 +1,7 @@
 package eu.mctraveler.region
 
 import com.google.gson.JsonPrimitive
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
@@ -16,12 +17,26 @@ import java.util.UUID
  * made on the [Region] and followed by [save]; structural changes go through
  * [add] and [remove], which keep parent links wired and save themselves.
  * All access is expected from the server thread.
+ *
+ * Queries run off a chunk-bucketed spatial index: every region is listed under
+ * each 16×16 column its x/z footprint touches, per world. [regionAt] pays one
+ * hash probe plus a cuboid test on the handful of regions sharing the chunk
+ * instead of a full tree scan — protection and environment code call it for
+ * every block of every explosion, every fluid spread step, and every entity
+ * damage event. The index rebuilds lazily after any structural change: [save],
+ * [add]/[remove], and any in-place mutation of [roots] or a live region's
+ * `subRegions` (both lists report through [DirtyTrackingList]).
  */
 class RegionService(private val file: Path) {
 
+    private var indexDirty = true
+    private var index: Index = Index(emptyMap(), emptyMap())
+
     /** The root regions, in file order. Sub-regions hang off their parents. */
-    val roots: MutableList<Region> =
-        if (Files.exists(file)) RegionStore.parse(Files.readString(file)) else mutableListOf()
+    val roots: MutableList<Region> = DirtyTrackingList<Region> { indexDirty = true }
+        .also { roots ->
+            if (Files.exists(file)) RegionStore.parse(Files.readString(file)).forEach(roots::add)
+        }
 
     /** What [onChange] registered, in registration order. */
     private val listeners = mutableListOf<() -> Unit>()
@@ -43,6 +58,7 @@ class RegionService(private val file: Path) {
     }
 
     fun save() {
+        indexDirty = true
         file.parent?.let(Files::createDirectories)
         Files.writeString(file, RegionStore.serialize(roots))
         listeners.forEach { it() }
@@ -67,10 +83,7 @@ class RegionService(private val file: Path) {
      * deleting or reordering unrelated regions.
      */
     fun stableIdOf(region: Region): String {
-        val existing = region.metadata[PASSPORT_ID_KEY]
-            ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
-            ?.asString
-            ?.takeIf(String::isNotEmpty)
+        val existing = stableIdOfStored(region)
         if (existing != null) return existing
 
         val id = UUID.randomUUID().toString()
@@ -80,37 +93,107 @@ class RegionService(private val file: Path) {
     }
 
     /** Resolves a stable passport id, or null when the region was deleted. */
-    fun byStableId(id: String): Region? {
-        fun find(regions: List<Region>): Region? {
+    fun byStableId(id: String): Region? = index().stable[id]
+
+    private fun index(): Index {
+        if (indexDirty) rebuildIndex()
+        return index
+    }
+
+    private fun rebuildIndex() {
+        val chunks = HashMap<String, Long2ObjectOpenHashMap<MutableList<Region>>>()
+        val stable = HashMap<String, Region>()
+        val onTreeChanged: () -> Unit = { indexDirty = true }
+
+        fun walk(regions: List<Region>) {
             for (region in regions) {
-                if (region.metadata[PASSPORT_ID_KEY]
-                        ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
-                        ?.asString == id
-                ) {
-                    return region
+                region.onTreeChanged = onTreeChanged
+                val buckets = chunks.getOrPut(region.world) { Long2ObjectOpenHashMap() }
+                for (cx in (region.minX shr 4)..(region.maxX shr 4)) {
+                    for (cz in (region.minZ shr 4)..(region.maxZ shr 4)) {
+                        buckets.getOrPut(chunkKey(cx, cz)) { ArrayList() }.add(region)
+                    }
                 }
-                find(region.subRegions)?.let { return it }
+                stableIdOfStored(region)?.let { stable[it] = region }
+                walk(region.subRegions)
             }
-            return null
         }
-        return find(roots)
+        walk(roots)
+
+        indexDirty = false
+        index = Index(chunks, stable)
     }
 
     /**
      * The deepest region containing the block position in the given World
      * (legacy world string), or null — sub-regions win over their parents.
      *
-     * Environmental protection (ticket 15) asks this from block ticks and
-     * explosion maths, so it walks the roots rather than filtering them into a
-     * new list: a server with no regions pays one empty-list check, and one
-     * with regions pays a scan and no allocation.
+     * Probes the chunk index: one bucket lookup filters the tree to the regions
+     * whose footprint covers this column, then deepest containment decides. A
+     * world with no regions misses the map — explosions, fluid spread and fire
+     * ticks in unprotected space pay a single hash probe.
      */
     fun regionAt(world: String, x: Int, y: Int, z: Int): Region? {
-        var found: Region = roots.firstOrNull { it.world == world && it.contains(x, y, z) } ?: return null
-        while (true) {
-            found = found.subRegions.firstOrNull { it.contains(x, y, z) } ?: return found
+        val candidates = index().chunks[world]
+            ?.get(chunkKey(x shr 4, z shr 4)) ?: return null
+        var found: Region? = null
+        var foundDepth = -1
+        for (region in candidates) {
+            if (!region.contains(x, y, z)) continue
+            var depth = 0
+            var parent = region.parent
+            while (parent != null) {
+                depth++
+                parent = parent.parent
+            }
+            if (depth > foundDepth) {
+                found = region
+                foundDepth = depth
+            }
         }
+        return found
     }
+
+    /**
+     * Whether any region's x/z footprint intersects the given column range in
+     * the given World — a bounding-box probe for callers about to scan many
+     * blocks (explosions, piston pushes). When it answers false, every block
+     * in the range is outside protection without one [regionAt] each; when it
+     * answers true the caller falls back to per-block checks.
+     */
+    fun anyRegionIntersecting(
+        world: String,
+        minX: Int,
+        maxX: Int,
+        minZ: Int,
+        maxZ: Int,
+    ): Boolean {
+        val worldIndex = index().chunks[world] ?: return false
+        val minCX = minX shr 4
+        val maxCX = maxX shr 4
+        val minCZ = minZ shr 4
+        val maxCZ = maxZ shr 4
+        for (cx in minCX..maxCX) {
+            for (cz in minCZ..maxCZ) {
+                val bucket = worldIndex.get(chunkKey(cx, cz)) ?: continue
+                for (region in bucket) {
+                    if (region.intersectsColumn(minX, maxX, minZ, maxZ)) return true
+                }
+            }
+        }
+        return false
+    }
+
+    private data class Index(
+        val chunks: Map<String, Long2ObjectOpenHashMap<MutableList<Region>>>,
+        val stable: Map<String, Region>,
+    )
+
+    private fun stableIdOfStored(region: Region): String? =
+        region.metadata[PASSPORT_ID_KEY]
+            ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
+            ?.asString
+            ?.takeIf(String::isNotEmpty)
 
     /**
      * The first region whose x/z footprint intersects the given column in the
@@ -178,6 +261,13 @@ class RegionService(private val file: Path) {
 
     private companion object {
         const val PASSPORT_ID_KEY = "passport-id"
+
+        /**
+         * Packs a chunk x/z pair into one long — the same layout ChunkPos uses,
+         * kept local so the service stays free of game classes.
+         */
+        private fun chunkKey(x: Int, z: Int): Long =
+            (x.toLong() and 0x3FFFFF) or ((z.toLong() and 0x3FFFFF) shl 22)
     }
 
     /**
@@ -216,5 +306,100 @@ class RegionService(private val file: Path) {
         }
         scan(roots)
         return found
+    }
+}
+
+/**
+ * A `MutableList` that reports every structural mutation — element or iterator
+ * adds, removes and reorderings — to [onMutate]. Lets the spatial index notice
+ * callers that mutate `roots`/`subRegions` in place rather than going through
+ * [RegionService.add]/[remove]/[save].
+ */
+internal class DirtyTrackingList<E> private constructor(
+    private val backing: ArrayList<E>,
+    private val onMutate: () -> Unit,
+) : MutableList<E> by backing {
+
+    constructor(onMutate: () -> Unit) : this(ArrayList(), onMutate)
+
+    override fun add(element: E): Boolean =
+        backing.add(element).also { onMutate() }
+
+    override fun add(index: Int, element: E) {
+        backing.add(index, element)
+        onMutate()
+    }
+
+    override fun addAll(elements: Collection<E>): Boolean =
+        backing.addAll(elements).also { if (it) onMutate() }
+
+    override fun addAll(index: Int, elements: Collection<E>): Boolean =
+        backing.addAll(index, elements).also { if (it) onMutate() }
+
+    override fun clear() {
+        if (isNotEmpty()) {
+            backing.clear()
+            onMutate()
+        }
+    }
+
+    override fun iterator(): MutableIterator<E> = iterator(backing.iterator())
+
+    override fun listIterator(): MutableListIterator<E> = listIterator(backing.listIterator())
+
+    override fun listIterator(index: Int): MutableListIterator<E> =
+        listIterator(backing.listIterator(index))
+
+    override fun remove(element: E): Boolean =
+        backing.remove(element).also { if (it) onMutate() }
+
+    override fun removeAll(elements: Collection<E>): Boolean =
+        backing.removeAll(elements).also { if (it) onMutate() }
+
+    override fun removeAt(index: Int): E =
+        backing.removeAt(index).also { onMutate() }
+
+    override fun removeIf(filter: java.util.function.Predicate<in E>): Boolean =
+        backing.removeIf(filter).also { if (it) onMutate() }
+
+    override fun retainAll(elements: Collection<E>): Boolean =
+        backing.retainAll(elements).also { if (it) onMutate() }
+
+    override fun set(index: Int, element: E): E =
+        backing.set(index, element).also { onMutate() }
+
+    override fun sort(c: Comparator<in E>) {
+        backing.sortWith(c)
+        onMutate()
+    }
+
+    private fun iterator(delegate: MutableIterator<E>) = object : MutableIterator<E> {
+        override fun hasNext(): Boolean = delegate.hasNext()
+        override fun next(): E = delegate.next()
+        override fun remove() {
+            delegate.remove()
+            onMutate()
+        }
+    }
+
+    private fun listIterator(delegate: MutableListIterator<E>) = object : MutableListIterator<E> {
+        override fun hasNext(): Boolean = delegate.hasNext()
+        override fun next(): E = delegate.next()
+        override fun nextIndex(): Int = delegate.nextIndex()
+        override fun hasPrevious(): Boolean = delegate.hasPrevious()
+        override fun previous(): E = delegate.previous()
+        override fun previousIndex(): Int = delegate.previousIndex()
+        override fun add(element: E) {
+            delegate.add(element)
+            onMutate()
+        }
+        override fun remove() {
+            delegate.remove()
+            onMutate()
+        }
+        override fun set(element: E) {
+            delegate.set(element)
+            onMutate()
+        }
     }
 }

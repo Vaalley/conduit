@@ -103,6 +103,24 @@ object RegionsFeature {
         return found
     }
 
+    /**
+     * Whether any region — the live tree's or a guard's synthetic one —
+     * intersects the x/z column range in [level]. Callers about to scan many
+     * block positions (an explosion's block list, a piston's push) use this as
+     * a one-probe early-out: false means [regionAt] would have answered null
+     * for every block in the range.
+     *
+     * The embassies guard never yields null in its world — every position
+     * there reports the whole-world region — so the probe answers true for the
+     * whole dimension without asking the index.
+     */
+    fun anyRegionIntersecting(level: Level, minX: Int, maxX: Int, minZ: Int, maxZ: Int): Boolean {
+        val service = service ?: return false
+        val world = RegionWorlds.legacyName(level.dimension())
+        return world == RegionWorlds.EMBASSIES ||
+            service.anyRegionIntersecting(world, minX, maxX, minZ, maxZ)
+    }
+
     /** Adds a guard to every [regionAt] from now on. */
     fun addLookupGuard(guard: (world: String, x: Int, y: Int, z: Int, found: Region?) -> Region?) {
         lookupGuards.add(guard)

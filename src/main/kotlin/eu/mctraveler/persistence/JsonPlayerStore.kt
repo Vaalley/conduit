@@ -23,8 +23,16 @@ import java.util.UUID
  *
  * Reads are served from an in-memory copy revalidated against the file's
  * size and mtime, so hand edits are still picked up; writes remain
- * synchronous whole-file rewrites (as the Portal's were). All access is
- * expected from the server thread.
+ * synchronous whole-file rewrites (as the Portal's were). Revalidation is
+ * itself throttled — every read paying a `stat` pair still costs a syscall
+ * storm when the question is asked per tick and per packet, so within
+ * [REVALIDATE_INTERVAL_MS] of the last check the cached copy (including a
+ * remembered "no file") is trusted outright; hand edits surface within a
+ * second. The window does not apply to the read half of a mutation — a
+ * read-modify-write must build on the file as it now stands, since other
+ * tools (the merge sweep's Per-World Buckets edit being the live example)
+ * write these files without going through the store. All access is expected
+ * from the server thread.
  */
 class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
 
@@ -57,7 +65,7 @@ class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
     }
 
     override fun setCrystalState(uuid: UUID, energy: Int, nextRegenAt: Int?) {
-        val record = read(uuid)
+        val record = readForWrite(uuid)
         val energyChanged = record[CRYSTAL_ENERGY]?.rawValue != energy.toString()
         val pendingChanged = if (nextRegenAt == null) {
             CRYSTAL_NEXT_REGEN_AT in record
@@ -110,7 +118,7 @@ class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
             ?: read(uuid)["ipAddress"]?.let { PortalJson.decodeString(it.rawValue) }
 
     override fun setLoginMetadata(uuid: UUID, at: Long, ip: String?) {
-        val record = read(uuid)
+        val record = readForWrite(uuid)
         record[LAST_LOGIN_AT] = PortalJson.Field(PortalJson.encodeString(LAST_LOGIN_AT), at.toString())
         if (ip == null) record.remove(LAST_IP)
         else record[LAST_IP] = PortalJson.Field(PortalJson.encodeString(LAST_IP), PortalJson.encodeString(ip))
@@ -118,7 +126,7 @@ class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
     }
 
     override fun setLogoutMetadata(uuid: UUID, at: Long, world: String, x: Double, y: Double, z: Double) {
-        val record = read(uuid)
+        val record = readForWrite(uuid)
         record[LAST_LOGOUT_AT] = PortalJson.Field(PortalJson.encodeString(LAST_LOGOUT_AT), at.toString())
         record[LAST_LOCATION_WORLD] = PortalJson.Field(PortalJson.encodeString(LAST_LOCATION_WORLD), PortalJson.encodeString(world))
         record[LAST_X] = PortalJson.Field(PortalJson.encodeString(LAST_X), x.toString())
@@ -147,23 +155,40 @@ class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
      * [setCrystalState] mutate it before [persist], and unchanged files are
      * answered by the cached copy rather than re-read and re-parsed.
      */
-    private fun read(uuid: UUID): LinkedHashMap<String, PortalJson.Field> {
+    private fun read(uuid: UUID): LinkedHashMap<String, PortalJson.Field> = read(uuid, trustWindow = true)
+
+    /**
+     * [read] without the revalidation window: always re-stats the file. Every
+     * mutator's read-modify-write goes through it — a windowed cache hit there
+     * could silently drop a write another tool made since our last look.
+     */
+    private fun readForWrite(uuid: UUID): LinkedHashMap<String, PortalJson.Field> =
+        read(uuid, trustWindow = false)
+
+    private fun read(uuid: UUID, trustWindow: Boolean): LinkedHashMap<String, PortalJson.Field> {
+        val now = System.currentTimeMillis()
+        if (trustWindow) cache[uuid]?.let {
+            if (now < it.nextCheckMillis) return it.record
+        }
         val file = fileFor(uuid)
         if (Files.notExists(file)) {
-            cache.remove(uuid)
-            return LinkedHashMap()
+            cache[uuid] = Cached(fileExists = false, size = -1, modified = null, LinkedHashMap(), now + REVALIDATE_INTERVAL_MS)
+            return cache.getValue(uuid).record
         }
         val attrs = Files.readAttributes(file, BasicFileAttributes::class.java)
         cache[uuid]?.let {
-            if (it.size == attrs.size() && it.modified == attrs.lastModifiedTime()) return it.record
+            if (it.fileExists && it.size == attrs.size() && it.modified == attrs.lastModifiedTime()) {
+                it.nextCheckMillis = now + REVALIDATE_INTERVAL_MS
+                return it.record
+            }
         }
         val record = PortalJson.parse(Files.readString(file))
-        cache[uuid] = Cached(attrs.size(), attrs.lastModifiedTime(), record)
+        cache[uuid] = Cached(fileExists = true, attrs.size(), attrs.lastModifiedTime(), record, now + REVALIDATE_INTERVAL_MS)
         return record
     }
 
     private fun write(uuid: UUID, key: String, rawValue: String) {
-        val record = read(uuid)
+        val record = readForWrite(uuid)
         // Replacing keeps the field's position; a new field lands at the end.
         record[key] = PortalJson.Field(PortalJson.encodeString(key), rawValue)
         persist(uuid, record)
@@ -171,7 +196,7 @@ class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
 
     /** Drops [key] from the record; a no-op (no write at all) if it is absent. */
     private fun remove(uuid: UUID, key: String) {
-        val record = read(uuid)
+        val record = readForWrite(uuid)
         if (record.remove(key) == null) return
         persist(uuid, record)
     }
@@ -187,18 +212,30 @@ class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
             val file = fileFor(uuid)
             Files.writeString(file, PortalJson.emit(record.values))
             val attrs = Files.readAttributes(file, BasicFileAttributes::class.java)
-            cache[uuid] = Cached(attrs.size(), attrs.lastModifiedTime(), record)
+            cache[uuid] = Cached(
+                fileExists = true,
+                attrs.size(),
+                attrs.lastModifiedTime(),
+                record,
+                System.currentTimeMillis() + REVALIDATE_INTERVAL_MS,
+            )
         } catch (e: Exception) {
             cache.remove(uuid)
             throw e
         }
     }
 
-    /** A parsed record and the file stat it was read under. */
+    /**
+     * A parsed record, the file stat it was read under, and when to next
+     * re-check the file. [fileExists] false entries remember an absent file so
+     * repeated reads of a never-written player do not stat on every call.
+     */
     private class Cached(
+        val fileExists: Boolean,
         val size: Long,
-        val modified: FileTime,
+        val modified: FileTime?,
         val record: LinkedHashMap<String, PortalJson.Field>,
+        var nextCheckMillis: Long,
     )
 
     private val cache = HashMap<UUID, Cached>()
@@ -206,6 +243,14 @@ class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
     private fun fileFor(uuid: UUID): Path = playersDir.resolve("$uuid.json")
 
     private companion object {
+        /**
+         * How long a cached answer (present or absent) is trusted before the
+         * file is re-stat'ed. The mod is the only writer in normal play —
+         * [persist] refreshes the cache directly — so this only delays notice
+         * of a hand edit.
+         */
+        const val REVALIDATE_INTERVAL_MS = 1000L
+
         // The Portal's field names in players/<uuid>.json.
         const val LAST_WORLD = "lastServer"
         const val NOTEPAD = "notepad"

@@ -57,6 +57,32 @@ object RegionEnvironment {
         optedIn(level, pos, EXPLOSIONS)
 
     /**
+     * Removes the blocks a region shields from an explosion's position list —
+     * the filter [RegionExplosionMixin] applies to `calculateExplodedPositions`.
+     *
+     * The blast probe is one bounding-box question first: when no region
+     * intersects the whole exploded column range, every position is outside
+     * protection and the per-block checks never run. Inside range, each block
+     * still answers through [allowsExplosionDamage] (a chunk-index probe each).
+     */
+    @JvmStatic
+    fun removeExplosionBlockedBlocks(level: Level, exploded: MutableList<BlockPos>) {
+        if (exploded.isEmpty()) return
+        var minX = Int.MAX_VALUE
+        var maxX = Int.MIN_VALUE
+        var minZ = Int.MAX_VALUE
+        var maxZ = Int.MIN_VALUE
+        for (pos in exploded) {
+            if (pos.x < minX) minX = pos.x
+            if (pos.x > maxX) maxX = pos.x
+            if (pos.z < minZ) minZ = pos.z
+            if (pos.z > maxZ) maxZ = pos.z
+        }
+        if (!RegionsFeature.anyRegionIntersecting(level, minX, maxX, minZ, maxZ)) return
+        exploded.removeIf { !allowsExplosionDamage(level, it) }
+    }
+
+    /**
      * Whether fire may take the block at [pos] — burn it away, char it into
      * more fire, or catch there in the first place. True outside every region,
      * and inside one flying `FIRE_DAMAGE`.
@@ -209,6 +235,32 @@ object RegionEnvironment {
         toDestroy: List<BlockPos>,
         pushDirection: Direction,
     ): Boolean {
+        // A piston in the middle of nowhere asks the bounding-box question
+        // once instead of a lookup per pushed and destroyed block. The landing
+        // column of every pushed block is covered by extending the range one
+        // block along the push.
+        var minX = pistonPos.x
+        var maxX = pistonPos.x
+        var minZ = pistonPos.z
+        var maxZ = pistonPos.z
+        fun include(pos: BlockPos) {
+            if (pos.x < minX) minX = pos.x
+            if (pos.x > maxX) maxX = pos.x
+            if (pos.z < minZ) minZ = pos.z
+            if (pos.z > maxZ) maxZ = pos.z
+        }
+        headPos?.let(::include)
+        toPush.forEach(::include)
+        toDestroy.forEach(::include)
+        when (pushDirection) {
+            Direction.EAST -> maxX++
+            Direction.WEST -> minX--
+            Direction.SOUTH -> maxZ++
+            Direction.NORTH -> minZ--
+            else -> {}
+        }
+        if (!RegionsFeature.anyRegionIntersecting(level, minX, maxX, minZ, maxZ)) return true
+
         val own = RegionsFeature.regionAt(level, pistonPos)
         if (headPos != null && !isPistonsOwnGround(level, own, headPos)) return false
         for (pos in toPush) {

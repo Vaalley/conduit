@@ -83,11 +83,12 @@ object RegionTracker {
 
     /** The region [player] is standing in right now, from their live position. */
     fun regionOf(player: ServerPlayer): Region? {
-        val pos = player.position()
+        // The position fields directly — one Vec3 per player per tick is pure
+        // churn on a call this hot.
         val dimension = player.level().dimension()
-        val x = floor(pos.x).toInt()
-        val y = floor(pos.y).toInt()
-        val z = floor(pos.z).toInt()
+        val x = floor(player.x).toInt()
+        val y = floor(player.y).toInt()
+        val z = floor(player.z).toInt()
         standing[player.uuid]?.let {
             if (it.dimension == dimension && it.x == x && it.y == y && it.z == z) return it.region
         }
