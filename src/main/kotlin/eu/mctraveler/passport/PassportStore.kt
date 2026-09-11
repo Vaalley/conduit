@@ -32,8 +32,14 @@ class PassportStore(private val directory: Path) {
 
     fun get(uuid: UUID): Passport? = passports[uuid]
 
-    fun getOrCreate(uuid: UUID, firstJoinFallback: Long): Passport =
-        passports.getOrPut(uuid) { Passport(firstJoinFallback).also { dirty.add(uuid) } }
+    /**
+     * The stored passport for [uuid], creating one stamped with
+     * [firstJoinFallback] when none exists. The fallback is a supplier because
+     * it reads a player record file — callers run on every tick and every
+     * block break, and only the create path ever needs the value.
+     */
+    fun getOrCreate(uuid: UUID, firstJoinFallback: () -> Long): Passport =
+        passports.getOrPut(uuid) { Passport(firstJoinFallback()).also { dirty.add(uuid) } }
 
     fun markDirty(uuid: UUID) {
         if (uuid in passports) dirty.add(uuid)

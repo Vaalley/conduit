@@ -25,6 +25,9 @@ class ActionLog(private val file: Path) {
     private val pending = mutableListOf<ActionEntry>()
     private val byPosition = mutableMapOf<Key, MutableList<ActionEntry>>()
 
+    /** Next time [flush] sweeps the in-memory index and file for expired entries. */
+    private var nextPruneAt = System.currentTimeMillis() + PRUNE_INTERVAL_MS
+
     init {
         if (Files.exists(file)) {
             Files.readAllLines(file).forEach { line ->
@@ -56,16 +59,28 @@ class ActionLog(private val file: Path) {
     fun all(since: Long = 0L, type: ActionType? = null): List<ActionEntry> =
         entries.filter { it.t >= since && (type == null || it.type == type) }.sortedByDescending { it.t }
 
+    /**
+     * Appends everything recorded since the last flush, then — at most once
+     * an hour — runs [prune] so `entries`/`byPosition` do not grow for the
+     * whole uptime. Flush before prune matters: pruning first would let the
+     * pending tail be written to the file twice.
+     */
     fun flush() {
-        if (pending.isEmpty()) return
-        file.parent?.let(Files::createDirectories)
-        Files.write(
-            file,
-            pending.joinToString("", transform = { gson.toJson(it) + "\n" }).toByteArray(),
-            java.nio.file.StandardOpenOption.CREATE,
-            java.nio.file.StandardOpenOption.APPEND,
-        )
-        pending.clear()
+        if (pending.isNotEmpty()) {
+            file.parent?.let(Files::createDirectories)
+            Files.write(
+                file,
+                pending.joinToString("", transform = { gson.toJson(it) + "\n" }).toByteArray(),
+                java.nio.file.StandardOpenOption.CREATE,
+                java.nio.file.StandardOpenOption.APPEND,
+            )
+            pending.clear()
+        }
+        val now = System.currentTimeMillis()
+        if (now >= nextPruneAt) {
+            nextPruneAt = now + PRUNE_INTERVAL_MS
+            prune()
+        }
     }
 
     private fun addLoaded(entry: ActionEntry) {
@@ -85,4 +100,9 @@ class ActionLog(private val file: Path) {
     }
 
     private data class Key(val world: String, val x: Int, val y: Int, val z: Int)
+
+    private companion object {
+        /** How often [flush] re-runs [prune]: an hour. */
+        const val PRUNE_INTERVAL_MS = 60L * 60 * 1000
+    }
 }

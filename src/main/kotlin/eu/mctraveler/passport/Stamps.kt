@@ -8,15 +8,23 @@ data class Stamp(
     val title: String,
     val description: String,
     val icon: String,
+    /** Granted at the moment the feat happens; [Stamps.evaluate] never looks at it. */
+    val eventOnly: Boolean = false,
     val unlocked: (StampContext) -> Boolean,
 )
 
+/**
+ * What a stamp predicate may read. [regions] and [embassies] are suppliers
+ * because computing either walks the player's visited-id set against the
+ * region index — only the sightseer/trespasser/diplomat/ambassador predicates
+ * read them, so passports that already have those stamps never pay for it.
+ */
 data class StampContext(
     val passport: Passport,
-    val embassies: Int,
+    val embassies: () -> Int,
     val overworldBiomeTotal: Int,
     val now: Long,
-    val regions: Int = 0,
+    val regions: () -> Int = { 0 },
     val stat: (Identifier) -> Int = { 0 },
 )
 
@@ -43,10 +51,10 @@ object Stamps {
                 "minecraft:the_end",
             ).all(it.passport.dimensions::contains)
         },
-        Stamp("sightseer", "Sightseer", "Visited 25 regions", "🏘️") { it.regions >= 25 },
-        Stamp("trespasser", "Trespasser", "Visited 100 regions", "🕵️") { it.regions >= 100 },
-        Stamp("diplomat", "Diplomat", "Visited 5 embassies", "🤝") { it.embassies >= 5 },
-        Stamp("ambassador", "Ambassador", "Visited 25 embassies", "🏛️") { it.embassies >= 25 },
+        Stamp("sightseer", "Sightseer", "Visited 25 regions", "🏘️") { it.regions() >= 25 },
+        Stamp("trespasser", "Trespasser", "Visited 100 regions", "🕵️") { it.regions() >= 100 },
+        Stamp("diplomat", "Diplomat", "Visited 5 embassies", "🤝") { it.embassies() >= 5 },
+        Stamp("ambassador", "Ambassador", "Visited 25 embassies", "🏛️") { it.embassies() >= 25 },
         Stamp("crystal_5", "Frequent Flyer", "5 crystal trips", "💎") { it.passport.crystalTrips >= 5 },
         Stamp("crystal_50", "Jetsetter", "50 crystal trips", "✈️") { it.passport.crystalTrips >= 50 },
         Stamp("wormhole", "Wormhole", "Used /rtp", "🎰") { it.passport.rtpUses >= 1 },
@@ -69,17 +77,32 @@ object Stamps {
             it.now - it.passport.firstJoin >= 365L * 24 * 60 * 60 * 1000
         },
         // Granted at the moment they happen; evaluate never unlocks these.
-        Stamp("ashes_to_ashes", "Ashes to Ashes", "Died in the Nether", "🔥") { false },
-        Stamp("into_the_void", "Into the Void", "Fell into the End void", "🕳️") { false },
-        Stamp("terminal_velocity", "Terminal Velocity", "Survived a 100 m fall", "🪂") { false },
-        Stamp("storm_chaser", "Storm Chaser", "Stood in a thunderstorm", "⛈️") { false },
+        Stamp("ashes_to_ashes", "Ashes to Ashes", "Died in the Nether", "🔥", eventOnly = true) { false },
+        Stamp("into_the_void", "Into the Void", "Fell into the End void", "🕳️", eventOnly = true) { false },
+        Stamp("terminal_velocity", "Terminal Velocity", "Survived a 100 m fall", "🪂", eventOnly = true) { false },
+        Stamp("storm_chaser", "Storm Chaser", "Stood in a thunderstorm", "⛈️", eventOnly = true) { false },
     )
+
+    /** The stamps [evaluate] can ever unlock — everything but the event-granted ones. */
+    private val EVALUATABLE: List<Stamp> = ALL.filterNot(Stamp::eventOnly)
 
     fun byId(id: String): Stamp? = ALL.firstOrNull { it.id == id }
 
+    /**
+     * Whether every evaluatable stamp is already unlocked — the cheap "nothing
+     * left to check" answer [PassportFeature.unlockStamps] uses to skip
+     * building a context on every block break of a veteran miner.
+     */
+    fun allEvaluatableUnlocked(passport: Passport): Boolean =
+        EVALUATABLE.all { it.id in passport.stamps }
+
     /** Adds newly satisfied stamps to passport.stamps (at = now) and returns them. */
     fun evaluate(context: StampContext): List<Stamp> =
-        ALL.filter { it.unlocked(context) && context.passport.stamps.putIfAbsent(it.id, context.now) == null }
+        EVALUATABLE.filter {
+            it.id !in context.passport.stamps &&
+                it.unlocked(context) &&
+                context.passport.stamps.putIfAbsent(it.id, context.now) == null
+        }
 
     /** Grants an event-driven stamp directly; returns it only when newly earned. */
     fun grant(passport: Passport, id: String, at: Long): Stamp? {

@@ -29,7 +29,7 @@ class PassportTest {
     fun `passport round trips through json store`() {
         val uuid = UUID.randomUUID()
         val store = PassportStore(dir)
-        val passport = store.getOrCreate(uuid, 1234L)
+        val passport = store.getOrCreate(uuid) { 1234L }
         passport.biomes["minecraft:plains"] = 2000L
         passport.distance.walk = 12.5
         passport.deaths = 2
@@ -137,13 +137,13 @@ class PassportTest {
     fun `stamps unlock thresholds and are idempotent`() {
         val passport = Passport(0L)
         passport.distance.walk = 999.0
-        val before = StampContext(passport, 0, 0, 1000L)
+        val before = StampContext(passport, { 0 }, 0, 1000L)
         assertTrue(Stamps.evaluate(before).isEmpty())
 
         passport.distance.walk = 1000.0
-        val unlocked = Stamps.evaluate(StampContext(passport, 0, 0, 1000L))
+        val unlocked = Stamps.evaluate(StampContext(passport, { 0 }, 0, 1000L))
         assertEquals(listOf("first_steps"), unlocked.map { it.id })
-        assertTrue(Stamps.evaluate(StampContext(passport, 0, 0, 1001L)).isEmpty())
+        assertTrue(Stamps.evaluate(StampContext(passport, { 0 }, 0, 1001L)).isEmpty())
     }
 
     @Test
@@ -158,7 +158,7 @@ class PassportTest {
         )
         val context = StampContext(
             passport,
-            embassies = 0,
+            embassies = { 0 },
             overworldBiomeTotal = 0,
             now = 365L * 24 * 60 * 60 * 1000,
         )
@@ -180,10 +180,10 @@ class PassportTest {
         passport.blocksMined = 10_000
         val context = StampContext(
             passport,
-            embassies = 0,
+            embassies = { 0 },
             overworldBiomeTotal = 0,
             now = 1000L,
-            regions = 100,
+            regions = { 100 },
         ) { id -> if (id == Stats.JUMP) 10_000 else 0 }
 
         val unlocked = Stamps.evaluate(context).map { it.id }.toSet()
@@ -205,7 +205,7 @@ class PassportTest {
         assertNull(Stamps.grant(passport, "unknown_stamp", 9L))
         assertEquals(7L, passport.stamps["storm_chaser"])
 
-        val context = StampContext(passport, 0, 0, 1000L, regions = 1000) { 10_000_000 }
+        val context = StampContext(passport, { 0 }, 0, 1000L, regions = { 1000 }) { 10_000_000 }
         assertTrue(Stamps.evaluate(context).none { it.id in setOf("ashes_to_ashes", "into_the_void", "terminal_velocity", "storm_chaser") })
     }
 

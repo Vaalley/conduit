@@ -107,6 +107,7 @@ interface MixinHooks {
     // Region environment
     fun allowsCreatureBlockChange(level: Level, pos: BlockPos, creature: Entity?): Boolean
     fun allowsExplosionDamage(level: Level, pos: BlockPos): Boolean
+    fun removeExplosionBlockedBlocks(level: Level, exploded: MutableList<BlockPos>)
     fun allowsFireDamage(level: Level, pos: BlockPos): Boolean
     fun allowsFluidSpread(level: Level, from: BlockPos, to: BlockPos): Boolean
     fun allowsDecorationMove(level: Level, pos: BlockPos): Boolean
@@ -253,6 +254,10 @@ object Hooks {
 
     @JvmStatic fun allowsExplosionDamage(level: Level, pos: BlockPos): Boolean =
         impl?.allowsExplosionDamage(level, pos) ?: true
+
+    @JvmStatic fun removeExplosionBlockedBlocks(level: Level, exploded: MutableList<BlockPos>) {
+        impl?.removeExplosionBlockedBlocks(level, exploded)
+    }
 
     @JvmStatic fun allowsFireDamage(level: Level, pos: BlockPos): Boolean =
         impl?.allowsFireDamage(level, pos) ?: true

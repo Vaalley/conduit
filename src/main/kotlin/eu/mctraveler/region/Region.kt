@@ -30,7 +30,24 @@ class Region(
 ) {
     val members: LinkedHashSet<UUID> = LinkedHashSet()
     val flags: LinkedHashSet<String> = LinkedHashSet()
-    val subRegions: MutableList<Region> = mutableListOf()
+
+    /**
+     * The sub-regions strictly inside this one.
+     *
+     * Mutating this list on a live tree must be observable by [RegionService]'s
+     * spatial index, so the list reports every structural change through
+     * [onTreeChanged]; the service wires that callback when the region joins a
+     * tree it owns and clears it on removal. A standalone region (importers,
+     * tests) carries no callback and the list behaves like a plain list.
+     */
+    val subRegions: MutableList<Region> = DirtyTrackingList { onTreeChanged?.invoke() }
+
+    /** Set by [RegionService] while this region is part of a tree it owns. */
+    internal var onTreeChanged: (() -> Unit)? = null
+
+    /** This region and every region nested under it, depth-first. */
+    fun selfAndDescendants(): Sequence<Region> =
+        sequenceOf(this) + subRegions.asSequence().flatMap { it.selfAndDescendants() }
 
     /**
      * Free-form JSON a feature hangs off a region, stored under an optional

@@ -25,6 +25,8 @@ import net.minecraft.world.level.Level
 import net.minecraft.world.phys.BlockHitResult
 
 object ActionRecorder {
+    private const val FLUSH_INTERVAL_TICKS = 20
+
     private val lookupTargetSuggestions = SuggestionProvider<CommandSourceStack> { context, builder ->
         if (builder.remaining.startsWith("r:")) {
             builder.buildFuture()
@@ -87,9 +89,14 @@ object ActionRecorder {
             }
         }
         ServerPlayConnectionEvents.DISCONNECT.register { handler, _ -> clear(handler.player.uuid) }
-        ServerTickEvents.END_SERVER_TICK.register {
+        ServerTickEvents.END_SERVER_TICK.register { server ->
             flushPendingPlacements()
-            MCTraveler.persistence?.actions?.flush()
+            // The disk append is batched once a second rather than on every
+            // tick someone is breaking blocks — the placement comparison
+            // above still runs every tick because it inspects live state.
+            if (server.tickCount % FLUSH_INTERVAL_TICKS == 0) {
+                MCTraveler.persistence?.actions?.flush()
+            }
         }
     }
 

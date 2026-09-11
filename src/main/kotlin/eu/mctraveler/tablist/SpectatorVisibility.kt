@@ -57,9 +57,26 @@ object SpectatorVisibility {
         val entries = packet.entries()
         if (entries.isEmpty()) return null
 
+        // Scan before allocating: with nobody vanished and nobody spectating —
+        // the steady state of a survival server — every entry passes and there
+        // is no masked copy to build at all.
+        val serverPlayers = viewer.level().server.playerList
+        val anyVanished = VanishFeature.anyVanished()
+        var needsMasking = false
+        for (entry in entries) {
+            if (entry.profileId() == viewer.uuid) continue
+            if (entry.gameMode() == GameType.SPECTATOR ||
+                (anyVanished && serverPlayers.getPlayer(entry.profileId())
+                    ?.let(VanishFeature::isVanished) == true)
+            ) {
+                needsMasking = true
+                break
+            }
+        }
+        if (!needsMasking) return null
+
         // A vanished player (issue #47) is simply not in a non-admin's list —
         // drop the entry before any spectator masking runs on what is left.
-        val serverPlayers = viewer.level().server.playerList
         val visible = entries.filter { entry ->
             entry.profileId() == viewer.uuid ||
                 serverPlayers.getPlayer(entry.profileId())?.let { !VanishFeature.isVanished(it) } ?: true

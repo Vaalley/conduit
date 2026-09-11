@@ -14,7 +14,6 @@ import net.minecraft.commands.Commands
 import net.minecraft.server.MinecraftServer
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.InteractionResult
-import net.minecraft.world.phys.Vec3
 import java.util.UUID
 import kotlin.math.roundToLong
 
@@ -41,7 +40,11 @@ object AwayFeature {
 
     private class State(player: ServerPlayer, tick: Long) {
         var lastInteractionTick = tick
-        var lastPosition: Vec3 = player.position()
+        // Position components rather than a Vec3 — position() allocates, and
+        // the idle check reads them every tick of every player.
+        var lastX = player.x
+        var lastY = player.y
+        var lastZ = player.z
         var lastYRot = player.yRot
         var lastXRot = player.xRot
         var away = false
@@ -106,7 +109,9 @@ object AwayFeature {
         val tick = currentTick(player)
         val state = states.getOrPut(player.uuid) { State(player, tick) }
         state.lastInteractionTick = tick
-        state.lastPosition = player.position()
+        state.lastX = player.x
+        state.lastY = player.y
+        state.lastZ = player.z
         state.lastYRot = player.yRot
         state.lastXRot = player.xRot
         if (state.away) {
@@ -122,7 +127,9 @@ object AwayFeature {
         // detect it as a position/look change since the last tick.
         for (player in server.playerList.players) {
             val state = states[player.uuid] ?: continue
-            if (player.position() != state.lastPosition ||
+            if (player.x != state.lastX ||
+                player.y != state.lastY ||
+                player.z != state.lastZ ||
                 player.yRot != state.lastYRot ||
                 player.xRot != state.lastXRot
             ) {
