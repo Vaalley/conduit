@@ -36,6 +36,13 @@ import java.util.UUID
  */
 class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
 
+    override fun balance(uuid: UUID): Long? = readDouble(uuid, BALANCE)?.toLong()
+
+    override fun setBalance(uuid: UUID, amount: Long) {
+        require(amount >= 0) { "balance must be non-negative" }
+        write(uuid, BALANCE, amount.toString())
+    }
+
     override fun lastWorld(uuid: UUID): String? =
         read(uuid)[LAST_WORLD]?.let { PortalJson.decodeString(it.rawValue) }
 
@@ -254,6 +261,7 @@ class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
         // The Portal's field names in players/<uuid>.json.
         const val LAST_WORLD = "lastServer"
         const val NOTEPAD = "notepad"
+        const val BALANCE = "balance"
 
         // Teleportation Crystal energy, shared by all a player's crystals.
         const val CRYSTAL_ENERGY = "crystalEnergy"

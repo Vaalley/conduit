@@ -81,6 +81,19 @@ class JsonPlayerStoreTest {
     }
 
     @Test
+    fun `legacy balance reads as an integer and rewrites without losing other fields`() {
+        val file = seedPortalFile()
+        val store = store()
+        assertEquals(1234L, store.balance(uuid))
+        store.setBalance(uuid, 40)
+        assertEquals(40L, store.balance(uuid))
+        assertEquals(
+            portalFile.replace("\"balance\":1234.50", "\"balance\":40"),
+            Files.readString(file),
+        )
+    }
+
+    @Test
     fun `reads first seen timestamp from legacy timestamps`() {
         seedPortalFile()
         assertEquals(1370044800000L, store().firstJoin(uuid))

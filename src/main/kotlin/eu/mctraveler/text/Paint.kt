@@ -117,6 +117,12 @@ class Paint private constructor(private val style: Style) {
         /** `SUCCESS <content>`: green+bold prefix, gray content. */
         fun success(vararg content: Any?): MutableComponent = prefixed(green.bold("SUCCESS"), content)
 
+        /** `BALANCE <content>`: gold+bold prefix, gray content. */
+        fun balance(vararg content: Any?): MutableComponent = prefixed(gold.bold("BALANCE"), content)
+
+        /** `STORE <content>`: red+bold prefix, gray content. */
+        fun store(vararg content: Any?): MutableComponent = prefixed(red.bold("STORE"), content)
+
         /** `USAGE <content>`: aqua+bold prefix, gray content (the Portal's §b§lUSAGE §7). */
         fun usage(vararg content: Any?): MutableComponent = prefixed(aqua.bold("USAGE"), content)
 

@@ -27,6 +27,7 @@
     "RegionContainerClickMixin",
     "RegionEntityDamageMixin",
     "RegionDecorationDamageMixin",
+    "StoreFrameAccessor",
     "RegionExplosionMixin",
     "RegionExplosionEntityMixin",
     "RegionChorusFlowerMixin",
