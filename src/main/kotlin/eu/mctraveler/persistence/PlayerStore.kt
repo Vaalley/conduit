@@ -6,15 +6,19 @@ import java.util.UUID
  * Per-player persistent data: the mod-owned player state that survives restarts
  * (everything vanilla doesn't already persist for us).
  *
- * The typed fields are the mod's live fields — last World and notepad pages.
- * Anything else found in existing player records (legacy fields from the
- * Portal era and before, including `balance` and the Portal's `isAdmin` — admin status is
+ * The typed fields are the mod's live fields — last World, notepad pages,
+ * balance. Anything else found in existing player records (legacy fields from the
+ * Portal era and before, including the Portal's `isAdmin` — admin status is
  * vanilla operator status now, and the `worlds` object that held the Per-World
  * Buckets, which the merge retired) must pass through every read-modify-write
  * cycle byte-for-byte.
  */
 interface PlayerStore {
-    /** The player's integer balance, or null when no legacy balance exists. */
+    /**
+     * The player's balance in whole units, or null if never recorded. Stored
+     * in the predecessor era's `balance` field; a legacy decimal value reads
+     * truncated and is rewritten as an integer on the first write.
+     */
     fun balance(uuid: UUID): Long?
 
     fun setBalance(uuid: UUID, amount: Long)
