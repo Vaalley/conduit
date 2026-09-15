@@ -149,8 +149,7 @@ object RegionInteractables {
      */
     fun isRegionModifyingItem(stack: ItemStack): Boolean {
         if (stack.isEmpty) return false
-        // AxeItem/HoeItem/ShovelItem were folded into Item: what made a shovel a
-        // shovel is now the block transformer it carries, bound the same way.
+        // Hoes, shovels and axes are plain Items told apart by their block transformer.
         if (stack.hasTransformer(BlockTransformers.HOE) ||
             stack.hasTransformer(BlockTransformers.SHOVEL) ||
             stack.hasTransformer(BlockTransformers.AXE)
