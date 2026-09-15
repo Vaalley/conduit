@@ -55,7 +55,7 @@ object TestPlayers {
         // Terrain is incidental to these tests (players get teleported into
         // unprepared chunks); invulnerability keeps suffocation/lava from
         // moving or killing them mid-assertion.
-        player.isInvulnerable = true
+        player.setPermanentlyInvulnerable(true)
         return player
     }
 

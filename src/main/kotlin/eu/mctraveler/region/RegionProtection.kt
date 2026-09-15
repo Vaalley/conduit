@@ -622,7 +622,7 @@ object RegionProtection {
         }
         if (!stack.`is`(Items.POTION) ||
             context.clickedFace == Direction.DOWN ||
-            !state.`is`(BlockTags.CONVERTABLE_TO_MUD)
+            !state.`is`(BlockTags.CONVERTIBLE_TO_MUD)
         ) {
             return false
         }

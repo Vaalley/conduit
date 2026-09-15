@@ -9,7 +9,7 @@ import net.minecraft.util.RandomSource
 import net.minecraft.world.entity.EntityTypes
 import net.minecraft.world.entity.Mob
 import net.minecraft.world.entity.decoration.ItemFrame
-import net.minecraft.world.entity.monster.EnderMan
+import net.minecraft.world.entity.monster.Enderman
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.Blocks
@@ -415,7 +415,7 @@ class RegionEnvironmentGameTest {
         createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
         helper.setBlock(TARGET_AT, Blocks.FARMLAND)
         bob.standAt(helper, 2.5, 3.0, 2.5)
-        bob.isInvulnerable = true
+        bob.setPermanentlyInvulnerable(true)
 
         val target = helper.absolutePos(TARGET_AT)
         val farmland = helper.level.getBlockState(target)
@@ -852,7 +852,7 @@ private const val TAKE_BLOCK_GOAL = "EndermanTakeBlockGoal"
 private const val LEAVE_BLOCK_GOAL = "EndermanLeaveBlockGoal"
 
 /** An enderman that will do nothing but what a test asks of it. */
-private fun GameTestHelper.anIdleEnderman(): EnderMan =
+private fun GameTestHelper.anIdleEnderman(): Enderman =
     spawn(EntityTypes.ENDERMAN, ENDERMAN_AT).also { it.isNoAi = true }
 
 /**

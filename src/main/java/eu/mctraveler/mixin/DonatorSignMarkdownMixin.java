@@ -1,6 +1,7 @@
 package eu.mctraveler.mixin;
 
 import eu.mctraveler.hooks.Hooks;
+import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -8,6 +9,7 @@ import net.minecraft.server.network.FilteredText;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
 import net.minecraft.world.level.block.entity.SignText;
+import net.minecraft.world.level.block.entity.SignTextSlot;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -32,29 +34,32 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class DonatorSignMarkdownMixin {
 
     @Shadow
-    public abstract SignText getText(boolean isFrontText);
+    public abstract SignText getText(SignTextSlot slot);
 
     @Shadow
-    public abstract boolean setText(SignText text, boolean isFrontText);
+    public abstract void setText(SignText text, SignTextSlot slot);
 
     @Inject(method = "updateSignText", at = @At("TAIL"), require = 0)
     private void mctraveler$applyDonatorMarkdown(
-            Player player, boolean isFrontText, List<FilteredText> lines, CallbackInfo ci) {
+            Player player, SignTextSlot slot, List<FilteredText> lines, CallbackInfo ci) {
         if (!(player instanceof ServerPlayer editor)) {
             return;
         }
-        SignText text = getText(isFrontText);
+        SignText text = getText(slot);
+        List<Component> messages = new ArrayList<>(text.getMessages(false));
+        List<Component> filteredMessages = new ArrayList<>(text.getMessages(true));
         boolean changed = false;
         for (int i = 0; i < lines.size(); i++) {
             Component styled = Hooks.markdownLineFor(editor, lines.get(i).raw());
             if (styled == null) {
                 continue;
             }
-            text = text.setMessage(i, styled);
+            messages.set(i, styled);
+            filteredMessages.set(i, styled);
             changed = true;
         }
         if (changed) {
-            setText(text, isFrontText);
+            setText(new SignText(messages, filteredMessages, text.getColor(), text.hasGlowingText()), slot);
             SignBlockEntity self = (SignBlockEntity) (Object) this;
             if (self.getLevel() != null) {
                 Hooks.onSignLoadedOrChanged(self.getLevel(), self.getBlockPos(), self);

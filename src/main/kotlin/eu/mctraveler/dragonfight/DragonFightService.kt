@@ -23,7 +23,8 @@ import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.levelgen.Heightmap
 import net.minecraft.world.level.levelgen.feature.EndPlatformFeature
-import net.minecraft.world.level.levelgen.feature.EndPodiumFeature
+import net.minecraft.util.Prediction
+import net.minecraft.world.level.dimension.end.EnderDragonFight
 import net.minecraft.world.level.portal.TeleportTransition
 
 /**
@@ -224,7 +225,7 @@ class DragonFightService(
         pendingEggs.entries.removeIf { (uuid, stack) ->
             val player = server.playerList.getPlayer(uuid) ?: return@removeIf false
             if (ArenaLevels.owner(player.level().dimension()) != null) return@removeIf false
-            if (!player.inventory.add(stack)) player.drop(stack, false, false)
+            if (!player.inventory.add(stack)) player.drop(stack, false, Prediction.SERVER_ONLY)
             true
         }
         if (server.tickCount % 1200 != 0) return
@@ -257,7 +258,7 @@ class DragonFightService(
     private fun takeDragonEgg(level: ServerLevel, player: ServerPlayer) {
         val fight = level.dragonFight ?: return
         val origin = (fight as EnderDragonFightAccessor).`mctraveler$exitPortalLocation`()
-            ?: level.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, EndPodiumFeature.getLocation(BlockPos.ZERO)).below()
+            ?: level.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, EnderDragonFight.getPodiumLocation(BlockPos.ZERO)).below()
         for (x in origin.x - 2..origin.x + 2) {
             for (z in origin.z - 2..origin.z + 2) {
                 for (y in origin.y..origin.y + 12) {

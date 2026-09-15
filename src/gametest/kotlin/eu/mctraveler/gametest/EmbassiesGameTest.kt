@@ -14,6 +14,7 @@ import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.world.level.GameType
 import net.minecraft.world.attribute.EnvironmentAttributes
+import net.minecraft.world.level.biome.MobSpawnSettings
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EntitySpawnReason
 import net.minecraft.world.entity.EntityTypes
@@ -78,9 +79,11 @@ class EmbassiesGameTest {
             biome.value().hasPrecipitation(),
             "it rains in the embassies dimension (deviation 1: no weather)",
         )
+        val spawnSettings = biome.value().attributes
+            .applyModifier(EnvironmentAttributes.NATURAL_MOB_SPAWNS, MobSpawnSettings.EMPTY)
         for (category in MobCategory.entries) {
             helper.assertTrue(
-                biome.value().mobSettings.getMobs(category).isEmpty,
+                spawnSettings.getMobsToSpawn(category).isEmpty,
                 "the embassies biome spawns $category mobs (deviation 1: no natural mobs)",
             )
         }

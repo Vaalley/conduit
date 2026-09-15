@@ -5,7 +5,7 @@ How to iterate on the mod in seconds, not minutes. Versions and cited sources li
 
 ## Prerequisites
 
-- **JDK 25** — required by Minecraft 26.2 and the Gradle toolchain. Any JDK 25 works for
+- **JDK 25** — required by Minecraft 26.3 and the Gradle toolchain. Any JDK 25 works for
   building (e.g. `brew install openjdk@25`); point `JAVA_HOME` at it.
 - **JetBrains Runtime (JBR) 25** — optional but recommended for the enhanced class redefinition dev loop
   (enhanced class redefinition). Download a `jbr-25.x-osx-aarch64` build from

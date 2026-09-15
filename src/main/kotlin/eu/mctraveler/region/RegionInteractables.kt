@@ -1,8 +1,9 @@
 package eu.mctraveler.region
 
+import net.minecraft.core.component.BlockTransformer
 import net.minecraft.core.component.DataComponents
+import net.minecraft.resources.ResourceKey
 import net.minecraft.world.item.ArmorStandItem
-import net.minecraft.world.item.AxeItem
 import net.minecraft.world.item.BlockItem
 import net.minecraft.world.item.BoneMealItem
 import net.minecraft.world.item.BucketItem
@@ -10,14 +11,12 @@ import net.minecraft.world.item.EndCrystalItem
 import net.minecraft.world.item.FireChargeItem
 import net.minecraft.world.item.FlintAndSteelItem
 import net.minecraft.world.item.HangingEntityItem
-import net.minecraft.world.item.HoeItem
 import net.minecraft.world.item.HoneycombItem
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 import net.minecraft.world.item.LeadItem
 import net.minecraft.world.item.MobBucketItem
 import net.minecraft.world.item.ShearsItem
-import net.minecraft.world.item.ShovelItem
 import net.minecraft.world.item.SpawnEggItem
 import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.inventory.CartographyTableMenu
@@ -29,6 +28,7 @@ import net.minecraft.world.inventory.SmithingMenu
 import net.minecraft.world.inventory.StonecutterMenu
 import net.minecraft.world.item.alchemy.PotionContents
 import net.minecraft.world.item.alchemy.Potions
+import net.minecraft.world.item.component.BlockTransformers
 import net.minecraft.world.level.block.AbstractCauldronBlock
 import net.minecraft.world.level.block.AbstractFurnaceBlock
 import net.minecraft.world.level.block.AnvilBlock
@@ -149,10 +149,17 @@ object RegionInteractables {
      */
     fun isRegionModifyingItem(stack: ItemStack): Boolean {
         if (stack.isEmpty) return false
+        // Hoes, shovels and axes are plain Items told apart by their block transformer.
+        if (stack.hasTransformer(BlockTransformers.HOE) ||
+            stack.hasTransformer(BlockTransformers.SHOVEL) ||
+            stack.hasTransformer(BlockTransformers.AXE)
+        ) {
+            return true
+        }
         return when (stack.item) {
             is BlockItem, is BucketItem, is MobBucketItem,
             is BoneMealItem, is FlintAndSteelItem, is FireChargeItem,
-            is HoeItem, is ShovelItem, is AxeItem, is ShearsItem,
+            is ShearsItem,
             is ArmorStandItem, is HangingEntityItem, is EndCrystalItem,
             is SpawnEggItem, is LeadItem, is HoneycombItem,
             -> true
@@ -171,8 +178,9 @@ object RegionInteractables {
      */
     fun changesCampfire(stack: ItemStack): Boolean {
         if (stack.isEmpty || stack.has(DataComponents.FOOD)) return false
+        if (stack.hasTransformer(BlockTransformers.SHOVEL)) return true
         return when (stack.item) {
-            is ShovelItem, is FlintAndSteelItem, is FireChargeItem -> true
+            is FlintAndSteelItem, is FireChargeItem -> true
             else -> isWaterPotion(stack) || stack.`is`(Items.POTION)
         }
     }
@@ -198,6 +206,9 @@ object RegionInteractables {
             menu is StonecutterMenu ||
             menu is CartographyTableMenu ||
             menu is EnchantmentMenu
+
+    private fun ItemStack.hasTransformer(key: ResourceKey<BlockTransformer>): Boolean =
+        get(DataComponents.BLOCK_TRANSFORMER)?.`is`(key) == true
 
     private fun isWaterPotion(stack: ItemStack): Boolean {
         if (!stack.`is`(Items.POTION) && !stack.`is`(Items.SPLASH_POTION) && !stack.`is`(Items.LINGERING_POTION)) {
