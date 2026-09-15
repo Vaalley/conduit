@@ -19,6 +19,7 @@ import net.minecraft.world.level.block.entity.BlockEntityType
 import net.minecraft.world.level.block.entity.BlockEntityTypes
 import net.minecraft.world.level.block.entity.SignBlockEntity
 import net.minecraft.world.level.block.entity.SignText
+import net.minecraft.world.level.block.entity.SignTextSlot
 
 /**
  * The `<name>` sign-markdown token: it renders as the reading player's own name,
@@ -56,7 +57,7 @@ object SignNames {
     /** Whether any of [text]'s (up to four) lines carries a `<name>` sentinel run. */
     fun hasToken(text: SignText): Boolean =
         (0 until SignText.LINES).any { i ->
-            containsSentinel(text.getMessage(i, false)) || containsSentinel(text.getMessage(i, true))
+            containsSentinel(text.getMessages(false)[i]) || containsSentinel(text.getMessages(true)[i])
         }
 
     private fun containsSentinel(component: Component): Boolean =
@@ -70,19 +71,21 @@ object SignNames {
      * sentinel and so is identical for everyone.
      */
     fun personalize(text: SignText, viewerName: String): SignText? {
-        var result = text
+        val rawMessages = text.getMessages(false).toMutableList()
+        val filteredMessages = text.getMessages(true).toMutableList()
         var changed = false
         for (i in 0 until SignText.LINES) {
-            val raw = text.getMessage(i, false)
-            val filtered = text.getMessage(i, true)
+            val raw = rawMessages[i]
+            val filtered = filteredMessages[i]
             val newRaw = personalizeComponent(raw, viewerName)
             val newFiltered = if (filtered === raw) newRaw else personalizeComponent(filtered, viewerName)
             if (newRaw != null || newFiltered != null) {
-                result = result.setMessage(i, newRaw ?: raw, newFiltered ?: filtered)
+                rawMessages[i] = newRaw ?: raw
+                filteredMessages[i] = newFiltered ?: filtered
                 changed = true
             }
         }
-        return if (changed) result else null
+        return if (changed) SignText(rawMessages, filteredMessages, text.color, text.hasGlowingText()) else null
     }
 
     private fun personalizeComponent(component: Component, viewerName: String): MutableComponent? {
@@ -115,7 +118,7 @@ object SignNames {
     /** Called from a mixin once a sign is in the world, and after markdown is applied on edit. */
     fun onSignLoadedOrChanged(level: Level, pos: BlockPos, sign: SignBlockEntity) {
         val key = ChunkPos.pack(pos)
-        if (hasToken(sign.frontText) || hasToken(sign.backText)) {
+        if (hasToken(sign.getText(SignTextSlot.FRONT)) || hasToken(sign.getText(SignTextSlot.BACK))) {
             tokenChunks.add(key)
         } else {
             recompute(level, pos, key)
@@ -137,7 +140,8 @@ object SignNames {
         val serverLevel = level as? ServerLevel ?: return
         val chunk = serverLevel.chunkSource.getChunkNow(pos.x shr 4, pos.z shr 4) ?: return
         val stillHasToken = chunk.blockEntities.values.any { be ->
-            be is SignBlockEntity && (hasToken(be.frontText) || hasToken(be.backText))
+            be is SignBlockEntity &&
+                (hasToken(be.getText(SignTextSlot.FRONT)) || hasToken(be.getText(SignTextSlot.BACK)))
         }
         if (!stillHasToken) tokenChunks.remove(key)
     }
@@ -171,7 +175,9 @@ object SignNames {
                 level.server.execute {
                     val chunk = level.chunkSource.getChunkNow(packet.x, packet.z) ?: return@execute
                     for (be in chunk.blockEntities.values) {
-                        if (be is SignBlockEntity && (hasToken(be.frontText) || hasToken(be.backText))) {
+                        if (be is SignBlockEntity &&
+                            (hasToken(be.getText(SignTextSlot.FRONT)) || hasToken(be.getText(SignTextSlot.BACK)))
+                        ) {
                             personalizedPacket(be, viewer)?.let { viewer.connection.send(it) }
                         }
                     }
@@ -192,16 +198,16 @@ object SignNames {
      */
     private fun personalizedPacket(sign: SignBlockEntity, viewer: ServerPlayer): ClientboundBlockEntityDataPacket? {
         val viewerName = viewer.gameProfile.name
-        val front = personalize(sign.frontText, viewerName)
-        val back = personalize(sign.backText, viewerName)
+        val front = personalize(sign.getText(SignTextSlot.FRONT), viewerName)
+        val back = personalize(sign.getText(SignTextSlot.BACK), viewerName)
         if (front == null && back == null) return null
         return ClientboundBlockEntityDataPacket.create(
             sign,
             BiFunction { blockEntity, registryAccess: RegistryAccess ->
                 val tag = blockEntity.getUpdateTag(registryAccess)
                 val ops = registryAccess.createSerializationContext(NbtOps.INSTANCE)
-                front?.let { tag.put("front_text", SignText.DIRECT_CODEC.encodeStart(ops, it).orThrow) }
-                back?.let { tag.put("back_text", SignText.DIRECT_CODEC.encodeStart(ops, it).orThrow) }
+                front?.let { tag.put("front_text", SignText.CODEC.encodeStart(ops, it).orThrow) }
+                back?.let { tag.put("back_text", SignText.CODEC.encodeStart(ops, it).orThrow) }
                 tag
             },
         )

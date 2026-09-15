@@ -4,10 +4,10 @@ Conduit is a server-side Fabric mod for a community Minecraft survival server.
 
 ## Requirements
 
-- Minecraft 26.2
-- Fabric Loader 0.19.3
-- Fabric API 0.156.0+26.2
-- Fabric Language Kotlin 1.13.13
+- Minecraft 26.3
+- Fabric Loader 0.19.5
+- Fabric API 0.160.5+26.3
+- Fabric Language Kotlin 1.14.1
 
 ## Build
 

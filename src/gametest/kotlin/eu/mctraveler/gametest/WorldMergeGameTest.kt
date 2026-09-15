@@ -194,7 +194,7 @@ class WorldMergeGameTest {
                 overworld.getBlockState(at).`is`(Blocks.STONE),
                 "no relocated block arrived at $at for the Region to be protecting",
             )
-            stranger.isInvulnerable = true
+            stranger.setPermanentlyInvulnerable(true)
             stranger.teleportTo(at.x + 0.5, MergedSave.FLOOR_Y + 1.0, at.z + 1.5)
 
             helper.assertFalse(
@@ -460,7 +460,7 @@ class WorldMergeGameTest {
      */
     private fun dieAndRespawn(server: MinecraftServer, player: ServerPlayer): ServerPlayer {
         player.setGameMode(GameType.SURVIVAL)
-        player.isInvulnerable = false
+        player.setPermanentlyInvulnerable(false)
         // The two acknowledgements a real client sends before the server stops
         // shielding it — the dimension change is over, and its level has
         // rendered. Without both the player is invulnerable, and so unkillable.
@@ -474,7 +474,7 @@ class WorldMergeGameTest {
         val respawned = checkNotNull(server.playerList.getPlayer(player.uuid)) {
             "the settler did not come back from the dead"
         }
-        respawned.isInvulnerable = true
+        respawned.setPermanentlyInvulnerable(true)
         return respawned
     }
 

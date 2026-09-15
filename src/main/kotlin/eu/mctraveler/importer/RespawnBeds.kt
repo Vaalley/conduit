@@ -9,6 +9,7 @@ import net.minecraft.nbt.CompoundTag
 import net.minecraft.nbt.ListTag
 import net.minecraft.nbt.NbtAccounter
 import net.minecraft.nbt.NbtIo
+import net.minecraft.nbt.StringTag
 import net.minecraft.resources.ResourceKey
 import net.minecraft.world.level.ChunkPos
 import net.minecraft.world.level.Level
@@ -233,8 +234,18 @@ class RespawnBeds(
         return palette.entryName(entry)
     }
 
-    private fun ListTag.entryName(index: Int): String? =
-        getCompound(index).orElse(null)?.getStringOr(BLOCK_NAME, "")?.takeIf(String::isNotEmpty)
+    /**
+     * The block id one palette entry names. Since 26.3 a block in its default
+     * state is written as a bare string and only a non-default one as a
+     * compound — whose keys are now `id`/`properties`, with `Name`/`Properties`
+     * the spelling an older save still carries.
+     */
+    private fun ListTag.entryName(index: Int): String? = when (val entry = getOrNull(index)) {
+        is StringTag -> entry.asString().orElse(null)?.takeIf(String::isNotEmpty)
+        is CompoundTag -> entry.getStringOr(BLOCK_ID, entry.getStringOr(BLOCK_NAME, ""))
+            .takeIf(String::isNotEmpty)
+        else -> null
+    }
 
     /**
      * The chunk holding [at], read straight out of its region file.
@@ -276,6 +287,7 @@ class RespawnBeds(
         const val PALETTE = "palette"
         const val DATA = "data"
         const val BLOCK_NAME = "Name"
+        const val BLOCK_ID = "id"
 
         /** The two blocks a player can wake up on. */
         const val RESPAWN_ANCHOR = "minecraft:respawn_anchor"

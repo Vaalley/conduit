@@ -2,7 +2,7 @@ package eu.mctraveler.mixin;
 
 import eu.mctraveler.hooks.Hooks;
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.entity.monster.EnderMan;
+import net.minecraft.world.entity.monster.Enderman;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import org.spongepowered.asm.mixin.Final;
@@ -21,12 +21,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * region to that question, so the enderman simply keeps looking — and keeps
  * carrying — rather than being caught mid-place.
  */
-@Mixin(targets = "net.minecraft.world.entity.monster.EnderMan$EndermanLeaveBlockGoal")
+@Mixin(targets = "net.minecraft.world.entity.monster.Enderman$EndermanLeaveBlockGoal")
 public abstract class RegionEndermanPlaceMixin {
 
     @Shadow
     @Final
-    private EnderMan enderman;
+    private Enderman enderman;
 
     @Inject(method = "canPlaceBlock", at = @At("HEAD"), cancellable = true)
     private void mctraveler$keepEndermanBlocksOutOfRegions(

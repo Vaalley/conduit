@@ -4,6 +4,7 @@ import com.mojang.authlib.GameProfile
 import io.netty.channel.embedded.EmbeddedChannel
 import java.time.Instant
 import java.util.BitSet
+import java.util.Optional
 import java.util.UUID
 import net.minecraft.network.Connection
 import net.minecraft.network.DisconnectionDetails
@@ -68,7 +69,7 @@ class TestPlayer private constructor(
                 message,
                 Instant.now(),
                 0L,
-                null,
+                Optional.empty(),
                 LastSeenMessages.Update(0, BitSet(), LastSeenMessages.Update.IGNORE_CHECKSUM),
             ),
         )
