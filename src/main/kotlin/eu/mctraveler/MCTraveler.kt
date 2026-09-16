@@ -80,6 +80,8 @@ object MCTraveler : ModInitializer {
         // SERVER_STARTED, and the service is created by the handler above.
         LodewayFeature.register()
         CrystalFeature.register()
+        // Economy must follow RankFeature so its end-tick balance write does
+        // not create a player record before RankFeature's welcome check.
         EconomyFeature.register()
         StoreFeature.register()
         eu.mctraveler.rtp.RtpFeature.register()
