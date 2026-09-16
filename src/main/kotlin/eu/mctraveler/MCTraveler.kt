@@ -5,6 +5,7 @@ import eu.mctraveler.chat.ChatBridge
 import eu.mctraveler.chat.ChatFeature
 import eu.mctraveler.chat.PrivateMessages
 import eu.mctraveler.crystal.CrystalFeature
+import eu.mctraveler.cosmetic.CosmeticFeature
 import eu.mctraveler.economy.EconomyFeature
 import eu.mctraveler.embassy.EmbassiesFeature
 import eu.mctraveler.geo.GeoIpFeature
@@ -83,6 +84,7 @@ object MCTraveler : ModInitializer {
         // Economy must follow RankFeature so its end-tick balance write does
         // not create a player record before RankFeature's welcome check.
         EconomyFeature.register()
+        CosmeticFeature.register()
         StoreFeature.register()
         eu.mctraveler.rtp.RtpFeature.register()
         eu.mctraveler.dragonfight.DragonFightFeature.register()

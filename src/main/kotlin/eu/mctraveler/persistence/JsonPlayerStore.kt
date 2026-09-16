@@ -74,6 +74,40 @@ class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
         write(uuid, ANNIVERSARY_PAID, years.toString())
     }
 
+    override fun nameTag(uuid: UUID): String? = read(uuid)[NAME_TAG]?.let { PortalJson.decodeString(it.rawValue) }
+
+    override fun setNameTag(uuid: UUID, tag: String?) {
+        if (tag == null) remove(uuid, NAME_TAG)
+        else write(uuid, NAME_TAG, PortalJson.encodeString(tag))
+    }
+
+    override fun nameColor(uuid: UUID): String? = read(uuid)[NAME_COLOR]?.let { PortalJson.decodeString(it.rawValue) }
+
+    override fun setNameColor(uuid: UUID, hex: String?) {
+        if (hex == null) remove(uuid, NAME_COLOR)
+        else write(uuid, NAME_COLOR, PortalJson.encodeString(normalizeHex(hex)))
+    }
+
+    override fun nameGradient(uuid: UUID): Pair<String, String>? {
+        val record = read(uuid)
+        val from = record[NAME_GRADIENT_FROM]?.let { PortalJson.decodeString(it.rawValue) } ?: return null
+        val to = record[NAME_GRADIENT_TO]?.let { PortalJson.decodeString(it.rawValue) } ?: return null
+        return from to to
+    }
+
+    override fun setNameGradient(uuid: UUID, from: String?, to: String?) {
+        val record = readForWrite(uuid)
+        record.remove(NAME_GRADIENT_FROM)
+        record.remove(NAME_GRADIENT_TO)
+        if (from != null && to != null) {
+            record[NAME_GRADIENT_FROM] =
+                PortalJson.Field(PortalJson.encodeString(NAME_GRADIENT_FROM), PortalJson.encodeString(normalizeHex(from)))
+            record[NAME_GRADIENT_TO] =
+                PortalJson.Field(PortalJson.encodeString(NAME_GRADIENT_TO), PortalJson.encodeString(normalizeHex(to)))
+        }
+        persist(uuid, record)
+    }
+
     override fun lastWorld(uuid: UUID): String? =
         read(uuid)[LAST_WORLD]?.let { PortalJson.decodeString(it.rawValue) }
 
@@ -294,6 +328,13 @@ class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
         const val NOTEPAD = "notepad"
         const val BALANCE = "balance"
         const val ANNIVERSARY_PAID = "anniversaryPaid"
+        const val NAME_TAG = "nameTag"
+        const val NAME_COLOR = "nameColor"
+        const val NAME_GRADIENT_FROM = "nameGradientFrom"
+        const val NAME_GRADIENT_TO = "nameGradientTo"
+
+        private fun normalizeHex(hex: String): String =
+            if (hex.startsWith("#")) hex.lowercase() else "#${hex.lowercase()}"
 
         // Teleportation Crystal energy, shared by all a player's crystals.
         const val CRYSTAL_ENERGY = "crystalEnergy"

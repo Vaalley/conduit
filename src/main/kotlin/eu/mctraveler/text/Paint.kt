@@ -105,6 +105,8 @@ class Paint private constructor(private val style: Style) {
         fun runs(command: String): Paint = plain.runs(command)
         fun opensUrl(url: String): Paint = plain.opensUrl(url)
 
+        fun rgb(color: Int): Paint = Paint(Style.EMPTY.withColor(TextColor.fromRgb(color)))
+
         /** Unstyled composition: `Paint("Hello ", name)`. */
         operator fun invoke(vararg content: Any?): MutableComponent = plain(*content)
 

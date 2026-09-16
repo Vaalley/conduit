@@ -2,6 +2,7 @@ package eu.mctraveler.chat
 
 import com.mojang.brigadier.CommandDispatcher
 import com.mojang.brigadier.arguments.StringArgumentType
+import eu.mctraveler.cosmetic.NameCosmetics
 import eu.mctraveler.geo.GeoIpFeature
 import eu.mctraveler.region.RegionTracker
 import eu.mctraveler.region.RegionsFeature
@@ -239,7 +240,7 @@ object ChatFeature {
     /** [CHAT_TYPE] bound with [player]'s username, in their rank's color, as the sender. */
     private fun chatBound(player: ServerPlayer): ChatType.Bound {
         val holder = player.level().registryAccess().lookupOrThrow(Registries.CHAT_TYPE).getOrThrow(CHAT_TYPE)
-        val name = eu.mctraveler.rank.RankFeature.nameColor(player)(player.gameProfile.name)
+        val name = NameCosmetics.forPlayer(player)
         return ChatType.Bound(holder, name, Optional.empty())
     }
 
