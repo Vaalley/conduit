@@ -24,19 +24,15 @@ object StoreFrames {
 
     fun mark(frame: ItemFrame) {
         frame.addTag(TAG)
-        setInvulnerable(frame, true)
+        frame.setPermanentlyInvulnerable(true)
         (frame as StoreFrameAccessor).`mctraveler$setFixed`(true)
     }
 
     fun unmark(frame: ItemFrame) {
         frame.removeTag(TAG)
-        setInvulnerable(frame, false)
+        frame.setPermanentlyInvulnerable(false)
         (frame as StoreFrameAccessor).`mctraveler$setFixed`(false)
     }
 
     fun isMarked(frame: ItemFrame): Boolean = frame.entityTags().contains(TAG)
-
-    private fun setInvulnerable(frame: ItemFrame, value: Boolean) {
-        (frame as EntityInvulnerabilityAccessor).`mctraveler$setInvulnerable`(value)
-    }
 }
