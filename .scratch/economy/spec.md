@@ -30,6 +30,13 @@ should be optional conveniences, never gates on core gameplay.
   Amount `$TBD`.
 - **Store creation fee** — AGREED. `/store create` charges the creator a flat fee.
   Amount `$TBD`.
+- **Anniversary payout** — AGREED. Paid on each anniversary of `firstJoin`, scaled
+  by years. Amount `$TBD`.
+- **Store slot upgrade** — AGREED. Pay once to grow a store's stock from 27 to 54
+  slots. Amount `$TBD`.
+- **Buy orders** — AGREED. Reverse stores: a frame that buys an item from players
+  at a set price, funded from the owner's balance.
+- **`/economy stats`** — AGREED. Admin anti-inflation dashboard built on the ledger.
 - **Amounts**: Valley will fill in every `$TBD` (and the stamp tier table) after
   reviewing this file; the numbers below are placeholders until then.
 
@@ -75,11 +82,20 @@ should be optional conveniences, never gates on core gameplay.
   (OPEN — or grant it to everyone lacking a balance on next login?)
 - Chat: `BALANCE Welcome! You start with $TBD` on join.
 
-### 4. Admin / event grants (exists)
+### 4. Anniversary payout (agreed, amount TBD)
+
+- On the first login on or after each anniversary of `PlayerStore.firstJoin`, pay
+  `$TBD × years` (or a per-year table — OPEN). Pairs with the `veteran` stamp
+  ("One year on MCTraveler"), which fires on the same clock.
+- Idempotency: persist `lastAnniversaryPaid: <year index>` in the player JSON so a
+  missed year is paid once on the next login, never twice.
+- Chat: `BALANCE Happy 2nd anniversary! +$X`.
+
+### 5. Admin / event grants (exists)
 
 - `/balance give` already covers contests, compensation, event prizes.
 
-### 5. Server buy-back store (idea, cautious)
+### 6. Server buy-back store (idea, cautious)
 
 - Admin-owned frame(s) at spawn that *buy* bulk items at fixed low prices —
   a price floor. Fastest inflation source; only if trade alone feels dead.
@@ -100,6 +116,14 @@ should be optional conveniences, never gates on core gameplay.
 - Not refunded on `/store delete` (it is a sink, and refunds would make frame spam
   free again). Admins pay too unless we decide otherwise. (OPEN)
 - Creation message gains the fee: `STORE Store created (-$TBD) — selling ...`.
+
+### 2. Store slot upgrade (agreed, amount TBD)
+
+- `/store upgrade` while looking at your own store: one-off `$TBD`, stock menu
+  becomes 6 rows (54 slots) and `StoreLadder.MAX_STOCK` doubles for that store.
+- `StoreRecord` gains `rows: Int` (3 default, 6 upgraded); persisted in
+  `stores.json`, older records without the field read as 3.
+- Not refunded on delete; upgrade is per store, not per player.
 
 ### Ideas (not agreed)
 
@@ -135,6 +159,30 @@ should be optional conveniences, never gates on core gameplay.
 - Purpose: trace disputes and dupes once stores go live; also feeds any future
   `/store stats`.
 
+### 3. Buy orders (reverse stores)
+
+- `/store buy-order <price per item>` (name OPEN) while looking at a frame with
+  the wanted item: creates a store with `kind = BUY`. Same locked-frame
+  mechanics, same `stores.json`, one extra `kind` field (`SELL` default).
+- Sellers right-click → 9-slot menu with the same quantity ladder; a slot is
+  active when the seller holds ≥ qty of the item *and* the owner's balance covers
+  `price × qty`; otherwise cobweb "Owner can't afford" / "You don't have enough".
+  Clicking moves items from seller inventory into the store's stock and pays
+  the seller from the owner's balance (offline owner fine — store write).
+- Owner right-click → stock menu to *collect* bought items (and, OPEN, top up a
+  cap on how much it will buy: `maxStock`, default `MAX_STOCK`).
+- Ledger reason: `buyorder:<frameId>`. Creation fee applies like normal stores.
+
+### 4. `/economy stats` (admin dashboard)
+
+- Reads the ledger (Systems §2) and prints: total money supply (sum of all
+  balances), money created vs destroyed this week by reason (stamps, join bonus,
+  anniversary vs store fees, upgrades, …), top faucet/sink, player-to-player
+  volume (`pay`, `store`, `buyorder`), and net inflation this week vs last.
+- Chat table first; a Passport-style menu is a possible later polish.
+- Requires the ledger to record `reason` categories consistently — define the
+  reason enum once and share it with `/balance history`.
+
 ## Open questions
 
 - Final tier amounts and stamp → tier assignment (table above is a first draft).
@@ -145,6 +193,8 @@ should be optional conveniences, never gates on core gameplay.
 - Whether any sink ships together with stamp bounties, or later.
 - `/balance top`: cached index vs disk scan; hide vanished players?
 - Ledger retention (trim to last N entries? never?).
+- Anniversary payout: linear `$X × years` or a table? Cap?
+- Buy orders: command name; whether owners can set a max buy quantity.
 
 ## Out of scope for now
 
@@ -160,3 +210,5 @@ should be optional conveniences, never gates on core gameplay.
 - 2026-09-16 — `/balance top` leaderboard and per-player transaction log
   (`/balance history`) agreed. Further faucet/sink ideas were floated and are
   pending Valley's review before they enter this file.
+- 2026-09-16 — Anniversary payout, store slot upgrade, buy orders and
+  `/economy stats` agreed (from a second batch of ideas; the rest not adopted).
