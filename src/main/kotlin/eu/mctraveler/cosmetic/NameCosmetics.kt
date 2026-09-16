@@ -20,16 +20,35 @@ object NameCosmetics {
     private data class Cached(val key: Key, val component: Component)
 
     private val cache = ConcurrentHashMap<UUID, Cached>()
+    private val unreadableRecords = ConcurrentHashMap.newKeySet<UUID>()
 
     fun forPlayer(player: ServerPlayer): Component {
         val persistence = checkNotNull(MCTraveler.persistence) { "Name cosmetics need the Persistence service" }
         val players = persistence.players
         val rank = runCatching { RankFeature.rankOf(player) }.getOrDefault(Rank.TRAVELER)
+        val cosmetics = if (player.uuid in unreadableRecords) {
+            Triple(null, null, null)
+        } else {
+            runCatching {
+                Triple(
+                    players.nameTag(player.uuid),
+                    players.nameColor(player.uuid),
+                    players.nameGradient(player.uuid),
+                )
+            }.getOrElse { failure ->
+                unreadableRecords += player.uuid
+                MCTraveler.LOGGER.warn(
+                    "Could not read ${player.gameProfile.name}'s name cosmetics; showing defaults",
+                    failure,
+                )
+                Triple(null, null, null)
+            }
+        }
         val key = Key(
             player.gameProfile.name,
-            players.nameTag(player.uuid),
-            players.nameColor(player.uuid),
-            players.nameGradient(player.uuid),
+            cosmetics.first,
+            cosmetics.second,
+            cosmetics.third,
             rank.name,
         )
         cache[player.uuid]?.takeIf { it.key == key }?.let { return it.component }
@@ -53,5 +72,6 @@ object NameCosmetics {
 
     fun invalidate(uuid: UUID) {
         cache.remove(uuid)
+        unreadableRecords.remove(uuid)
     }
 }
