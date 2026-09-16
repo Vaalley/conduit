@@ -37,6 +37,9 @@ should be optional conveniences, never gates on core gameplay.
 - **Buy orders** — AGREED. Reverse stores: a frame that buys an item from players
   at a set price, funded from the owner's balance.
 - **`/economy stats`** — AGREED. Admin anti-inflation dashboard built on the ledger.
+- **Name cosmetics** — AGREED. Paid vanity for chat *and* tablist: a one-character
+  tag before the name (emoji), a custom hex name colour, and (pricier) a
+  two-colour gradient. Donators keep a unique marker. Amounts `$TBD`.
 - **Amounts**: Valley will fill in every `$TBD` (and the stamp tier table) after
   reviewing this file; the numbers below are placeholders until then.
 
@@ -125,13 +128,43 @@ should be optional conveniences, never gates on core gameplay.
   `stores.json`, older records without the field read as 3.
 - Not refunded on delete; upgrade is per store, not per player.
 
+### 3. Name cosmetics (agreed, amounts TBD)
+
+Applies everywhere the player's name is painted: chat and the tab list both go
+through `RankFeature.nameColor(player)` (used by `ChatFeature` and
+`TabListFeature.tabDisplayName`), so one seam becomes "name style" instead of
+"rank colour". Rendered as `<tag> <name>` — e.g. `🐢 Vaalley` (no brackets;
+OPEN, easy to flip).
+
+- **Tag** — `/cosmetic tag <char>`: exactly one grapheme in front of the name,
+  space-separated. Allow emoji and symbols; block anything that renders as
+  nothing, whitespace, or formatting codes; keep a small denylist. `$TBD`, one-off
+  (changing it later costs again, OPEN).
+- **Solid colour** — `/cosmetic color <#rrggbb>`: any hex; Minecraft components
+  support full RGB (`TextColor.fromRgb`). Reject colours too close to black /
+  the chat background for readability (luminance floor, OPEN). `$TBD`.
+- **Gradient** — `/cosmetic gradient <#from> <#to>`: linear per-character
+  interpolation across the name; renders as one component per character. Costs
+  more than solid. `$TBD`.
+- **Donator marker** — donators keep something nobody can buy: a fixed unique
+  glyph after/before the tag (e.g. `✦`) or a gold outline on the tag. The rank
+  colour stops being the only differentiator, which Valley is fine with.
+- **Persistence** — new typed fields on `PlayerStore`: `nameTag: String?`,
+  `nameColor: String?` (hex), `nameGradient: Pair<String, String>?`. Purchases go
+  through the ledger (`fee:cosmetic-tag` etc.).
+- **Reset** — `/cosmetic reset` is free; admins can strip a tag/colour
+  (`/cosmetic reset <player>`) for abuse.
+- **Rendering budget** — tablist refresh rebuilds every display name each tick
+  cycle; gradient components are ~16 parts per name, fine at this server's size
+  but cache the built `Component` per player and invalidate on change.
+
 ### Ideas (not agreed)
 
 - `/rtp` skip-cooldown fee.
 - Extra crystal Energy refill.
 - `/region extend` beyond the free 5000-block quota (paid quota bump instead of
   asking an admin).
-- Cosmetics: sign colours for non-donators, `/cat` variants, tablist flair.
+- Other cosmetics: sign colours for non-donators, `/cat` variants.
 - Postcard sending fee (small, thematic).
 
 ## Systems (agreed)
@@ -193,6 +226,8 @@ should be optional conveniences, never gates on core gameplay.
 - Whether any sink ships together with stamp bounties, or later.
 - `/balance top`: cached index vs disk scan; hide vanished players?
 - Ledger retention (trim to last N entries? never?).
+- Name cosmetics: brackets around the tag or not; what the donator marker is;
+  do changes cost again; luminance floor for colours.
 - Anniversary payout: linear `$X × years` or a table? Cap?
 - Buy orders: command name; whether owners can set a max buy quantity.
 
@@ -212,3 +247,5 @@ should be optional conveniences, never gates on core gameplay.
   pending Valley's review before they enter this file.
 - 2026-09-16 — Anniversary payout, store slot upgrade, buy orders and
   `/economy stats` agreed (from a second batch of ideas; the rest not adopted).
+- 2026-09-16 — Name cosmetics (tag + hex colour + gradient, chat and tablist)
+  agreed. "Repeatable stamps" discussed and set aside, not in the plan.
