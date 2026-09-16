@@ -1,6 +1,7 @@
 package eu.mctraveler.store
 
 import eu.mctraveler.economy.Economy
+import eu.mctraveler.economy.Reasons
 import eu.mctraveler.text.Paint
 import net.minecraft.ChatFormatting
 import net.minecraft.core.component.DataComponents
@@ -132,12 +133,12 @@ object StoreMenus {
                 }
                 val total = StoreLadder.priceFor(record.pricePerItem, quantity)
                 val persistence = eu.mctraveler.MCTraveler.persistence ?: return@execute
-                if (!Economy.withdraw(persistence.players, player.uuid, total)) {
+                if (!persistence.economy.withdraw(player.uuid, total, Reasons.store(record.frameId))) {
                     player.sendSystemMessage(Paint.error("You don't have enough money — that costs ", Economy.format(total)))
                     refresh(player, record)
                     return@execute
                 }
-                Economy.deposit(persistence.players, record.owner, total)
+                persistence.economy.deposit(record.owner, total, Reasons.store(record.frameId))
                 record.stock -= quantity
                 StoreFeature.requireService().save()
                 give(player, StoreFeature.recordItem(player, record), quantity)

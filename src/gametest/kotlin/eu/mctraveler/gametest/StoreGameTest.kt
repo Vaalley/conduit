@@ -2,7 +2,6 @@ package eu.mctraveler.gametest
 
 import com.google.gson.JsonParser
 import eu.mctraveler.MCTraveler
-import eu.mctraveler.economy.Economy
 import eu.mctraveler.store.StoreFeature
 import eu.mctraveler.store.StoreFrames
 import eu.mctraveler.store.StoreLadder
@@ -96,9 +95,9 @@ class StoreGameTest {
     fun insufficientBalanceIsUnchanged(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "StoreFunds")
         try {
-            val persistence = checkNotNull(MCTraveler.persistence).players
-            helper.assertFalse(Economy.withdraw(persistence, player.uuid, 1), "empty balance allowed withdrawal")
-            helper.assertValueEqual(Economy.balanceOf(persistence, player.uuid), 0L, "empty balance changed")
+            val economy = checkNotNull(MCTraveler.persistence).economy
+            helper.assertFalse(economy.withdraw(player.uuid, 1, "test"), "empty balance allowed withdrawal")
+            helper.assertValueEqual(economy.balanceOf(player.uuid), 0L, "empty balance changed")
             helper.succeed()
         } finally {
             player.leave()

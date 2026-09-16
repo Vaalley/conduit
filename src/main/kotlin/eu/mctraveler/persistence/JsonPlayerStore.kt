@@ -43,6 +43,36 @@ class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
         write(uuid, BALANCE, amount.toString())
     }
 
+    override fun allBalances(): Map<UUID, Long> {
+        if (Files.notExists(playersDir)) return emptyMap()
+        return Files.list(playersDir).use { files ->
+            files.filter { it.fileName.toString().endsWith(".json") }
+                .toList()
+                .mapNotNull { file ->
+                    val uuid = runCatching {
+                        UUID.fromString(file.fileName.toString().removeSuffix(".json"))
+                    }.getOrElse {
+                        eu.mctraveler.MCTraveler.LOGGER.warn("Skipping player file with invalid uuid {}", file, it)
+                        return@mapNotNull null
+                    }
+                    try {
+                        balance(uuid)?.let { uuid to it }
+                    } catch (failure: Exception) {
+                        eu.mctraveler.MCTraveler.LOGGER.warn("Skipping unparsable player file {}", file, failure)
+                        null
+                    }
+                }
+                .toMap()
+        }
+    }
+
+    override fun anniversaryPaid(uuid: UUID): Int? = readInt(uuid, ANNIVERSARY_PAID)
+
+    override fun setAnniversaryPaid(uuid: UUID, years: Int) {
+        require(years >= 0) { "anniversary years must be non-negative" }
+        write(uuid, ANNIVERSARY_PAID, years.toString())
+    }
+
     override fun lastWorld(uuid: UUID): String? =
         read(uuid)[LAST_WORLD]?.let { PortalJson.decodeString(it.rawValue) }
 
@@ -262,6 +292,7 @@ class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
         const val LAST_WORLD = "lastServer"
         const val NOTEPAD = "notepad"
         const val BALANCE = "balance"
+        const val ANNIVERSARY_PAID = "anniversaryPaid"
 
         // Teleportation Crystal energy, shared by all a player's crystals.
         const val CRYSTAL_ENERGY = "crystalEnergy"

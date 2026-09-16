@@ -214,4 +214,16 @@ class JsonPlayerStoreTest {
         assertThrows(IllegalArgumentException::class.java) { store().setLastWorld(uuid, "primary") }
         assertEquals("""{"balance":1,"balance":2}""", Files.readString(file))
     }
+
+    @Test
+    fun `all balances scans valid json files and skips invalid files`() {
+        val other = UUID.fromString("00000000-0000-0000-0000-000000000002")
+        Files.writeString(dir.resolve("$uuid.json"), """{"balance":12.5}""")
+        Files.writeString(dir.resolve("$other.json"), """{"balance":30}""")
+        Files.writeString(dir.resolve("not-a-uuid.json"), """{"balance":50}""")
+        Files.writeString(dir.resolve("notes.txt"), """{"balance":60}""")
+        Files.writeString(dir.resolve("00000000-0000-0000-0000-000000000003.json"), """{"balance":""")
+
+        assertEquals(mapOf(uuid to 12L, other to 30L), store().allBalances())
+    }
 }
