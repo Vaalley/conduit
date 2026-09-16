@@ -17,6 +17,7 @@ import net.minecraft.nbt.CompoundTag
 import net.minecraft.network.chat.Component
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.server.network.Filterable
+import net.minecraft.util.Prediction
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 import net.minecraft.world.item.component.CustomData
@@ -171,7 +172,7 @@ object NotepadFeature {
         if (slotHeldTheBook) {
             inventory.setItem(session.slot, session.original)
         } else if (!session.original.isEmpty) {
-            inventory.placeItemBackInInventory(session.original)
+            inventory.placeItemBackInInventory(session.original, Prediction.SERVER_ONLY)
         }
         return true
     }

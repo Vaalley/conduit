@@ -35,7 +35,7 @@ class CrystalRecipeJsonTest {
     }
 
     private val ops: RegistryOps<JsonElement> =
-        RegistryOps.create(JsonOps.INSTANCE, VanillaRegistries.createLookup())
+        RegistryOps.create(JsonOps.INSTANCE, VanillaRegistries.createWorldLookup())
 
     /** The shipped recipe, read off the classpath exactly where the server looks for it. */
     private fun json(tier: Int): JsonElement {
@@ -54,7 +54,7 @@ class CrystalRecipeJsonTest {
     @Test
     fun `every tier's recipe decodes as the server's datapack reload would`() {
         for (tier in 1..3) {
-            val recipe = Recipe.CODEC.parse(ops, json(tier))
+            val recipe = Recipe.DIRECT_CODEC.parse(ops, json(tier))
                 .getOrThrow { message -> AssertionError("tier $tier recipe did not decode: $message") }
             if (tier == 1) {
                 assertInstanceOf(ShapelessRecipe::class.java, recipe, "tier 1 is shapeless")

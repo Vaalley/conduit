@@ -25,7 +25,7 @@ object MinecraftTestBootstrap {
         done = true
         SharedConstants.tryDetectVersion()
         Bootstrap.bootStrap()
-        BuiltInRegistries.DATA_COMPONENT_INITIALIZERS.build(VanillaRegistries.createLookup())
+        BuiltInRegistries.DATA_COMPONENT_INITIALIZERS.build(VanillaRegistries.createWorldLookup())
             .forEach { it.apply() }
     }
 }

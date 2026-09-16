@@ -32,7 +32,7 @@ public abstract class RegionSignEditMixin {
     private void mctraveler$protectSignEdit(
             ServerboundSignUpdatePacket packet, List<FilteredText> lines, CallbackInfo ci) {
         ServerPlayer editor = this.player;
-        if (!Hooks.allowsBlockChange(editor, editor.level(), packet.getPos())) {
+        if (!Hooks.allowsBlockChange(editor, editor.level(), packet.pos())) {
             ci.cancel();
         }
     }

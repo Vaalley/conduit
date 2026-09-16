@@ -13,6 +13,7 @@ import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.entity.SignBlockEntity
 import net.minecraft.world.level.block.entity.SignText
+import net.minecraft.world.level.block.entity.SignTextSlot
 
 /**
  * The `<name>` sign-markdown token renders as the reading player's own name,
@@ -33,7 +34,7 @@ class SignNameTokenGameTest {
         writeFirstLine(helper, donator, "Hi <name>!")
 
         // Baked into the block entity as a sentinel run, invisible literal for anyone unresolved.
-        helper.assertValueEqual(sign.frontText.getMessage(0, false).string, "Hi <name>!", "sentinel fallback text")
+        helper.assertValueEqual(sign.getText(SignTextSlot.FRONT).getMessages(false)[0].string, "Hi <name>!", "sentinel fallback text")
 
         val alice = MessageCapturingPlayer.join(helper, "SignNameAlice")
         val bob = MessageCapturingPlayer.join(helper, "SignNameBob")
@@ -53,7 +54,7 @@ class SignNameTokenGameTest {
         val sign = placeSign(helper, traveler)
         writeFirstLine(helper, traveler, "Hi <name>!")
 
-        helper.assertValueEqual(sign.frontText.getMessage(0, false).string, "Hi <name>!", "literal token text")
+        helper.assertValueEqual(sign.getText(SignTextSlot.FRONT).getMessages(false)[0].string, "Hi <name>!", "literal token text")
 
         val viewer = MessageCapturingPlayer.join(helper, "SignNameViewer")
         val original: ClientboundBlockEntityDataPacket = sign.updatePacket
@@ -74,7 +75,7 @@ class SignNameTokenGameTest {
 
     private fun writeFirstLine(helper: GameTestHelper, editor: ServerPlayer, line: String) {
         editor.connection.handleSignUpdate(
-            ServerboundSignUpdatePacket(helper.absolutePos(SIGN_AT), true, line, "", "", ""),
+            ServerboundSignUpdatePacket(helper.absolutePos(SIGN_AT), listOf(line, "", "", ""), SignTextSlot.FRONT),
         )
     }
 
@@ -82,7 +83,7 @@ class SignNameTokenGameTest {
     private fun renderedFirstLine(sign: SignBlockEntity, viewer: ServerPlayer): String {
         val packet = Hooks.packetForViewer(viewer, sign.updatePacket) as ClientboundBlockEntityDataPacket
         val ops = viewer.level().registryAccess().createSerializationContext(NbtOps.INSTANCE)
-        val front = SignText.DIRECT_CODEC.parse(ops, packet.tag.getCompoundOrEmpty("front_text")).orThrow
-        return front.getMessage(0, false).string
+        val front = SignText.CODEC.parse(ops, packet.tag.getCompoundOrEmpty("front_text")).orThrow
+        return front.getMessages(false)[0].string
     }
 }

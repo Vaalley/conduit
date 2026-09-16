@@ -31,6 +31,7 @@ import net.minecraft.world.level.block.EndPortalFrameBlock
 import net.minecraft.world.SimpleMenuProvider
 import net.minecraft.world.level.block.entity.ChestBlockEntity
 import net.minecraft.world.level.block.entity.SignBlockEntity
+import net.minecraft.world.level.block.entity.SignTextSlot
 import net.minecraft.world.phys.BlockHitResult
 import net.minecraft.world.phys.EntityHitResult
 import net.minecraft.world.phys.Vec3
@@ -1668,11 +1669,11 @@ private fun GameTestHelper.placeSignFor(editor: MessageCapturingPlayer): SignBlo
 /** Sends the sign text a client sends when the editor presses Done. */
 private fun MessageCapturingPlayer.writesOnSign(helper: GameTestHelper, first: String, second: String) {
     connection.handleSignUpdate(
-        ServerboundSignUpdatePacket(helper.absolutePos(SIGN_AT), true, first, second, "", ""),
+        ServerboundSignUpdatePacket(helper.absolutePos(SIGN_AT), listOf(first, second, "", ""), SignTextSlot.FRONT),
     )
 }
 
-private fun signLine(sign: SignBlockEntity): String = sign.frontText.getMessage(0, false).string
+private fun signLine(sign: SignBlockEntity): String = sign.getText(SignTextSlot.FRONT).getMessages(false)[0].string
 
 /** A chest holding one diamond, inside the test region. */
 private fun GameTestHelper.stockedChest(): ChestBlockEntity {

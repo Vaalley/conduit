@@ -217,7 +217,7 @@ class RespawnAndPortalsGameTest {
      */
     private fun dieAndRespawn(server: MinecraftServer, player: ServerPlayer): ServerPlayer {
         player.setGameMode(GameType.SURVIVAL)
-        player.isInvulnerable = false
+        player.setPermanentlyInvulnerable(false)
         // The two acknowledgements a real client sends before the server stops
         // shielding it — the dimension change is over, and its level has
         // rendered. Without both the player is invulnerable, and so unkillable.
@@ -233,7 +233,7 @@ class RespawnAndPortalsGameTest {
         }
         // Terrain is incidental to these tests: keep the respawned player safe
         // from whatever they landed in until the next deliberate death.
-        respawned.isInvulnerable = true
+        respawned.setPermanentlyInvulnerable(true)
         return respawned
     }
 

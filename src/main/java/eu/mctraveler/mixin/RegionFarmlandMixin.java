@@ -21,27 +21,26 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 public abstract class RegionFarmlandMixin {
 
     @Shadow
-    private static void turnToDirt(Entity entity, BlockState state, Level level, BlockPos pos) {
-        throw new AssertionError();
-    }
+    public abstract void turnToBaseBlock(Entity entity, BlockState state, Level level, BlockPos pos);
 
     @Redirect(
             method = "fallOn",
             at = @At(
                     value = "INVOKE",
-                    target = "Lnet/minecraft/world/level/block/FarmlandBlock;turnToDirt(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;)V"))
+                    target = "Lnet/minecraft/world/level/block/FarmlandBlock;turnToBaseBlock(Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;)V"))
     private void mctraveler$protectFarmlandConversion(
+            FarmlandBlock self,
             Entity entity, BlockState state, Level level, BlockPos pos) {
         if (level.isClientSide() || entity == null) {
-            turnToDirt(entity, state, level, pos);
+            turnToBaseBlock(entity, state, level, pos);
         } else if (entity instanceof ServerPlayer player) {
             if (Hooks.allowsBlockChange(player, level, pos)) {
-                turnToDirt(entity, state, level, pos);
+                turnToBaseBlock(entity, state, level, pos);
             }
         } else if (entity instanceof Player) {
-            turnToDirt(entity, state, level, pos);
+            turnToBaseBlock(entity, state, level, pos);
         } else if (Hooks.allowsCreatureBlockChange(level, pos, entity)) {
-            turnToDirt(entity, state, level, pos);
+            turnToBaseBlock(entity, state, level, pos);
     }
 }
 }

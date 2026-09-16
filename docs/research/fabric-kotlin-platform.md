@@ -36,16 +36,16 @@ Per the Fabric announcement ["Fabric for Minecraft 26.1"](https://fabricmc.net/2
 
 | Component | Version | Source |
 |---|---|---|
-| Minecraft (latest stable) | **26.2** (26.3 in snapshots) | [piston-meta manifest](https://piston-meta.mojang.com/mc/game/version_manifest_v2.json), [Fabric meta](https://meta.fabricmc.net/v2/versions/game) |
-| Java runtime required by MC 26.2 | **Java 25** (`javaVersion.majorVersion: 25`) | [Mojang 26.2 version JSON](https://piston-meta.mojang.com/v1/packages/3457237902814cca3f5c6f20b0c5db1b1f341512/26.2.json) |
-| Fabric Loader | **0.19.3** (stable) | [meta.fabricmc.net/v2/versions/loader](https://meta.fabricmc.net/v2/versions/loader) |
-| Fabric API | **0.156.0+26.2** for MC 26.2 (0.156.1+26.3 for snapshots) | [maven.fabricmc.net fabric-api metadata](https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/maven-metadata.xml) |
+| Minecraft | **26.3** | [piston-meta manifest](https://piston-meta.mojang.com/mc/game/version_manifest_v2.json), [Fabric meta](https://meta.fabricmc.net/v2/versions/game) |
+| Java runtime required by MC 26.3 | **Java 25** (`javaVersion.majorVersion: 25`) | [piston-meta manifest](https://piston-meta.mojang.com/mc/game/version_manifest_v2.json) |
+| Fabric Loader | **0.19.5** | [meta.fabricmc.net/v2/versions/loader](https://meta.fabricmc.net/v2/versions/loader) |
+| Fabric API | **0.160.5+26.3** for MC 26.3 | [maven.fabricmc.net fabric-api metadata](https://maven.fabricmc.net/net/fabricmc/fabric-api/fabric-api/maven-metadata.xml) |
 | Fabric Loom | **1.17.x** stable line (1.17.17 latest; 1.18 alphas in progress); 26.1+ requires Loom >= 1.15 | [maven.fabricmc.net loom metadata](https://maven.fabricmc.net/net/fabricmc/fabric-loom/maven-metadata.xml), [26.1 announcement](https://fabricmc.net/2026/03/14/261.html) |
 | Gradle | **9.4.0+** required for the 26.1+ toolchain | [26.1 announcement](https://fabricmc.net/2026/03/14/261.html) |
 | Gradle JVM / dev JDK | **Java 25** minimum | [26.1 announcement](https://fabricmc.net/2026/03/14/261.html); Fabric's own CI uses `java-version: 25` ([automatic-testing docs](https://docs.fabricmc.net/develop/automatic-testing)) |
 | IntelliJ IDEA | **2025.3+** required (mixin compilation) | [26.1 announcement](https://fabricmc.net/2026/03/14/261.html) |
-| fabric-language-kotlin | **1.13.13+kotlin.2.4.10** (released 2026-07-15) | [GitHub releases](https://github.com/FabricMC/fabric-language-kotlin/releases) |
-| Kotlin (bundled by FLK) | **2.4.10** (+ kotlin-reflect 2.4.10) | [FLK README](https://github.com/FabricMC/fabric-language-kotlin) |
+| fabric-language-kotlin | **1.14.1+kotlin.2.4.20** | [GitHub releases](https://github.com/FabricMC/fabric-language-kotlin/releases) |
+| Kotlin (bundled by FLK) | **2.4.20** (+ kotlin-reflect 2.4.20) | [FLK README](https://github.com/FabricMC/fabric-language-kotlin) |
 | kotlinx bundled by FLK | coroutines-core 1.11.0, serialization-core/json/cbor 1.11.0, atomicfu 0.33.0, kotlinx-datetime 0.8.0, kotlinx-io 0.9.1 | [FLK README](https://github.com/FabricMC/fabric-language-kotlin) |
 | Mappings | **Mojang official mappings only** for 26.1+ (Yarn ended at 1.21.11) | [1.21.11 announcement](https://fabricmc.net/2025/12/05/12111.html) |
 
@@ -105,10 +105,10 @@ Per the [fabric.mod.json reference](https://docs.fabricmc.net/develop/loader/fab
     "main": [ { "adapter": "kotlin", "value": "net.mctraveler.MCTraveler" } ]
   },
   "depends": {
-    "fabricloader": ">=0.19.3",
+    "fabricloader": ">=0.19.5",
     "fabric-api": "*",
-    "fabric-language-kotlin": ">=1.13.13+kotlin.2.4.10",
-    "minecraft": "~26.2"
+    "fabric-language-kotlin": ">=1.14.1+kotlin.2.4.20",
+    "minecraft": "~26.3"
   }
 }
 ```

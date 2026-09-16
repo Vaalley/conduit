@@ -14,6 +14,7 @@ import net.minecraft.network.protocol.game.ServerboundSignUpdatePacket
 import net.minecraft.stats.Stats
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.entity.SignBlockEntity
+import net.minecraft.world.level.block.entity.SignTextSlot
 
 /**
  * The rank ladder: a brand-new account is welcomed and starts a Newbie
@@ -203,7 +204,7 @@ class RankGameTest {
         donator.writesOnRankTestSign(helper, "%aGreen%r plain")
 
         helper.assertValueEqual(
-            runsOf(sign.frontText.getMessage(0, false)),
+            runsOf(sign.getText(SignTextSlot.FRONT).getMessages(false)[0]),
             listOf(Run("Green", "green"), Run(" plain")),
             "the Donator's markdown was not applied to the sign",
         )
@@ -218,7 +219,7 @@ class RankGameTest {
         traveler.writesOnRankTestSign(helper, "%aGreen")
 
         helper.assertValueEqual(
-            sign.frontText.getMessage(0, false).string,
+            sign.getText(SignTextSlot.FRONT).getMessages(false)[0].string,
             "%aGreen",
             "a non-Donator's % codes were not left literal",
         )
@@ -247,7 +248,7 @@ class RankGameTest {
     /** Sends the sign text a client sends when the editor presses Done. */
     private fun MessageCapturingPlayer.writesOnRankTestSign(helper: GameTestHelper, firstLine: String) {
         connection.handleSignUpdate(
-            ServerboundSignUpdatePacket(helper.absolutePos(SIGN_AT), true, firstLine, "", "", ""),
+            ServerboundSignUpdatePacket(helper.absolutePos(SIGN_AT), listOf(firstLine, "", "", ""), SignTextSlot.FRONT),
         )
     }
 }

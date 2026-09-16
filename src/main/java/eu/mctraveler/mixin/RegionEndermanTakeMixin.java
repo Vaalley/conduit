@@ -2,7 +2,7 @@ package eu.mctraveler.mixin;
 
 import eu.mctraveler.hooks.Hooks;
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.entity.monster.EnderMan;
+import net.minecraft.world.entity.monster.Enderman;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -23,12 +23,12 @@ import org.spongepowered.asm.mixin.injection.Redirect;
  * holdable, so nothing is removed and nothing is carried. Refusing the removal
  * alone would leave the enderman holding a copy of a block still in the ground.
  */
-@Mixin(targets = "net.minecraft.world.entity.monster.EnderMan$EndermanTakeBlockGoal")
+@Mixin(targets = "net.minecraft.world.entity.monster.Enderman$EndermanTakeBlockGoal")
 public abstract class RegionEndermanTakeMixin {
 
     @Shadow
     @Final
-    private EnderMan enderman;
+    private Enderman enderman;
 
     @Redirect(
             method = "tick",

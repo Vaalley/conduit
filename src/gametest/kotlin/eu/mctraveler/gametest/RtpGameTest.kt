@@ -19,6 +19,7 @@ import net.minecraft.world.item.ItemStack
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.entity.SignBlockEntity
+import net.minecraft.world.level.block.entity.SignTextSlot
 import net.minecraft.world.phys.BlockHitResult
 import net.minecraft.world.phys.Vec3
 
@@ -278,7 +279,7 @@ class RtpGameTest {
             helper.assertTrue(RtpSigns.isMarked(sign), "the sign is not marked")
             helper.assertTrue(sign.isWaxed, "the sign is not waxed")
             helper.assertValueEqual(
-                (0 until 4).map { sign.frontText.getMessage(it, false).string },
+                (0 until 4).map { sign.getText(SignTextSlot.FRONT).getMessages(false)[it].string },
                 listOf("[ Random ]", "[ Teleport ]", "", "right-click me"),
                 "the words on a blank sign once marked",
             )
@@ -303,11 +304,11 @@ class RtpGameTest {
         try {
             admin.makeAdmin()
             val sign = helper.placeSign()
-            sign.updateText({ it.setMessage(0, net.minecraft.network.chat.Component.literal("Go explore!")) }, true)
+            sign.updateText({ it.asMutable().setLine(0, net.minecraft.network.chat.Component.literal("Go explore!")).asImmutable() }, SignTextSlot.FRONT)
             admin.looksAt(helper, SIGN_AT)
             admin.runCommand("rtp sign")
             helper.assertTrue(RtpSigns.isMarked(sign), "the sign is not marked")
-            helper.assertValueEqual(sign.frontText.getMessage(0, false).string, "Go explore!", "the first line")
+            helper.assertValueEqual(sign.getText(SignTextSlot.FRONT).getMessages(false)[0].string, "Go explore!", "the first line")
             helper.succeed()
         } finally {
             admin.leave()

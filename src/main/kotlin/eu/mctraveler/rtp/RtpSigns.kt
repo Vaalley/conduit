@@ -4,6 +4,7 @@ import eu.mctraveler.text.Paint
 import net.minecraft.network.chat.Component
 import net.minecraft.world.level.block.entity.SignBlockEntity
 import net.minecraft.world.level.block.entity.SignText
+import net.minecraft.world.level.block.entity.SignTextSlot
 
 /**
  * Signs that `/rtp` a player who right-clicks them — the way a new arrival at
@@ -29,9 +30,9 @@ object RtpSigns {
         Paint.darkGray("right-click me"),
     )
 
-    fun isMarked(sign: SignBlockEntity): Boolean = isMarked(sign.frontText)
+    fun isMarked(sign: SignBlockEntity): Boolean = isMarked(sign.getText(SignTextSlot.FRONT))
 
-    fun isMarked(text: SignText): Boolean = text.getMessage(0, false).style.insertion == SENTINEL
+    fun isMarked(text: SignText): Boolean = text.getMessages(false)[0].style.insertion == SENTINEL
 
     /**
      * Marks [sign], filling in [DEFAULT_LINES] if it says nothing yet, and
@@ -39,7 +40,7 @@ object RtpSigns {
      */
     fun mark(sign: SignBlockEntity): Boolean {
         if (isMarked(sign)) return false
-        sign.updateText({ text -> mark(text) }, true)
+        sign.updateText({ text -> mark(text) }, SignTextSlot.FRONT)
         sign.setWaxed(true)
         return true
     }
@@ -47,25 +48,33 @@ object RtpSigns {
     /** Undoes [mark]; the sign stays waxed. Returns false when it was not marked. */
     fun unmark(sign: SignBlockEntity): Boolean {
         if (!isMarked(sign)) return false
-        sign.updateText({ text -> unmark(text) }, true)
+        sign.updateText({ text -> unmark(text) }, SignTextSlot.FRONT)
         return true
     }
 
     fun mark(text: SignText): SignText {
         val filled = if (isBlank(text)) {
-            DEFAULT_LINES.foldIndexed(text) { i, acc, line -> acc.setMessage(i, line) }
+            DEFAULT_LINES.foldIndexed(text) { i, acc, line -> acc.withLine(i, line) }
         } else {
             text
         }
-        val first = filled.getMessage(0, false)
-        return filled.setMessage(0, first.copy().withStyle { it.withInsertion(SENTINEL) })
+        val first = filled.getMessages(false)[0]
+        return filled.withLine(0, first.copy().withStyle { it.withInsertion(SENTINEL) })
     }
 
     fun unmark(text: SignText): SignText {
-        val first = text.getMessage(0, false)
-        return text.setMessage(0, first.copy().withStyle { it.withInsertion(null) })
+        val first = text.getMessages(false)[0]
+        return text.withLine(0, first.copy().withStyle { it.withInsertion(null) })
     }
 
+    /** [SignText.setMessage] is gone: rebuild the immutable text with line [i] replaced. */
+    private fun SignText.withLine(i: Int, line: Component): SignText = SignText(
+        getMessages(false).toMutableList().also { it[i] = line },
+        getMessages(true).toMutableList().also { it[i] = line },
+        color,
+        hasGlowingText(),
+    )
+
     private fun isBlank(text: SignText): Boolean =
-        (0 until SignText.LINES).all { text.getMessage(it, false).string.isBlank() }
+        text.getMessages(false).all { it.string.isBlank() }
 }
