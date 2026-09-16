@@ -26,6 +26,9 @@ class StoreServiceTest {
             JsonParser.parseString("""{"id":"minecraft:diamond","count":1}"""),
             10,
             20,
+            6,
+            StoreKind.BUY,
+            30,
         )
         StoreService(file).add(record)
         val loaded = StoreService(file).byFrame(frame)
@@ -33,6 +36,29 @@ class StoreServiceTest {
         assertEquals(record, loaded)
         assertNotNull(StoreService(file).remove(frame))
         assertNull(StoreService(file).byFrame(frame))
+    }
+
+    @Test
+    fun `legacy records use default rows and sell kind`() {
+        val frame = UUID.randomUUID()
+        val owner = UUID.randomUUID()
+        dir.resolve("stores.json").toFile().writeText(
+            """
+            {"stores":[{
+              "frameId":"$frame",
+              "owner":"$owner",
+              "dimension":"minecraft:overworld",
+              "x":1,"y":2,"z":3,
+              "item":{"id":"minecraft:diamond","count":1},
+              "pricePerItem":10,
+              "stock":20
+            }]}
+            """.trimIndent(),
+        )
+        val loaded = checkNotNull(StoreService(dir.resolve("stores.json")).byFrame(frame))
+        assertEquals(3, loaded.rows)
+        assertEquals(StoreKind.SELL, loaded.kind)
+        assertNull(loaded.wanted)
     }
 
     @Test
