@@ -8,6 +8,7 @@ import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.Style
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.Container
+import net.minecraft.world.Containers
 import net.minecraft.world.SimpleContainer
 import net.minecraft.world.SimpleMenuProvider
 import net.minecraft.world.entity.player.Inventory
@@ -99,7 +100,9 @@ object StoreMenus {
                 if (ItemStack.isSameItemSameComponents(stack, sold)) {
                     stock += stack.count
                 } else if (player is ServerPlayer) {
-                    player.inventory.placeItemBackInInventory(stack)
+                    if (!player.inventory.add(stack)) {
+                        Containers.dropItemStack(player.level(), player.x, player.y, player.z, stack)
+                    }
                 }
                 contents.setItem(slot, ItemStack.EMPTY)
             }
@@ -178,7 +181,9 @@ object StoreMenus {
         while (remaining > 0) {
             val count = remaining.coerceAtMost(sold.maxStackSize)
             val stack = sold.copyWithCount(count)
-            if (!player.inventory.add(stack)) player.drop(stack, false)
+            if (!player.inventory.add(stack)) {
+                Containers.dropItemStack(player.level(), player.x, player.y, player.z, stack)
+            }
             remaining -= count
         }
     }

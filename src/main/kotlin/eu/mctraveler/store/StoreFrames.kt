@@ -1,5 +1,6 @@
 package eu.mctraveler.store
 
+import eu.mctraveler.mixin.EntityInvulnerableAccessor
 import eu.mctraveler.mixin.StoreFrameAccessor
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.entity.decoration.ItemFrame
@@ -24,13 +25,13 @@ object StoreFrames {
 
     fun mark(frame: ItemFrame) {
         frame.addTag(TAG)
-        frame.setInvulnerable(true)
+        (frame as EntityInvulnerableAccessor).`mctraveler$setInvulnerable`(true)
         (frame as StoreFrameAccessor).`mctraveler$setFixed`(true)
     }
 
     fun unmark(frame: ItemFrame) {
         frame.removeTag(TAG)
-        frame.setInvulnerable(false)
+        (frame as EntityInvulnerableAccessor).`mctraveler$setInvulnerable`(false)
         (frame as StoreFrameAccessor).`mctraveler$setFixed`(false)
     }
 
