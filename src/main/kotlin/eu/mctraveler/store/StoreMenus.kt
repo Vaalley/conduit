@@ -223,11 +223,17 @@ object StoreMenus {
                     refresh(player, record)
                     return@execute
                 }
-                if (!persistence.economy.withdraw(record.owner, total, Reasons.buyOrder(record.frameId))) {
+                val removed = removeMatching(player, wanted, quantity)
+                if (removed < quantity) {
+                    if (removed > 0) give(player, wanted, removed)
                     refresh(player, record)
                     return@execute
                 }
-                check(removeMatching(player, wanted, quantity) == quantity)
+                if (!persistence.economy.withdraw(record.owner, total, Reasons.buyOrder(record.frameId))) {
+                    give(player, wanted, removed)
+                    refresh(player, record)
+                    return@execute
+                }
                 persistence.economy.deposit(player.uuid, total, Reasons.buyOrder(record.frameId))
                 record.stock += quantity
                 StoreFeature.requireService().save()
