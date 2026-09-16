@@ -1,0 +1,29 @@
+package eu.mctraveler.economy
+
+import java.util.UUID
+
+object Reasons {
+    const val JOIN_BONUS = "join-bonus"
+    const val FEE_STORE_CREATE = "fee:store-create"
+    const val FEE_STORE_UPGRADE = "fee:store-upgrade"
+    const val FEE_COSMETIC_TAG = "fee:cosmetic-tag"
+    const val FEE_COSMETIC_COLOR = "fee:cosmetic-color"
+    const val FEE_COSMETIC_GRADIENT = "fee:cosmetic-gradient"
+
+    fun pay(other: UUID): String = "pay:$other"
+
+    fun store(frame: UUID): String = "store:$frame"
+
+    fun stamp(id: String): String = "stamp:$id"
+
+    fun admin(sender: UUID): String = "admin:$sender"
+
+    fun anniversary(year: Int): String = "anniversary:$year"
+
+    fun buyOrder(frame: UUID): String = "buy-order:$frame"
+
+    fun isTransfer(reason: String): Boolean =
+        reason.startsWith("pay:") ||
+            reason.startsWith("store:") ||
+            reason.startsWith("buy-order:")
+}

@@ -81,6 +81,19 @@ class JsonPlayerStoreTest {
     }
 
     @Test
+    fun `legacy balance reads as an integer and rewrites without losing other fields`() {
+        val file = seedPortalFile()
+        val store = store()
+        assertEquals(1234L, store.balance(uuid))
+        store.setBalance(uuid, 40)
+        assertEquals(40L, store.balance(uuid))
+        assertEquals(
+            portalFile.replace("\"balance\":1234.50", "\"balance\":40"),
+            Files.readString(file),
+        )
+    }
+
+    @Test
     fun `reads first seen timestamp from legacy timestamps`() {
         seedPortalFile()
         assertEquals(1370044800000L, store().firstJoin(uuid))
@@ -200,5 +213,52 @@ class JsonPlayerStoreTest {
         Files.writeString(file, """{"balance":1,"balance":2}""")
         assertThrows(IllegalArgumentException::class.java) { store().setLastWorld(uuid, "primary") }
         assertEquals("""{"balance":1,"balance":2}""", Files.readString(file))
+    }
+
+    @Test
+    fun `all balances scans valid json files and skips invalid files`() {
+        val other = UUID.fromString("00000000-0000-0000-0000-000000000002")
+        Files.writeString(dir.resolve("$uuid.json"), """{"balance":12.5}""")
+        Files.writeString(dir.resolve("$other.json"), """{"balance":30}""")
+        Files.writeString(dir.resolve("not-a-uuid.json"), """{"balance":50}""")
+        Files.writeString(dir.resolve("notes.txt"), """{"balance":60}""")
+        Files.writeString(dir.resolve("00000000-0000-0000-0000-000000000003.json"), """{"balance":""")
+
+        assertEquals(mapOf(uuid to 12L, other to 30L), store().allBalances())
+    }
+
+    @Test
+    fun `name cosmetics round-trip and preserve legacy fields`() {
+        val file = dir.resolve("$uuid.json")
+        Files.writeString(file, """{"balance":12.50,"legacy":true}""")
+        val store = store()
+        store.setNameTag(uuid, "🐢")
+        store.setNameColor(uuid, "FF8800")
+        store.setNameGradient(uuid, "#112233", "#AABBCC")
+
+        assertEquals("🐢", store.nameTag(uuid))
+        assertEquals("#ff8800", store.nameColor(uuid))
+        assertEquals("#112233" to "#aabbcc", store.nameGradient(uuid))
+        assertEquals(
+            """{"balance":12.50,"legacy":true,"nameTag":"🐢","nameColor":"#ff8800","nameGradientFrom":"#112233","nameGradientTo":"#aabbcc"}""",
+            Files.readString(file),
+        )
+    }
+
+    @Test
+    fun `clearing name cosmetics removes only their fields`() {
+        val file = dir.resolve("$uuid.json")
+        val store = store()
+        store.setNameTag(uuid, "★")
+        store.setNameColor(uuid, "#FF8800")
+        store.setNameGradient(uuid, "#112233", "#AABBCC")
+        store.setNameTag(uuid, null)
+        store.setNameColor(uuid, null)
+        store.setNameGradient(uuid, null, null)
+
+        assertNull(store.nameTag(uuid))
+        assertNull(store.nameColor(uuid))
+        assertNull(store.nameGradient(uuid))
+        assertEquals("{}", Files.readString(file))
     }
 }

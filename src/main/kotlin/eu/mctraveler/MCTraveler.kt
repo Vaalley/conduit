@@ -5,6 +5,8 @@ import eu.mctraveler.chat.ChatBridge
 import eu.mctraveler.chat.ChatFeature
 import eu.mctraveler.chat.PrivateMessages
 import eu.mctraveler.crystal.CrystalFeature
+import eu.mctraveler.cosmetic.CosmeticFeature
+import eu.mctraveler.economy.EconomyFeature
 import eu.mctraveler.embassy.EmbassiesFeature
 import eu.mctraveler.geo.GeoIpFeature
 import eu.mctraveler.hooks.Hooks
@@ -16,6 +18,7 @@ import eu.mctraveler.notepad.NotepadFeature
 import eu.mctraveler.persistence.PersistenceService
 import eu.mctraveler.passport.PassportFeature
 import eu.mctraveler.region.RegionsFeature
+import eu.mctraveler.store.StoreFeature
 import eu.mctraveler.tablist.TabListFeature
 import eu.mctraveler.weather.NoRain
 import net.fabricmc.api.ModInitializer
@@ -78,6 +81,11 @@ object MCTraveler : ModInitializer {
         // SERVER_STARTED, and the service is created by the handler above.
         LodewayFeature.register()
         CrystalFeature.register()
+        // Economy must follow RankFeature so its end-tick balance write does
+        // not create a player record before RankFeature's welcome check.
+        EconomyFeature.register()
+        CosmeticFeature.register()
+        StoreFeature.register()
         eu.mctraveler.rtp.RtpFeature.register()
         eu.mctraveler.dragonfight.DragonFightFeature.register()
         HttpApi.register()

@@ -6,14 +6,41 @@ import java.util.UUID
  * Per-player persistent data: the mod-owned player state that survives restarts
  * (everything vanilla doesn't already persist for us).
  *
- * The typed fields are the mod's live fields — last World and notepad pages.
- * Anything else found in existing player records (legacy fields from the
+ * The typed fields are the mod's live fields — last World, notepad pages,
+ * balance, anniversaryPaid, nameTag, nameColor, nameGradientFrom, nameGradientTo. Anything else found in existing player records (legacy fields from the
  * Portal era and before, including the Portal's `isAdmin` — admin status is
  * vanilla operator status now, and the `worlds` object that held the Per-World
  * Buckets, which the merge retired) must pass through every read-modify-write
  * cycle byte-for-byte.
  */
 interface PlayerStore {
+    /**
+     * The player's balance in whole units, or null if never recorded. Stored
+     * in the predecessor era's `balance` field; a legacy decimal value reads
+     * truncated and is rewritten as an integer on the first write.
+     */
+    fun balance(uuid: UUID): Long?
+
+    fun setBalance(uuid: UUID, amount: Long)
+
+    fun allBalances(): Map<UUID, Long>
+
+    fun anniversaryPaid(uuid: UUID): Int?
+
+    fun setAnniversaryPaid(uuid: UUID, years: Int)
+
+    fun nameTag(uuid: UUID): String?
+
+    fun setNameTag(uuid: UUID, tag: String?)
+
+    fun nameColor(uuid: UUID): String?
+
+    fun setNameColor(uuid: UUID, hex: String?)
+
+    fun nameGradient(uuid: UUID): Pair<String, String>?
+
+    fun setNameGradient(uuid: UUID, from: String?, to: String?)
+
     /**
      * The World the player was last in — `"primary"` or `"secondary"` — or null
      * for a player with no recorded World. Stored as the Portal's `lastServer`

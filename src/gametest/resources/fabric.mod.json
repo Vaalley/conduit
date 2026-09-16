@@ -38,6 +38,7 @@
       "eu.mctraveler.gametest.EmbassyCommandGameTest",
       "eu.mctraveler.gametest.EmbassyAnchorGameTest",
       "eu.mctraveler.gametest.CrystalMenuGameTest",
+      "eu.mctraveler.gametest.StoreGameTest",
       "eu.mctraveler.gametest.VanishGameTest",
       "eu.mctraveler.gametest.ModerationGameTest",
       "eu.mctraveler.gametest.ActionLogGameTest",

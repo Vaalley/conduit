@@ -1,5 +1,7 @@
 package eu.mctraveler.persistence
 
+import eu.mctraveler.economy.Economy
+import eu.mctraveler.economy.Ledger
 import eu.mctraveler.passport.PassportStore
 import eu.mctraveler.moderation.ActionLog
 import eu.mctraveler.moderation.PunishmentStore
@@ -9,7 +11,9 @@ import java.nio.file.Path
  * The Persistence service: the mod's flat-JSON storage, all under one [root]
  * directory (in production `<server run dir>/mctraveler/`):
  *
- * - `players/<uuid>.json` — per-player records ([JsonPlayerStore])
+ * - `players/<uuid>.json` — per-player records ([JsonPlayerStore]), including
+ *   live `balance` and `anniversaryPaid` fields
+ * - `ledger/<uuid>.jsonl` — append-only balance transactions ([Ledger])
  * - `uuid-cache.json` — the uuid → username cache ([NameCache])
  *
  * Both files keep the Portal's formats, so the importer copies Portal data
@@ -27,6 +31,8 @@ class PersistenceService(val root: Path) {
     val playersDir: Path = root.resolve("players")
 
     val players: PlayerStore = JsonPlayerStore(playersDir)
+    val ledger: Ledger = Ledger(root.resolve("ledger"))
+    val economy: Economy = Economy(players, ledger)
     val names: NameCache = NameCache(root.resolve("uuid-cache.json"))
     val passports: PassportStore = PassportStore(root.resolve("passport"))
     val punishments: PunishmentStore = PunishmentStore(root.resolve("punishments.json"))

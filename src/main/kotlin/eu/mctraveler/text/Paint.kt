@@ -105,6 +105,8 @@ class Paint private constructor(private val style: Style) {
         fun runs(command: String): Paint = plain.runs(command)
         fun opensUrl(url: String): Paint = plain.opensUrl(url)
 
+        fun rgb(color: Int): Paint = Paint(Style.EMPTY.withColor(TextColor.fromRgb(color)))
+
         /** Unstyled composition: `Paint("Hello ", name)`. */
         operator fun invoke(vararg content: Any?): MutableComponent = plain(*content)
 
@@ -116,6 +118,12 @@ class Paint private constructor(private val style: Style) {
 
         /** `SUCCESS <content>`: green+bold prefix, gray content. */
         fun success(vararg content: Any?): MutableComponent = prefixed(green.bold("SUCCESS"), content)
+
+        /** `BALANCE <content>`: gold+bold prefix, gray content. */
+        fun balance(vararg content: Any?): MutableComponent = prefixed(gold.bold("BALANCE"), content)
+
+        /** `STORE <content>`: red+bold prefix, gray content. */
+        fun store(vararg content: Any?): MutableComponent = prefixed(red.bold("STORE"), content)
 
         /** `USAGE <content>`: aqua+bold prefix, gray content (the Portal's §b§lUSAGE §7). */
         fun usage(vararg content: Any?): MutableComponent = prefixed(aqua.bold("USAGE"), content)

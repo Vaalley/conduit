@@ -1,6 +1,7 @@
 package eu.mctraveler.region
 
 import eu.mctraveler.text.Paint
+import eu.mctraveler.store.StoreFrames
 import java.util.IdentityHashMap
 import java.util.UUID
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents
@@ -677,6 +678,9 @@ object RegionProtection {
      */
     @JvmStatic
     fun allowsEntityDamage(entity: Entity, source: DamageSource): Boolean {
+        if (entity is net.minecraft.world.entity.decoration.ItemFrame && StoreFrames.isMarked(entity)) {
+            return false
+        }
         if (isRegionDecoration(entity)) return allowsDecorationDamage(entity, source)
         val player = playerResponsibleFor(source) ?: return true
         if (entity is ServerPlayer) return allowsPvp(player, entity)

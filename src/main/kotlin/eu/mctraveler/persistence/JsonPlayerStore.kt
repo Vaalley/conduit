@@ -1,5 +1,6 @@
 package eu.mctraveler.persistence
 
+import eu.mctraveler.MCTraveler
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.BasicFileAttributes
@@ -35,6 +36,77 @@ import java.util.UUID
  * from the server thread.
  */
 class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
+
+    override fun balance(uuid: UUID): Long? = readDouble(uuid, BALANCE)?.toLong()
+
+    override fun setBalance(uuid: UUID, amount: Long) {
+        require(amount >= 0) { "balance must be non-negative" }
+        write(uuid, BALANCE, amount.toString())
+    }
+
+    override fun allBalances(): Map<UUID, Long> {
+        if (Files.notExists(playersDir)) return emptyMap()
+        return Files.list(playersDir).use { files ->
+            files.filter { it.fileName.toString().endsWith(".json") }
+                .toList()
+                .mapNotNull { file ->
+                    val uuid = runCatching {
+                        UUID.fromString(file.fileName.toString().removeSuffix(".json"))
+                    }.getOrElse {
+                        MCTraveler.LOGGER.warn("Skipping player file with invalid uuid {}", file, it)
+                        return@mapNotNull null
+                    }
+                    try {
+                        balance(uuid)?.let { uuid to it }
+                    } catch (failure: Exception) {
+                        MCTraveler.LOGGER.warn("Skipping unparsable player file {}", file, failure)
+                        null
+                    }
+                }
+                .toMap()
+        }
+    }
+
+    override fun anniversaryPaid(uuid: UUID): Int? = readInt(uuid, ANNIVERSARY_PAID)
+
+    override fun setAnniversaryPaid(uuid: UUID, years: Int) {
+        require(years >= 0) { "anniversary years must be non-negative" }
+        write(uuid, ANNIVERSARY_PAID, years.toString())
+    }
+
+    override fun nameTag(uuid: UUID): String? = read(uuid)[NAME_TAG]?.let { PortalJson.decodeString(it.rawValue) }
+
+    override fun setNameTag(uuid: UUID, tag: String?) {
+        if (tag == null) remove(uuid, NAME_TAG)
+        else write(uuid, NAME_TAG, PortalJson.encodeString(tag))
+    }
+
+    override fun nameColor(uuid: UUID): String? = read(uuid)[NAME_COLOR]?.let { PortalJson.decodeString(it.rawValue) }
+
+    override fun setNameColor(uuid: UUID, hex: String?) {
+        if (hex == null) remove(uuid, NAME_COLOR)
+        else write(uuid, NAME_COLOR, PortalJson.encodeString(normalizeHex(hex)))
+    }
+
+    override fun nameGradient(uuid: UUID): Pair<String, String>? {
+        val record = read(uuid)
+        val from = record[NAME_GRADIENT_FROM]?.let { PortalJson.decodeString(it.rawValue) } ?: return null
+        val to = record[NAME_GRADIENT_TO]?.let { PortalJson.decodeString(it.rawValue) } ?: return null
+        return from to to
+    }
+
+    override fun setNameGradient(uuid: UUID, from: String?, to: String?) {
+        val record = readForWrite(uuid)
+        record.remove(NAME_GRADIENT_FROM)
+        record.remove(NAME_GRADIENT_TO)
+        if (from != null && to != null) {
+            record[NAME_GRADIENT_FROM] =
+                PortalJson.Field(PortalJson.encodeString(NAME_GRADIENT_FROM), PortalJson.encodeString(normalizeHex(from)))
+            record[NAME_GRADIENT_TO] =
+                PortalJson.Field(PortalJson.encodeString(NAME_GRADIENT_TO), PortalJson.encodeString(normalizeHex(to)))
+        }
+        persist(uuid, record)
+    }
 
     override fun lastWorld(uuid: UUID): String? =
         read(uuid)[LAST_WORLD]?.let { PortalJson.decodeString(it.rawValue) }
@@ -254,6 +326,15 @@ class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
         // The Portal's field names in players/<uuid>.json.
         const val LAST_WORLD = "lastServer"
         const val NOTEPAD = "notepad"
+        const val BALANCE = "balance"
+        const val ANNIVERSARY_PAID = "anniversaryPaid"
+        const val NAME_TAG = "nameTag"
+        const val NAME_COLOR = "nameColor"
+        const val NAME_GRADIENT_FROM = "nameGradientFrom"
+        const val NAME_GRADIENT_TO = "nameGradientTo"
+
+        private fun normalizeHex(hex: String): String =
+            if (hex.startsWith("#")) hex.lowercase() else "#${hex.lowercase()}"
 
         // Teleportation Crystal energy, shared by all a player's crystals.
         const val CRYSTAL_ENERGY = "crystalEnergy"

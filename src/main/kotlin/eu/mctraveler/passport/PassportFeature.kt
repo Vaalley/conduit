@@ -1,6 +1,8 @@
 package eu.mctraveler.passport
 
 import eu.mctraveler.MCTraveler
+import eu.mctraveler.economy.Reasons
+import eu.mctraveler.economy.Economy
 import eu.mctraveler.region.RegionTracker
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.text.Paint
@@ -87,6 +89,22 @@ object PassportFeature {
         val persistence = MCTraveler.persistence ?: return
         val passport = persistence.passports.getOrCreate(player.uuid) {
             persistence.players.firstJoin(player.uuid) ?: System.currentTimeMillis()
+        }
+        if (!passport.bountiesPaid) {
+            val bounty = Stamps.bountyFor(passport.stamps.keys)
+            if (bounty > 0) {
+                persistence.economy.deposit(player.uuid, bounty, Reasons.stamp("retro"))
+                player.sendSystemMessage(
+                    Paint.balance(
+                        "Your ",
+                        passport.stamps.keys.count { Stamps.byId(it) != null },
+                        " stamps earned you ",
+                        Economy.format(bounty),
+                    ),
+                )
+            }
+            passport.bountiesPaid = true
+            persistence.passports.markDirty(player.uuid)
         }
         unlockStamps(player, passport)
         states[player.uuid] = State(player)
@@ -213,8 +231,10 @@ object PassportFeature {
                     "Stamp unlocked: ",
                     Paint.gold("${stamp.icon} ${stamp.title}"),
                     Paint.gray(" — ${stamp.description}"),
+                    Paint.green(" (+${Economy.format(stamp.tier.bounty)})"),
                 ),
             )
+            MCTraveler.persistence?.economy?.deposit(player.uuid, stamp.tier.bounty, Reasons.stamp(stamp.id))
             PassportEvents.record(
                 StampEvent(
                     at = at,
