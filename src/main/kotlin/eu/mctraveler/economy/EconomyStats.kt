@@ -20,7 +20,7 @@ data class EconomyStats(
     val lastSevenDays: EconomyPeriod,
 ) {
     companion object {
-        fun of(entries: Sequence<LedgerEntry>, now: Long): Stats {
+        fun of(entries: Sequence<LedgerEntry>, now: Long): EconomyStats {
             val all = entries.toList()
             return EconomyStats(
                 period(all),
@@ -68,5 +68,3 @@ data class EconomyStats(
         private const val SEVEN_DAYS_MILLIS = 7L * 24 * 60 * 60 * 1000
     }
 }
-
-typealias Stats = EconomyStats

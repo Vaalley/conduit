@@ -1,5 +1,6 @@
 package eu.mctraveler.persistence
 
+import eu.mctraveler.MCTraveler
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.BasicFileAttributes
@@ -52,13 +53,13 @@ class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
                     val uuid = runCatching {
                         UUID.fromString(file.fileName.toString().removeSuffix(".json"))
                     }.getOrElse {
-                        eu.mctraveler.MCTraveler.LOGGER.warn("Skipping player file with invalid uuid {}", file, it)
+                        MCTraveler.LOGGER.warn("Skipping player file with invalid uuid {}", file, it)
                         return@mapNotNull null
                     }
                     try {
                         balance(uuid)?.let { uuid to it }
                     } catch (failure: Exception) {
-                        eu.mctraveler.MCTraveler.LOGGER.warn("Skipping unparsable player file {}", file, failure)
+                        MCTraveler.LOGGER.warn("Skipping unparsable player file {}", file, failure)
                         null
                     }
                 }

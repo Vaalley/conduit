@@ -55,7 +55,7 @@ object EconomyFeature {
         )
     }
 
-    private data class PendingJoin(val uuid: UUID, val missingBalance: Boolean?)
+    private data class PendingJoin(val uuid: UUID, val missingBalance: Boolean)
 
     private val pendingJoins = ArrayDeque<PendingJoin>()
     private val dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").withZone(ZoneOffset.UTC)
@@ -296,7 +296,7 @@ object EconomyFeature {
             set(DataComponents.PROFILE, ResolvableProfile.createResolved(profile))
             set(
                 DataComponents.LORE,
-                net.minecraft.world.item.component.ItemLore(
+                ItemLore(
                     listOf(Component.literal(Economy.format(balance)).setStyle(Style.EMPTY.withColor(ChatFormatting.GREEN).withItalic(false))),
                 ),
             )
