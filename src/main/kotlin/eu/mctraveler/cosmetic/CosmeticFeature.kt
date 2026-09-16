@@ -42,18 +42,15 @@ object CosmeticFeature {
                 .then(
                     Commands.literal("color")
                         .then(
-                            Commands.argument("hex", StringArgumentType.word())
+                            Commands.argument("hex", StringArgumentType.greedyString())
                                 .executes { context -> reply(context) { setColor(it, context) } },
                         ),
                 )
                 .then(
                     Commands.literal("gradient")
                         .then(
-                            Commands.argument("from", StringArgumentType.word())
-                                .then(
-                                    Commands.argument("to", StringArgumentType.word())
-                                        .executes { context -> reply(context) { setGradient(it, context) } },
-                                ),
+                            Commands.argument("colors", StringArgumentType.greedyString())
+                                .executes { context -> reply(context) { setGradient(it, context) } },
                         ),
                 )
                 .then(
@@ -93,8 +90,10 @@ object CosmeticFeature {
     }
 
     private fun setGradient(player: ServerPlayer, context: CommandContext<CommandSourceStack>): Component {
-        val fromInput = StringArgumentType.getString(context, "from")
-        val toInput = StringArgumentType.getString(context, "to")
+        val colors = StringArgumentType.getString(context, "colors").trim().split(Regex("\\s+"))
+        if (colors.size != 2) return Paint.error("Usage: /name gradient <#from> <#to>")
+        val fromInput = colors[0]
+        val toInput = colors[1]
         val from = NameStyle.parseHex(fromInput)
         val to = NameStyle.parseHex(toInput)
         if (from == null || to == null) return Paint.error("Use a hex colour like #ff8800")
