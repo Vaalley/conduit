@@ -178,23 +178,27 @@ object EconomyFeature {
             val uuid = pending.uuid
             val player = server.playerList.getPlayer(uuid) ?: continue
             val persistence = MCTraveler.persistence ?: continue
-            if (pending.missingBalance != false || persistence.players.balance(uuid) == null) {
-                persistence.economy.deposit(uuid, 100, Reasons.JOIN_BONUS)
+            try {
+                if (pending.missingBalance || persistence.players.balance(uuid) == null) {
+                    persistence.economy.deposit(uuid, 100, Reasons.JOIN_BONUS)
+                }
+                val firstJoin = persistence.players.firstJoin(uuid)
+                    ?: persistence.passports.get(uuid)?.firstJoin
+                    ?: continue
+                val now = System.currentTimeMillis()
+                val years = Anniversary.years(firstJoin, now)
+                val alreadyPaid = persistence.players.anniversaryPaid(uuid) ?: 0
+                for (year in Anniversary.due(firstJoin, now, alreadyPaid)) {
+                    val payout = Anniversary.payout(year)
+                    persistence.economy.deposit(uuid, payout, Reasons.anniversary(year))
+                    player.sendSystemMessage(
+                        Paint.balance("Happy ", ordinal(year), " anniversary! +", Economy.format(payout)),
+                    )
+                }
+                if (years > alreadyPaid) persistence.players.setAnniversaryPaid(uuid, years)
+            } catch (failure: Exception) {
+                MCTraveler.LOGGER.warn("Skipping economy payouts for $uuid because its player record could not be read", failure)
             }
-            val firstJoin = persistence.players.firstJoin(uuid)
-                ?: persistence.passports.get(uuid)?.firstJoin
-                ?: continue
-            val now = System.currentTimeMillis()
-            val years = Anniversary.years(firstJoin, now)
-            val alreadyPaid = persistence.players.anniversaryPaid(uuid) ?: 0
-            for (year in Anniversary.due(firstJoin, now, alreadyPaid)) {
-                val payout = Anniversary.payout(year)
-                persistence.economy.deposit(uuid, payout, Reasons.anniversary(year))
-                player.sendSystemMessage(
-                    Paint.balance("Happy ", ordinal(year), " anniversary! +", Economy.format(payout)),
-                )
-            }
-            if (years > alreadyPaid) persistence.players.setAnniversaryPaid(uuid, years)
         }
     }
 

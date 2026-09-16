@@ -50,7 +50,7 @@ class NameStyleTest {
             "Val",
             NameStyle.Style(null, 0xff8800, null, false, rankColor),
         )
-        assertEquals(TextColor.fromRgb(0xff8800), rendered.siblings.single().style.color)
+        assertEquals(TextColor.fromRgb(0xff8800), rendered.style.color)
     }
 
     @Test
@@ -74,6 +74,6 @@ class NameStyleTest {
             "Vaalley",
             NameStyle.Style(null, null, null, false, rankColor),
         )
-        assertEquals("green", rendered.siblings.single().style.color?.serialize())
+        assertEquals("green", rendered.style.color?.serialize())
     }
 }

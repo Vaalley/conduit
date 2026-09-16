@@ -15,6 +15,9 @@ object NameStyle {
     )
 
     fun render(name: String, style: Style): Component {
+        if (style.tag == null && !style.donator && style.gradient == null) {
+            return if (style.color != null) Paint.rgb(style.color)(name) else style.rankColor(name)
+        }
         val rendered = Component.empty()
         style.tag?.let { rendered.append(Paint.white(it, " ")) }
         if (style.donator) rendered.append(Paint.gold("✦ "))
