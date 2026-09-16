@@ -1,7 +1,5 @@
 package eu.mctraveler.store
 
-import eu.mctraveler.mixin.EntityInvulnerableAccessor
-import eu.mctraveler.mixin.EntityPermanentlyInvulnerableAccessor
 import eu.mctraveler.mixin.StoreFrameAccessor
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.entity.decoration.ItemFrame
@@ -39,12 +37,6 @@ object StoreFrames {
     fun isMarked(frame: ItemFrame): Boolean = frame.entityTags().contains(TAG)
 
     private fun setInvulnerable(frame: ItemFrame, value: Boolean) {
-        when {
-            frame is EntityInvulnerableAccessor ->
-                frame.`mctraveler$setInvulnerable`(value)
-            frame is EntityPermanentlyInvulnerableAccessor ->
-                frame.`mctraveler$setPermanentlyInvulnerable`(value)
-            else -> error("Entity invulnerability accessor was not applied")
-        }
+        (frame as EntityInvulnerabilityAccessor).`mctraveler$setInvulnerable`(value)
     }
 }
