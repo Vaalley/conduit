@@ -81,6 +81,16 @@ object EconomyFeature {
                     Commands.literal("history")
                         .executes { ctx -> history(ctx, null, 1) }
                         .then(
+                            Commands.argument("page", IntegerArgumentType.integer(1))
+                                .executes { ctx ->
+                                    history(
+                                        ctx,
+                                        null,
+                                        IntegerArgumentType.getInteger(ctx, "page"),
+                                    )
+                                },
+                        )
+                        .then(
                             Commands.argument("player", GameProfileArgument.gameProfile())
                                 .suggests(players)
                                 .executes { ctx -> history(ctx, profile(ctx), 1) }
@@ -95,16 +105,6 @@ object EconomyFeature {
                                         },
                                 ),
                         )
-                        .then(
-                            Commands.argument("page", IntegerArgumentType.integer(1))
-                                .executes { ctx ->
-                                    history(
-                                        ctx,
-                                        null,
-                                        IntegerArgumentType.getInteger(ctx, "page"),
-                                    )
-                                },
-                        ),
                 )
                 .then(
                     Commands.argument("player", GameProfileArgument.gameProfile())
