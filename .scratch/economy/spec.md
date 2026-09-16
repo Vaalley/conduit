@@ -26,6 +26,12 @@ should be optional conveniences, never gates on core gameplay.
   bounty into their balance. Stamps are already idempotent achievements
   (`Stamps.grant` returns null when already held), so this cannot be farmed.
   Details in "Faucets" below; tier amounts are still open.
+- **Starting balance on first join** — AGREED. A new player never starts at $0.
+  Amount `$TBD`.
+- **Store creation fee** — AGREED. `/store create` charges the creator a flat fee.
+  Amount `$TBD`.
+- **Amounts**: Valley will fill in every `$TBD` (and the stamp tier table) after
+  reviewing this file; the numbers below are placeholders until then.
 
 ## Faucets
 
@@ -59,9 +65,15 @@ should be optional conveniences, never gates on core gameplay.
 - Pro: fair, predictable, gives day-one spending money. Con: steady inflation
   source; needs a cap or diminishing returns per day to stay tame.
 
-### 3. Welcome bonus (idea)
+### 3. Starting balance on first join (agreed, amount TBD)
 
-- $100 on first join (rank Newbie). Trivial to implement via `firstJoin`.
+- Deposit `$TBD` the first time a player joins. Hook: the same first-join path
+  that records `PlayerStore.firstJoin` (Newbie rank onboarding), guarded so it
+  only fires when `firstJoin` was previously unset — never on returning players.
+- Existing players who already have a `balance` field are untouched; players with
+  a first-join timestamp but no balance field get nothing (they are not new).
+  (OPEN — or grant it to everyone lacking a balance on next login?)
+- Chat: `BALANCE Welcome! You start with $TBD` on join.
 
 ### 4. Admin / event grants (exists)
 
@@ -77,13 +89,24 @@ should be optional conveniences, never gates on core gameplay.
 - **Per-block / per-mob-kill payouts** — rewards AFK and auto farms; inflates
   hardest. Stamps already reward these milestones once.
 
-## Sinks (ideas, none agreed)
+## Sinks
+
+### 1. Store creation fee (agreed, amount TBD)
+
+- `/store create <price>` withdraws a flat `$TBD` from the creator *after* all
+  validation passes (frame present, has item, not already a store, region allows)
+  and before the frame is locked — insufficient funds → `ERROR You need $TBD to
+  create a store (you have $X)` and nothing changes.
+- Not refunded on `/store delete` (it is a sink, and refunds would make frame spam
+  free again). Admins pay too unless we decide otherwise. (OPEN)
+- Creation message gains the fee: `STORE Store created (-$TBD) — selling ...`.
+
+### Ideas (not agreed)
 
 - `/rtp` skip-cooldown fee.
 - Extra crystal Energy refill.
 - `/region extend` beyond the free 5000-block quota (paid quota bump instead of
   asking an admin).
-- Store-creation fee (e.g. $50) to discourage frame spam.
 - Cosmetics: sign colours for non-donators, `/cat` variants, tablist flair.
 - Postcard sending fee (small, thematic).
 
@@ -91,6 +114,8 @@ should be optional conveniences, never gates on core gameplay.
 
 - Final tier amounts and stamp → tier assignment (table above is a first draft).
 - Retroactive payout for already-held stamps: (a) none vs (b) pay on next login.
+- Starting balance for existing players who have no `balance` field yet.
+- Should admins be exempt from the store creation fee? Refund on delete? (leaning no/no)
 - Where the payout shows in chat (inline with the stamp line vs separate).
 - Whether any sink ships together with stamp bounties, or later.
 - Should `/balance top` (leaderboard) exist?
@@ -104,3 +129,5 @@ should be optional conveniences, never gates on core gameplay.
 
 - 2026-09-16 — Plan started after #36. Stamp bounties agreed in principle by
   Valley; everything else is a proposal.
+- 2026-09-16 — Store creation fee (sink) and first-join starting balance (faucet)
+  agreed; all amounts deferred to Valley's review (`$TBD`).
