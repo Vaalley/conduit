@@ -4,6 +4,8 @@ import java.util.UUID
 
 object Reasons {
     const val JOIN_BONUS = "join-bonus"
+    const val FEE_STORE_CREATE = "fee:store-create"
+    const val FEE_STORE_UPGRADE = "fee:store-upgrade"
 
     fun pay(other: UUID): String = "pay:$other"
 
@@ -14,6 +16,8 @@ object Reasons {
     fun admin(sender: UUID): String = "admin:$sender"
 
     fun anniversary(year: Int): String = "anniversary:$year"
+
+    fun buyOrder(frame: UUID): String = "buy-order:$frame"
 
     fun isTransfer(reason: String): Boolean =
         reason.startsWith("pay:") ||

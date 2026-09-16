@@ -47,6 +47,9 @@ class StoreService(private val file: Path) {
                     add("item", record.item.deepCopy())
                     addProperty("pricePerItem", record.pricePerItem)
                     addProperty("stock", record.stock)
+                    addProperty("rows", record.rows)
+                    addProperty("kind", record.kind.name)
+                    record.wanted?.let { addProperty("wanted", it) }
                 },
             )
         }
@@ -66,6 +69,11 @@ class StoreService(private val file: Path) {
                 item = json.get("item").deepCopy(),
                 pricePerItem = json.get("pricePerItem").asLong,
                 stock = json.get("stock").asInt,
+                rows = json.get("rows")?.asInt ?: 3,
+                kind = json.get("kind")?.asString?.let {
+                    runCatching { StoreKind.valueOf(it) }.getOrDefault(StoreKind.SELL)
+                } ?: StoreKind.SELL,
+                wanted = json.get("wanted")?.asInt,
             )
             this.stores[record.frameId] = record
         }

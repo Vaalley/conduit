@@ -2,10 +2,12 @@ package eu.mctraveler.store
 
 import com.mojang.brigadier.Command
 import com.mojang.brigadier.CommandDispatcher
+import com.mojang.brigadier.arguments.IntegerArgumentType
 import com.mojang.brigadier.arguments.LongArgumentType
 import com.mojang.brigadier.context.CommandContext
 import eu.mctraveler.MCTraveler
 import eu.mctraveler.economy.Economy
+import eu.mctraveler.economy.Reasons
 import eu.mctraveler.region.RegionProtection
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.text.Paint
@@ -66,6 +68,8 @@ object StoreFeature {
                     if (player is ServerPlayer) {
                         if (record.owner == player.uuid || RegionsFeature.isAdmin(player)) {
                             StoreMenus.openStock(player, record)
+                        } else if (record.kind == StoreKind.BUY) {
+                            StoreMenus.openSell(player, record)
                         } else {
                             StoreMenus.openBuy(player, record)
                         }
@@ -81,7 +85,9 @@ object StoreFeature {
                 InteractionResult.PASS
             }
         }
-        RegionProtection.exemptMenu { it is StoreMenus.StockMenu || it is StoreMenus.BuyMenu }
+        RegionProtection.exemptMenu {
+            it is StoreMenus.StockMenu || it is StoreMenus.BuyMenu || it is StoreMenus.SellMenu
+        }
     }
 
     fun recordItem(player: ServerPlayer, record: StoreRecord): ItemStack =
@@ -90,13 +96,43 @@ object StoreFeature {
     private fun registerCommands(dispatcher: CommandDispatcher<CommandSourceStack>) {
         dispatcher.register(
             Commands.literal("store")
-                .executes { context -> reply(context) { Paint.usage("/store create <price> or /store delete") } }
+                .executes {
+                    reply(it) { Paint.usage("/store create <price>, /store buy <price> [max], /store upgrade, or /store delete") }
+                }
                 .then(
                     Commands.literal("create")
                         .then(
                             Commands.argument("price", LongArgumentType.longArg(1))
-                                .executes { context -> reply(context) { create(it, price(context)) } },
+                                .executes { context ->
+                                    reply(context) { create(it, price(context), StoreKind.SELL, null) }
+                                },
                         ),
+                )
+                .then(
+                    Commands.literal("buy")
+                        .then(
+                            Commands.argument("price", LongArgumentType.longArg(1))
+                                .executes { context ->
+                                    reply(context) { create(it, price(context), StoreKind.BUY, null) }
+                                }
+                                .then(
+                                    Commands.argument("max", IntegerArgumentType.integer(1))
+                                        .executes { context ->
+                                            reply(context) {
+                                                create(
+                                                    it,
+                                                    price(context),
+                                                    StoreKind.BUY,
+                                                    IntegerArgumentType.getInteger(context, "max"),
+                                                )
+                                            }
+                                        },
+                                ),
+                        ),
+                )
+                .then(
+                    Commands.literal("upgrade")
+                        .executes { context -> reply(context) { upgrade(it) } },
                 )
                 .then(
                     Commands.literal("delete")
@@ -105,7 +141,7 @@ object StoreFeature {
         )
     }
 
-    private fun create(player: ServerPlayer, price: Long): Component {
+    private fun create(player: ServerPlayer, price: Long, kind: StoreKind, wanted: Int?): Component {
         val frame = StoreFrames.lookedAtFrame(player)
             ?: return Paint.error("You need to look at an item frame")
         val item = frame.item
@@ -115,6 +151,17 @@ object StoreFeature {
         }
         if (!RegionProtection.allowsEntityInteract(player, InteractionHand.MAIN_HAND, frame)) {
             return Paint.error("You can't create a store here")
+        }
+        val persistence = MCTraveler.persistence
+            ?: return Paint.error("The economy is unavailable")
+        if (!persistence.economy.withdraw(player.uuid, StoreFees.CREATE, Reasons.FEE_STORE_CREATE)) {
+            return Paint.error(
+                "You need ",
+                Economy.format(StoreFees.CREATE),
+                " to create a store (you have ",
+                Economy.format(persistence.economy.balanceOf(player.uuid)),
+                ")",
+            )
         }
         StoreFrames.mark(frame)
         requireService().add(
@@ -126,15 +173,57 @@ object StoreFeature {
                 item = StoreCodec.encode(player, item),
                 pricePerItem = price,
                 stock = 0,
+                kind = kind,
+                wanted = wanted,
             ),
         )
-        return Paint.store(
-            "Store created — selling ",
-            item.hoverName,
-            " for ",
-            Economy.format(price),
-            " each. Right-click it to add stock.",
-        )
+        return if (kind == StoreKind.BUY) {
+            Paint.store(
+                "Store created (-",
+                Economy.format(StoreFees.CREATE),
+                ") — buying ",
+                item.hoverName,
+                " for ",
+                Economy.format(price),
+                " each",
+                wanted?.let { " (up to $it)" } ?: "",
+                ".",
+            )
+        } else {
+            Paint.store(
+                "Store created (-",
+                Economy.format(StoreFees.CREATE),
+                ") — selling ",
+                item.hoverName,
+                " for ",
+                Economy.format(price),
+                " each. Right-click it to add stock.",
+            )
+        }
+    }
+
+    private fun upgrade(player: ServerPlayer): Component {
+        val frame = StoreFrames.lookedAtFrame(player)
+            ?: return Paint.error("You need to look at a store")
+        val record = requireService().byFrame(frame.uuid)
+            ?: return Paint.error("You need to look at a store")
+        if (record.owner != player.uuid && !RegionsFeature.isAdmin(player)) {
+            return Paint.error("This isn't your store")
+        }
+        if (record.rows >= 6) return Paint.error("This store is already upgraded")
+        val persistence = MCTraveler.persistence
+            ?: return Paint.error("The economy is unavailable")
+        if (!persistence.economy.withdraw(player.uuid, StoreFees.UPGRADE, Reasons.FEE_STORE_UPGRADE)) {
+            return Paint.error(
+                "You need ",
+                Economy.format(StoreFees.UPGRADE),
+                " to upgrade this store (you have ",
+                Economy.format(persistence.economy.balanceOf(player.uuid)),
+                ")",
+            )
+        }
+        requireService().add(record.copy(rows = 6))
+        return Paint.store("Store upgraded to 54 slots (-", Economy.format(StoreFees.UPGRADE), ")")
     }
 
     private fun delete(player: ServerPlayer): Component {
