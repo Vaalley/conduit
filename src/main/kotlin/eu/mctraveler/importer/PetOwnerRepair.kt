@@ -2,6 +2,7 @@ package eu.mctraveler.importer
 
 import eu.mctraveler.MCTraveler
 import eu.mctraveler.mixin.AbstractHorseOwnerAccessor
+import eu.mctraveler.persistence.NameCache
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EntityReference
@@ -34,13 +35,13 @@ object PetOwnerRepair {
 
     /** Replaces an imported offline owner reference, returning whether it did. */
     fun repair(entity: Entity): Boolean {
-        val names = MCTraveler.persistence?.names?.entries() ?: return false
-        val owners = ownersFor(names)
         val reference = when (entity) {
             is TamableAnimal -> entity.ownerReference
             is AbstractHorse -> entity.ownerReference
             else -> return false
         } ?: return false
+        val names = MCTraveler.persistence?.names ?: return false
+        val owners = ownersFor(names)
         val offline = reference.uuid
         val real = owners[offline] ?: return false
 
@@ -59,11 +60,10 @@ object PetOwnerRepair {
         return true
     }
 
-    private fun ownersFor(names: Map<UUID, String>): Map<UUID, UUID> {
+    private fun ownersFor(names: NameCache): Map<UUID, UUID> {
         if (names.size != cachedSize) {
-            cachedOwners = names.entries.mapNotNull { (uuid, username) ->
-                val offline = OfflineUuid.of(username)
-                realOwnerFor(offline, names)?.let { real -> offline to real }
+            cachedOwners = names.entries().entries.mapNotNull { (uuid, name) ->
+                OfflineUuid.of(name).takeIf { it != uuid }?.let { it to uuid }
             }.toMap()
             cachedSize = names.size
         }

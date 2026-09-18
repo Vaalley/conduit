@@ -36,6 +36,8 @@ class NameCache(private val file: Path) {
     fun entries(): Map<UUID, String> =
         names.entries.associate { (uuid, username) -> UUID.fromString(uuid) to username }
 
+    val size: Int get() = names.size
+
     /** Remember [username] as [uuid]'s name, replacing any previous name. */
     fun record(uuid: UUID, username: String) {
         val key = uuid.toString()
