@@ -144,13 +144,7 @@ object EconomyFeature {
 
         dispatcher.register(
             Commands.literal("economy")
-                .then(Commands.literal("stats").executes { ctx -> stats(ctx.source.playerOrException) })
-                .then(adminMutation("set", 0) { target, value, sender ->
-                    economy().set(target, value, Reasons.admin(sender.uuid))
-                })
-                .then(adminMutation("give", 1) { target, value, sender ->
-                    economy().deposit(target, value, Reasons.admin(sender.uuid))
-                }),
+                .then(Commands.literal("stats").executes { ctx -> stats(ctx.source.playerOrException) }),
         )
     }
 
