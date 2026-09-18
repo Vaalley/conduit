@@ -984,6 +984,27 @@ class RegionProtectionGameTest {
     }
 
     @GameTest
+    fun anOwnerStandsUpTheirSittingWolfInsideTheirOwnRegion(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T14WolfSitA")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        val wolf = helper.spawnWithNoFreeWill(EntityTypes.WOLF, BlockPos(2, 2, 2))
+        wolf.tame(alice)
+        wolf.setOrderedToSit(true)
+        alice.standAt(helper, 2.0, 2.0, 1.0)
+        alice.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY)
+        alice.messages.clear()
+
+        val gate = net.fabricmc.fabric.api.event.player.UseEntityCallback.EVENT.invoker()
+            .interact(alice, helper.level, InteractionHand.MAIN_HAND, wolf, net.minecraft.world.phys.EntityHitResult(wolf))
+        helper.assertTrue(gate == InteractionResult.PASS, "the owner's empty-hand click was gated: $gate")
+        val result = alice.interactOn(wolf, InteractionHand.MAIN_HAND, wolf.position())
+        helper.assertTrue(result.consumesAction(), "the owner's click did not consume: $result")
+        helper.assertFalse(wolf.isOrderedToSit, "the owner's sitting wolf was not told to stand")
+        alice.leave()
+        helper.succeed()
+    }
+
+    @GameTest
     fun aNonMemberCannotInteractWithSomeoneElsesTamedWolf(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T14WolfOtherA")
         val bob = MessageCapturingPlayer.join(helper, "T14WolfOtherB")

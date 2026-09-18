@@ -47,7 +47,8 @@
       "eu.mctraveler.gametest.RankGameTest",
       "eu.mctraveler.gametest.SignNameTokenGameTest",
       "eu.mctraveler.gametest.RtpGameTest",
-      "eu.mctraveler.gametest.DragonFightGameTest"
+      "eu.mctraveler.gametest.DragonFightGameTest",
+      "eu.mctraveler.gametest.PetOwnerRepairGameTest"
     ],
     "server": [
       {
