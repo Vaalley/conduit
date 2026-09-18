@@ -10,7 +10,7 @@ class StampsTest {
         assertEquals(11, Stamps.ALL.count { it.tier == StampTier.UNCOMMON })
         assertEquals(16, Stamps.ALL.count { it.tier == StampTier.RARE })
         assertEquals(5, Stamps.ALL.count { it.tier == StampTier.EPIC })
-        assertEquals(1580L, Stamps.totalBounty())
+        assertEquals(158_000L, Stamps.totalBounty())
     }
 
     @Test

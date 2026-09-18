@@ -4,6 +4,7 @@ import com.google.gson.GsonBuilder
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import eu.mctraveler.economy.Economy
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
@@ -45,7 +46,7 @@ class StoreService(private val file: Path) {
                     addProperty("y", record.pos.y)
                     addProperty("z", record.pos.z)
                     add("item", record.item.deepCopy())
-                    addProperty("pricePerItem", record.pricePerItem)
+                    addProperty("pricePerItem", Economy.toDecimal(record.pricePerItem))
                     addProperty("stock", record.stock)
                     addProperty("rows", record.rows)
                     addProperty("kind", record.kind.name)
@@ -67,7 +68,7 @@ class StoreService(private val file: Path) {
                 dimension = json.get("dimension").asString,
                 pos = BlockPos(json.get("x").asInt, json.get("y").asInt, json.get("z").asInt),
                 item = json.get("item").deepCopy(),
-                pricePerItem = json.get("pricePerItem").asLong,
+                pricePerItem = Economy.fromDecimal(json.get("pricePerItem").asBigDecimal),
                 stock = json.get("stock").asInt,
                 rows = json.get("rows")?.asInt ?: 3,
                 kind = json.get("kind")?.asString?.let {

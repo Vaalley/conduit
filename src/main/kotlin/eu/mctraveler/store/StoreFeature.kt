@@ -3,7 +3,7 @@ package eu.mctraveler.store
 import com.mojang.brigadier.Command
 import com.mojang.brigadier.CommandDispatcher
 import com.mojang.brigadier.arguments.IntegerArgumentType
-import com.mojang.brigadier.arguments.LongArgumentType
+import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.context.CommandContext
 import eu.mctraveler.MCTraveler
 import eu.mctraveler.economy.Economy
@@ -102,18 +102,26 @@ object StoreFeature {
                 .then(
                     Commands.literal("create")
                         .then(
-                            Commands.argument("price", LongArgumentType.longArg(1))
+                            Commands.argument("price", StringArgumentType.word())
                                 .executes { context ->
-                                    reply(context) { create(it, price(context), StoreKind.SELL, null) }
+                                    reply(context) {
+                                        val value = price(context)
+                                            ?: return@reply Paint.error("Amount must be a number like 12.50")
+                                        create(it, value, StoreKind.SELL, null)
+                                    }
                                 },
                         ),
                 )
                 .then(
                     Commands.literal("buy")
                         .then(
-                            Commands.argument("price", LongArgumentType.longArg(1))
+                            Commands.argument("price", StringArgumentType.word())
                                 .executes { context ->
-                                    reply(context) { create(it, price(context), StoreKind.BUY, null) }
+                                    reply(context) {
+                                        val value = price(context)
+                                            ?: return@reply Paint.error("Amount must be a number like 12.50")
+                                        create(it, value, StoreKind.BUY, null)
+                                    }
                                 }
                                 .then(
                                     Commands.argument("max", IntegerArgumentType.integer(1))
@@ -121,7 +129,8 @@ object StoreFeature {
                                             reply(context) {
                                                 create(
                                                     it,
-                                                    price(context),
+                                                    price(context)
+                                                        ?: return@reply Paint.error("Amount must be a number like 12.50"),
                                                     StoreKind.BUY,
                                                     IntegerArgumentType.getInteger(context, "max"),
                                                 )
@@ -246,8 +255,8 @@ object StoreFeature {
         return Paint.store("Store deleted, ", record.stock, " items dropped")
     }
 
-    private fun price(context: CommandContext<CommandSourceStack>): Long =
-        LongArgumentType.getLong(context, "price")
+    private fun price(context: CommandContext<CommandSourceStack>): Long? =
+        Economy.parseAmount(StringArgumentType.getString(context, "price"), 1)
 
     private inline fun reply(
         context: CommandContext<CommandSourceStack>,

@@ -4,7 +4,6 @@ import com.mojang.authlib.GameProfile
 import com.mojang.brigadier.Command
 import com.mojang.brigadier.CommandDispatcher
 import com.mojang.brigadier.arguments.IntegerArgumentType
-import com.mojang.brigadier.arguments.LongArgumentType
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.context.CommandContext
 import com.mojang.brigadier.suggestion.SuggestionProvider
@@ -131,10 +130,12 @@ object EconomyFeature {
                     Commands.argument("player", StringArgumentType.word())
                         .suggests(players)
                         .then(
-                            Commands.argument("amount", LongArgumentType.longArg(1))
+                            Commands.argument("amount", StringArgumentType.word())
                                 .executes { ctx ->
                                     reply(ctx) {
-                                        pay(it, StringArgumentType.getString(ctx, "player"), amount(ctx))
+                                        val value = amount(ctx, 1)
+                                            ?: return@reply Paint.error("Amount must be a number like 12.50")
+                                        pay(it, StringArgumentType.getString(ctx, "player"), value)
                                     }
                                 },
                         ),
@@ -143,7 +144,13 @@ object EconomyFeature {
 
         dispatcher.register(
             Commands.literal("economy")
-                .then(Commands.literal("stats").executes { ctx -> stats(ctx.source.playerOrException) }),
+                .then(Commands.literal("stats").executes { ctx -> stats(ctx.source.playerOrException) })
+                .then(adminMutation("set", 0) { target, value, sender ->
+                    economy().set(target, value, Reasons.admin(sender.uuid))
+                })
+                .then(adminMutation("give", 1) { target, value, sender ->
+                    economy().deposit(target, value, Reasons.admin(sender.uuid))
+                }),
         )
     }
 
@@ -155,12 +162,13 @@ object EconomyFeature {
         Commands.argument("player", GameProfileArgument.gameProfile())
             .suggests(players)
             .then(
-                Commands.argument("amount", LongArgumentType.longArg(minimum))
+                Commands.argument("amount", StringArgumentType.word())
                     .executes { ctx ->
                         reply(ctx) { sender ->
                             val target = profile(ctx) ?: return@reply Paint.error("Player not found")
                             RegionsFeature.adminGate(sender)?.let { return@reply it }
-                            val value = amount(ctx)
+                            val value = amount(ctx, minimum)
+                                ?: return@reply Paint.error("Amount must be a number like 12.50")
                             mutation(target.id(), value, sender)
                             if (literal == "set") {
                                 Paint.success(target.name(), " now has ", Economy.format(value))
@@ -180,7 +188,7 @@ object EconomyFeature {
             val persistence = MCTraveler.persistence ?: continue
             try {
                 if (pending.missingBalance || persistence.players.balance(uuid) == null) {
-                    persistence.economy.deposit(uuid, 100, Reasons.JOIN_BONUS)
+                    persistence.economy.deposit(uuid, Economy.dollars(100), Reasons.JOIN_BONUS)
                 }
                 val firstJoin = persistence.players.firstJoin(uuid)
                     ?: persistence.passports.get(uuid)?.firstJoin
@@ -330,8 +338,8 @@ object EconomyFeature {
     private fun profile(context: CommandContext<CommandSourceStack>): NameAndId? =
         runCatching { GameProfileArgument.getGameProfiles(context, "player").firstOrNull() }.getOrNull()
 
-    private fun amount(context: CommandContext<CommandSourceStack>): Long =
-        LongArgumentType.getLong(context, "amount")
+    private fun amount(context: CommandContext<CommandSourceStack>, minimum: Long): Long? =
+        Economy.parseAmount(StringArgumentType.getString(context, "amount"), minimum)
 
     private fun ordinal(year: Int): String =
         when {

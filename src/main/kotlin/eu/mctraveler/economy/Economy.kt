@@ -2,6 +2,8 @@ package eu.mctraveler.economy
 
 import java.util.UUID
 import eu.mctraveler.persistence.PlayerStore
+import java.math.BigDecimal
+import java.math.RoundingMode
 
 class Economy(
     private val players: PlayerStore,
@@ -45,6 +47,28 @@ class Economy(
     }
 
     companion object {
-        fun format(amount: Long): String = "$$amount"
+        fun format(cents: Long): String {
+            val value = BigDecimal.valueOf(cents, 2).setScale(2)
+            return if (value.signum() < 0) "-$${value.abs().toPlainString()}" else "$${value.toPlainString()}"
+        }
+
+        fun dollars(whole: Long): Long = whole * 100
+
+        fun toDecimal(cents: Long): BigDecimal = BigDecimal.valueOf(cents, 2)
+
+        fun fromDecimal(value: BigDecimal): Long =
+            value.movePointRight(2).setScale(0, RoundingMode.HALF_UP).longValueExact()
+
+        fun parseAmount(text: String): Long? =
+            try {
+                fromDecimal(BigDecimal(text))
+            } catch (_: NumberFormatException) {
+                null
+            } catch (_: ArithmeticException) {
+                null
+            }
+
+        fun parseAmount(text: String, minimum: Long): Long? =
+            parseAmount(text)?.takeIf { it >= minimum }
     }
 }

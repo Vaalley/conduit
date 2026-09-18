@@ -1,6 +1,8 @@
 package eu.mctraveler.persistence
 
 import eu.mctraveler.MCTraveler
+import eu.mctraveler.economy.Economy
+import java.math.BigDecimal
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.BasicFileAttributes
@@ -37,11 +39,18 @@ import java.util.UUID
  */
 class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
 
-    override fun balance(uuid: UUID): Long? = readDouble(uuid, BALANCE)?.toLong()
+    override fun balance(uuid: UUID): Long? =
+        read(uuid)[BALANCE]?.let { field ->
+            try {
+                Economy.fromDecimal(BigDecimal(field.rawValue))
+            } catch (failure: NumberFormatException) {
+                throw IllegalArgumentException("\"$BALANCE\" is not a number: ${field.rawValue}", failure)
+            }
+        }
 
     override fun setBalance(uuid: UUID, amount: Long) {
         require(amount >= 0) { "balance must be non-negative" }
-        write(uuid, BALANCE, amount.toString())
+        write(uuid, BALANCE, Economy.toDecimal(amount).toPlainString())
     }
 
     override fun allBalances(): Map<UUID, Long> {

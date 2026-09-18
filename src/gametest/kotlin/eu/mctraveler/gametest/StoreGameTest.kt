@@ -2,6 +2,7 @@ package eu.mctraveler.gametest
 
 import com.google.gson.JsonParser
 import eu.mctraveler.MCTraveler
+import eu.mctraveler.economy.Economy
 import eu.mctraveler.store.StoreFeature
 import eu.mctraveler.store.StoreFrames
 import eu.mctraveler.store.StoreLadder
@@ -37,7 +38,7 @@ class StoreGameTest {
                 player.runCommand("store create 10")
                 helper.assertValueEqual(
                     player.messages.last().string,
-                    Paint.error("You need $20 to create a store (you have $0)").string,
+                    Paint.error("You need $20.00 to create a store (you have $0.00)").string,
                     "creation fee refusal",
                 )
                 helper.assertTrue(StoreFeature.requireService().byFrame(frame.uuid) == null, "store was created without funds")
@@ -59,19 +60,19 @@ class StoreGameTest {
         helper.runAfterDelay(1) {
             try {
                 val persistence = checkNotNull(MCTraveler.persistence)
-                persistence.economy.set(player.uuid, 25, "test")
+                persistence.economy.set(player.uuid, Economy.dollars(25), "test")
                 faceFrame(player, frame)
-                player.runCommand("store create 10")
+                player.runCommand("store create 0.05")
                 val record = checkNotNull(StoreFeature.requireService().byFrame(frame.uuid))
-                helper.assertValueEqual(persistence.economy.balanceOf(player.uuid), 5L, "creation fee balance")
+                helper.assertValueEqual(persistence.economy.balanceOf(player.uuid), Economy.dollars(5), "creation fee balance")
                 helper.assertTrue(
                     persistence.ledger.read(player.uuid).any {
-                        it.reason == "fee:store-create" && it.delta == -20L
+                        it.reason == "fee:store-create" && it.delta == -Economy.dollars(20)
                     },
                     "creation fee was not logged",
                 )
                 helper.assertTrue(StoreFrames.isMarked(frame), "created frame was not marked")
-                helper.assertValueEqual(record.pricePerItem, 10L, "created store price")
+                helper.assertValueEqual(record.pricePerItem, 5L, "created store price")
                 helper.succeed()
             } finally {
                 StoreFeature.requireService().remove(frame.uuid)
@@ -89,7 +90,7 @@ class StoreGameTest {
         helper.runAfterDelay(1) {
             try {
                 val persistence = checkNotNull(MCTraveler.persistence)
-                persistence.economy.set(player.uuid, 20, "test")
+                persistence.economy.set(player.uuid, Economy.dollars(20), "test")
                 val record = record(player, frame, stock = 0)
                 StoreFeature.requireService().add(record)
                 StoreFrames.mark(frame)
@@ -97,7 +98,11 @@ class StoreGameTest {
                 player.runCommand("store upgrade")
                 val upgraded = checkNotNull(StoreFeature.requireService().byFrame(frame.uuid))
                 helper.assertValueEqual(upgraded.rows, 6, "upgraded rows")
-                helper.assertValueEqual(persistence.economy.balanceOf(player.uuid), 5L, "upgrade fee balance")
+                helper.assertValueEqual(
+                    persistence.economy.balanceOf(player.uuid),
+                    Economy.dollars(5),
+                    "upgrade fee balance",
+                )
                 helper.succeed()
             } finally {
                 StoreFeature.requireService().remove(frame.uuid)
@@ -117,7 +122,7 @@ class StoreGameTest {
         helper.runAfterDelay(1) {
             try {
                 val persistence = checkNotNull(MCTraveler.persistence)
-                persistence.economy.set(owner.uuid, 100, "test")
+                persistence.economy.set(owner.uuid, Economy.dollars(100), "test")
                 persistence.economy.set(seller.uuid, 0, "test")
                 faceFrame(owner, frame)
                 owner.runCommand("store buy 2 10")
@@ -129,8 +134,16 @@ class StoreGameTest {
                 helper.runAfterDelay(1) {
                     try {
                         val updated = checkNotNull(StoreFeature.requireService().byFrame(frame.uuid))
-                        helper.assertValueEqual(persistence.economy.balanceOf(seller.uuid), 8L, "seller payment")
-                        helper.assertValueEqual(persistence.economy.balanceOf(owner.uuid), 72L, "buyer payment")
+                        helper.assertValueEqual(
+                            persistence.economy.balanceOf(seller.uuid),
+                            Economy.dollars(8),
+                            "seller payment",
+                        )
+                        helper.assertValueEqual(
+                            persistence.economy.balanceOf(owner.uuid),
+                            Economy.dollars(72),
+                            "buyer payment",
+                        )
                         helper.assertValueEqual(updated.stock, 4, "buy-order stock")
                         helper.assertValueEqual(
                             seller.inventory.getNonEquipmentItems()

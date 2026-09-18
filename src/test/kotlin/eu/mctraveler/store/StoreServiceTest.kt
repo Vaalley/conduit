@@ -1,6 +1,7 @@
 package eu.mctraveler.store
 
 import com.google.gson.JsonParser
+import eu.mctraveler.economy.Economy
 import java.nio.file.Path
 import java.util.UUID
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -24,13 +25,14 @@ class StoreServiceTest {
             "minecraft:overworld",
             BlockPos(1, 2, 3),
             JsonParser.parseString("""{"id":"minecraft:diamond","count":1}"""),
-            10,
+            5,
             20,
             6,
             StoreKind.BUY,
             30,
         )
         StoreService(file).add(record)
+        assertEquals(true, file.toFile().readText().contains("\"pricePerItem\": 0.05"))
         val loaded = StoreService(file).byFrame(frame)
         assertNotNull(loaded)
         assertEquals(record, loaded)
@@ -50,15 +52,35 @@ class StoreServiceTest {
               "dimension":"minecraft:overworld",
               "x":1,"y":2,"z":3,
               "item":{"id":"minecraft:diamond","count":1},
-              "pricePerItem":10,
+              "pricePerItem":5,
               "stock":20
             }]}
             """.trimIndent(),
         )
         val loaded = checkNotNull(StoreService(dir.resolve("stores.json")).byFrame(frame))
+        assertEquals(Economy.dollars(5), loaded.pricePerItem)
         assertEquals(3, loaded.rows)
         assertEquals(StoreKind.SELL, loaded.kind)
         assertNull(loaded.wanted)
+    }
+
+    @Test
+    fun `decimal cents prices round trip`() {
+        val file = dir.resolve("stores.json")
+        val frame = UUID.randomUUID()
+        StoreService(file).add(
+            StoreRecord(
+                frame,
+                UUID.randomUUID(),
+                "minecraft:overworld",
+                BlockPos(1, 2, 3),
+                JsonParser.parseString("""{"id":"minecraft:diamond","count":1}"""),
+                5,
+                0,
+            ),
+        )
+        assertEquals(5L, checkNotNull(StoreService(file).byFrame(frame)).pricePerItem)
+        assertEquals(true, file.toFile().readText().contains("\"pricePerItem\": 0.05"))
     }
 
     @Test
