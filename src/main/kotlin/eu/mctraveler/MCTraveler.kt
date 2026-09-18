@@ -69,6 +69,7 @@ object MCTraveler : ModInitializer {
         }
         NotepadFeature.register()
         eu.mctraveler.importer.OrphanedSaveClaimFeature.register()
+        eu.mctraveler.importer.PetOwnerRepair.register()
         eu.mctraveler.worlds.WorldsFeature.register()
         RegionsFeature.register()
         EmbassiesFeature.register()
