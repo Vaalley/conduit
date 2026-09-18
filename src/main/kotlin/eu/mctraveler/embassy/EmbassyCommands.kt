@@ -5,6 +5,7 @@ import com.mojang.brigadier.CommandDispatcher
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.context.CommandContext
 import eu.mctraveler.region.Region
+import eu.mctraveler.region.RegionFlags
 import eu.mctraveler.region.RegionTracker
 import eu.mctraveler.region.RegionWorlds
 import eu.mctraveler.region.RegionsFeature
@@ -93,6 +94,7 @@ object EmbassyCommands {
             // wrote and what the store omits.
         )
         region.members.add(player.uuid)
+        RegionFlags.seedDefaults(region)
         region.flags.add(Region.EMBASSY_FLAG)
         region.metadata[EmbassyDestination.KEY] = EmbassyDestination.at(player).toJson()
         RegionsFeature.requireService().add(region, parent = null)
