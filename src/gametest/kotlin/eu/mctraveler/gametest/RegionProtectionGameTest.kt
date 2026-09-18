@@ -1,5 +1,6 @@
 package eu.mctraveler.gametest
 
+import eu.mctraveler.region.RegionProtection
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.text.Paint
 import net.fabricmc.fabric.api.gametest.v1.GameTest
@@ -953,6 +954,54 @@ class RegionProtectionGameTest {
         helper.assertFalse(wolf.doHurtTarget(helper.level, cow), "a tamed wolf hurt a protected animal")
         helper.assertValueEqual(cow.health, cow.maxHealth, "a tamed wolf damaged a protected animal")
         helper.assertTrue(bob.wasRefusedBy("T14WolfA's Place"), "the tamed-wolf damage emitted no refusal")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun anOwnerMayInteractWithTheirTamedWolfInsideAProtectedRegion(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T14WolfOwnA")
+        val bob = MessageCapturingPlayer.join(helper, "T14WolfOwnB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        val wolf = helper.spawnWithNoFreeWill(EntityTypes.WOLF, BlockPos(2, 2, 2))
+        wolf.tame(bob)
+        bob.standAt(helper, 2.0, 2.0, 1.0)
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.BONE))
+        bob.messages.clear()
+
+        helper.assertTrue(
+            RegionProtection.allowsEntityInteract(bob, InteractionHand.MAIN_HAND, wolf),
+            "a pet owner was refused their own wolf",
+        )
+        helper.assertFalse(
+            bob.wasRefusedBy("T14WolfOwnA's Place"),
+            "the pet owner's interaction emitted a refusal",
+        )
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aNonMemberCannotInteractWithSomeoneElsesTamedWolf(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T14WolfOtherA")
+        val bob = MessageCapturingPlayer.join(helper, "T14WolfOtherB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        val wolf = helper.spawnWithNoFreeWill(EntityTypes.WOLF, BlockPos(2, 2, 2))
+        wolf.tame(alice)
+        bob.standAt(helper, 2.0, 2.0, 1.0)
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.BONE))
+        bob.messages.clear()
+
+        helper.assertFalse(
+            RegionProtection.allowsEntityInteract(bob, InteractionHand.MAIN_HAND, wolf),
+            "a non-member interacted with someone else's wolf",
+        )
+        helper.assertTrue(
+            bob.wasRefusedBy("T14WolfOtherA's Place"),
+            "the non-member's pet interaction emitted no refusal",
+        )
         alice.leave()
         bob.leave()
         helper.succeed()

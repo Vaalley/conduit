@@ -767,6 +767,7 @@ object RegionProtection {
      *   and refuses everything else (it is not ridden, its load not touched);
      * - any other rideable mount (horse-family, camel, pig, nautilus) may be
      *   mounted with an empty hand, gated by `RIDEABLE`;
+     * - a player's own tamed animal is never refused;
      * - every other mob keeps the old rule: an empty-hand interaction that
      *   changes nothing is allowed, a held-item one is refused unless the
      *   region flies `PUBLIC_VILLAGERS`.
@@ -796,6 +797,7 @@ object RegionProtection {
         if (entity is AbstractChestBoat) {
             return region == null || canModifyRegion(p, region) || refuse(p, region)
         }
+        if (isOwnedBy(entity, p)) return true
 
         val protecting = entityProtectedBy(p, region) ?: return true
         if (isRegionDecoration(entity)) return refuse(p, protecting)
@@ -827,6 +829,10 @@ object RegionProtection {
     /** A mount a `RIDEABLE`-flying region may be ridden in: the horse family, camels, pigs, nautiluses. */
     private fun isRideableMount(entity: Entity): Boolean =
         entity is AbstractHorse || entity is Camel || entity is Pig || entity is AbstractNautilus
+
+    /** A tamed animal answers to its owner wherever it stands, whatever the region says. */
+    private fun isOwnedBy(entity: Entity, player: ServerPlayer): Boolean =
+        entity is OwnableEntity && entity.ownerReference?.uuid == player.uuid
 
     /**
      * [region] when its entities are off-limits to [player], or null when they
