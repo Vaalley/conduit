@@ -131,7 +131,25 @@ class EmbassyCommandGameTest {
         helper.assertValueEqual(region.startY, 320, "the new embassy's start-y")
         helper.assertValueEqual(region.endY, -64, "the new embassy's end-y")
         helper.assertValueEqual(region.members.toList(), listOf(player.uuid), "the new embassy's members")
-        helper.assertValueEqual(region.flags.toList(), listOf("EMBASSY"), "the new embassy's flags")
+        helper.assertValueEqual(
+            region.flags.toList(),
+            listOf(
+                "GATES",
+                "DOORS",
+                "TRAPDOORS",
+                "PUBLIC_REDSTONE",
+                "WEIGHTED_PRESSURE_PLATES",
+                "MINECARTS",
+                "BOATS",
+                "RIDEABLE",
+                "ANIMAL_PROTECTION",
+                "PVP",
+                "SCOREBOARD",
+                "FALL_DAMAGE",
+                "EMBASSY",
+            ),
+            "the new embassy's flags",
+        )
 
         // ...and the destination it remembers is where the creator was standing.
         val destination = checkNotNull(region.metadata["embassy-destination"]) {
