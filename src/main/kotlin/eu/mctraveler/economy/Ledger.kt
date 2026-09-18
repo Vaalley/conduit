@@ -1,6 +1,8 @@
 package eu.mctraveler.economy
 
-import com.google.gson.Gson
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
+import com.google.gson.JsonPrimitive
 import eu.mctraveler.MCTraveler
 import java.nio.file.Files
 import java.nio.file.Path
@@ -15,13 +17,18 @@ data class LedgerEntry(
 )
 
 class Ledger(private val directory: Path) {
-    private val gson = Gson()
-
     fun append(entry: LedgerEntry) {
         Files.createDirectories(directory)
+        val json = JsonObject().apply {
+            addProperty("at", entry.at)
+            addProperty("player", entry.player.toString())
+            add("delta", JsonPrimitive(Economy.toDecimal(entry.delta)))
+            add("balance", JsonPrimitive(Economy.toDecimal(entry.balance)))
+            addProperty("reason", entry.reason)
+        }
         Files.writeString(
             fileFor(entry.player),
-            gson.toJson(entry) + "\n",
+            json.toString() + "\n",
             java.nio.file.StandardOpenOption.CREATE,
             java.nio.file.StandardOpenOption.APPEND,
         )
@@ -33,7 +40,14 @@ class Ledger(private val directory: Path) {
         return Files.readAllLines(file).mapNotNull { line ->
             if (line.isBlank()) return@mapNotNull null
             try {
-                requireNotNull(gson.fromJson(line, LedgerEntry::class.java))
+                val json = JsonParser.parseString(line).asJsonObject
+                LedgerEntry(
+                    at = json.get("at").asLong,
+                    player = UUID.fromString(json.get("player").asString),
+                    delta = Economy.fromDecimal(json.get("delta").asBigDecimal),
+                    balance = Economy.fromDecimal(json.get("balance").asBigDecimal),
+                    reason = json.get("reason").asString,
+                )
             } catch (failure: Exception) {
                 MCTraveler.LOGGER.warn("Skipping unparsable ledger entry in {}", file, failure)
                 null

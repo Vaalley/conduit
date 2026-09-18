@@ -1,13 +1,14 @@
 package eu.mctraveler.passport
 
+import eu.mctraveler.economy.Economy
 import net.minecraft.resources.Identifier
 import net.minecraft.stats.Stats
 
 enum class StampTier(val bounty: Long) {
-    COMMON(10),
-    UNCOMMON(20),
-    RARE(50),
-    EPIC(100),
+    COMMON(Economy.dollars(10)),
+    UNCOMMON(Economy.dollars(20)),
+    RARE(Economy.dollars(50)),
+    EPIC(Economy.dollars(100)),
 }
 
 data class Stamp(

@@ -17,10 +17,24 @@ class LedgerTest {
     @Test
     fun `append and read round trip while skipping malformed lines`() {
         val ledger = Ledger(dir)
-        val entry = LedgerEntry(1L, first, 10L, 10L, "join-bonus")
+        val entry = LedgerEntry(1L, first, 5L, 5L, "join-bonus")
         ledger.append(entry)
+        assertEquals(true, Files.readString(dir.resolve("$first.jsonl")).contains("\"delta\":0.05"))
         Files.writeString(dir.resolve("$first.jsonl"), "{bad}\n", java.nio.file.StandardOpenOption.APPEND)
         assertEquals(listOf(entry), ledger.read(first))
+    }
+
+    @Test
+    fun `legacy whole-dollar entries read as cents`() {
+        Files.createDirectories(dir)
+        Files.writeString(
+            dir.resolve("$first.jsonl"),
+            """{"at":1,"player":"$first","delta":100,"balance":100,"reason":"x"}""",
+        )
+        assertEquals(
+            listOf(LedgerEntry(1L, first, 10_000L, 10_000L, "x")),
+            Ledger(dir).read(first),
+        )
     }
 
     @Test

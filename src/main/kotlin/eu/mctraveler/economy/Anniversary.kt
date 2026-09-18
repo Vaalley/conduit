@@ -11,7 +11,7 @@ object Anniversary {
 
     fun payout(year: Int): Long {
         require(year >= 1) { "anniversary year must be positive" }
-        return (200.0 * sqrt(year.toDouble())).roundToLong()
+        return Economy.dollars((200.0 * sqrt(year.toDouble())).roundToLong())
     }
 
     fun due(firstJoin: Long, now: Long, alreadyPaid: Int): List<Int> =

@@ -81,16 +81,30 @@ class JsonPlayerStoreTest {
     }
 
     @Test
-    fun `legacy balance reads as an integer and rewrites without losing other fields`() {
+    fun `legacy decimal balance reads as cents and rewrites without losing other fields`() {
         val file = seedPortalFile()
         val store = store()
-        assertEquals(1234L, store.balance(uuid))
-        store.setBalance(uuid, 40)
-        assertEquals(40L, store.balance(uuid))
+        assertEquals(123450L, store.balance(uuid))
+        store.setBalance(uuid, 10005)
+        assertEquals(10005L, store.balance(uuid))
         assertEquals(
-            portalFile.replace("\"balance\":1234.50", "\"balance\":40"),
+            portalFile.replace("\"balance\":1234.50", "\"balance\":100.05"),
             Files.readString(file),
         )
+    }
+
+    @Test
+    fun `legacy whole dollar balance reads as cents`() {
+        val file = dir.resolve("$uuid.json")
+        Files.writeString(file, """{"balance":100}""")
+        assertEquals(10_000L, store().balance(uuid))
+    }
+
+    @Test
+    fun `legacy balance decimals round half up to cents`() {
+        val file = dir.resolve("$uuid.json")
+        Files.writeString(file, """{"balance":12.345}""")
+        assertEquals(1235L, store().balance(uuid))
     }
 
     @Test
@@ -224,7 +238,7 @@ class JsonPlayerStoreTest {
         Files.writeString(dir.resolve("notes.txt"), """{"balance":60}""")
         Files.writeString(dir.resolve("00000000-0000-0000-0000-000000000003.json"), """{"balance":""")
 
-        assertEquals(mapOf(uuid to 12L, other to 30L), store().allBalances())
+        assertEquals(mapOf(uuid to 1250L, other to 3000L), store().allBalances())
     }
 
     @Test

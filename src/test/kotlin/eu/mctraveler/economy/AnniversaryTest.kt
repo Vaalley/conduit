@@ -6,10 +6,10 @@ import org.junit.jupiter.api.Test
 class AnniversaryTest {
     @Test
     fun `payout rounds square root schedule`() {
-        assertEquals(200L, Anniversary.payout(1))
-        assertEquals(283L, Anniversary.payout(2))
-        assertEquals(346L, Anniversary.payout(3))
-        assertEquals(400L, Anniversary.payout(4))
+        assertEquals(Economy.dollars(200), Anniversary.payout(1))
+        assertEquals(Economy.dollars(283), Anniversary.payout(2))
+        assertEquals(Economy.dollars(346), Anniversary.payout(3))
+        assertEquals(Economy.dollars(400), Anniversary.payout(4))
     }
 
     @Test

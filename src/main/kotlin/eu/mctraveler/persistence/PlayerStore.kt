@@ -15,9 +15,9 @@ import java.util.UUID
  */
 interface PlayerStore {
     /**
-     * The player's balance in whole units, or null if never recorded. Stored
-     * in the predecessor era's `balance` field; a legacy decimal value reads
-     * truncated and is rewritten as an integer on the first write.
+     * The player's balance in cents, or null if never recorded. Stored in the
+     * predecessor era's `balance` field as decimal dollars; legacy whole-dollar
+     * values read as dollars and are converted to cents in memory.
      */
     fun balance(uuid: UUID): Long?
 

@@ -1,7 +1,9 @@
 package eu.mctraveler.cosmetic
 
+import eu.mctraveler.economy.Economy
+
 object CosmeticFees {
-    const val TAG = 100L
-    const val COLOR = 100L
-    const val GRADIENT = 200L
+    val TAG = Economy.dollars(100)
+    val COLOR = Economy.dollars(100)
+    val GRADIENT = Economy.dollars(200)
 }

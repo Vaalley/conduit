@@ -1,6 +1,8 @@
 package eu.mctraveler.store
 
+import eu.mctraveler.economy.Economy
+
 object StoreFees {
-    const val CREATE = 20L
-    const val UPGRADE = 15L
+    val CREATE = Economy.dollars(20)
+    val UPGRADE = Economy.dollars(15)
 }
