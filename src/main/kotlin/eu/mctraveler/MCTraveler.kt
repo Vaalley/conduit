@@ -90,6 +90,7 @@ object MCTraveler : ModInitializer {
         eu.mctraveler.rtp.RtpFeature.register()
         eu.mctraveler.dragonfight.DragonFightFeature.register()
         HttpApi.register()
+        eu.mctraveler.help.HelpCommand.register()
         MapCommand.register()
         MapItemGuard.register()
         LOGGER.info("MCTraveler initialized")

@@ -3,6 +3,7 @@ package eu.mctraveler.text
 import net.minecraft.ChatFormatting
 import net.minecraft.network.chat.ClickEvent
 import net.minecraft.network.chat.Component
+import net.minecraft.network.chat.HoverEvent
 import net.minecraft.network.chat.MutableComponent
 import net.minecraft.network.chat.Style
 import net.minecraft.network.chat.TextColor
@@ -67,6 +68,9 @@ class Paint private constructor(private val style: Style) {
     fun runs(command: String): Paint = Paint(style.withClickEvent(ClickEvent.RunCommand(command)))
     fun opensUrl(url: String): Paint = Paint(style.withClickEvent(ClickEvent.OpenUrl(java.net.URI.create(url))))
 
+    /** Shows [text] in a tooltip while the reader hovers the content this chain styles. */
+    fun hover(text: Component): Paint = Paint(style.withHoverEvent(HoverEvent.ShowText(text)))
+
     /** Builds a component carrying this chain's style over the given content. */
     operator fun invoke(vararg content: Any?): MutableComponent {
         val parts = content.mapNotNull(::toPart)
@@ -104,6 +108,7 @@ class Paint private constructor(private val style: Style) {
 
         fun runs(command: String): Paint = plain.runs(command)
         fun opensUrl(url: String): Paint = plain.opensUrl(url)
+        fun hover(text: Component): Paint = plain.hover(text)
 
         fun rgb(color: Int): Paint = Paint(Style.EMPTY.withColor(TextColor.fromRgb(color)))
 
