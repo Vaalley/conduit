@@ -1,5 +1,6 @@
 package eu.mctraveler.economy
 
+import eu.mctraveler.command.Audience
 import com.mojang.authlib.GameProfile
 import com.mojang.brigadier.Command
 import com.mojang.brigadier.CommandDispatcher
@@ -144,6 +145,7 @@ object EconomyFeature {
 
         dispatcher.register(
             Commands.literal("economy")
+                .requires(Audience.ADMIN.gate)
                 .then(Commands.literal("stats").executes { ctx -> stats(ctx.source.playerOrException) }),
         )
     }

@@ -30,6 +30,7 @@ class EmbassyCommandGameTest {
     @GameTest
     fun bareEmbassyPrintsItsTwoSubcommands(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "T02Help")
+        player.makeAdmin()
         player.runCommand("embassy")
 
         // Nucleus sent two plain lines, with no prefix and no styling. Picked
@@ -50,7 +51,7 @@ class EmbassyCommandGameTest {
     fun creatingAnEmbassyIsForAdminsOnly(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "T02CrGate")
         player.runCommand("embassy create")
-        helper.assertValueEqual(player.messages.last(), notAdmin, "the non-admin /embassy create reply")
+        helper.assertUnknownCommand(player, "the non-admin /embassy create")
         player.leave()
         helper.succeed()
     }
@@ -59,7 +60,7 @@ class EmbassyCommandGameTest {
     fun deletingAnEmbassyIsForAdminsOnly(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "T02DelGate")
         player.runCommand("embassy delete")
-        helper.assertValueEqual(player.messages.last(), notAdmin, "the non-admin /embassy delete reply")
+        helper.assertUnknownCommand(player, "the non-admin /embassy delete")
         player.leave()
         helper.succeed()
     }
@@ -318,8 +319,6 @@ class EmbassyCommandGameTest {
     }
 
     // ---- helpers ----
-
-    private val notAdmin = Paint.error("You must be an admin to use this command")
 
     private fun embassies(helper: GameTestHelper): ServerLevel =
         checkNotNull(helper.level.server.getLevel(EmbassiesFeature.DIMENSION)) {

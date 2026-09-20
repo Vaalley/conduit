@@ -1,5 +1,6 @@
 package eu.mctraveler.rank
 
+import eu.mctraveler.command.Audience
 import com.mojang.brigadier.Command
 import com.mojang.brigadier.CommandDispatcher
 import com.mojang.brigadier.arguments.StringArgumentType
@@ -32,6 +33,7 @@ object RankCommands {
     fun register(dispatcher: CommandDispatcher<CommandSourceStack>) {
         dispatcher.register(
             Commands.literal("rank")
+                .requires(Audience.ADMIN.gate)
                 .executes { ctx -> reply(ctx) { Paint.usage("/rank set <player> <rank>") } }
                 .then(
                     Commands.literal("set")

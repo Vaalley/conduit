@@ -17,19 +17,33 @@ class CrystalCommandGameTest {
 
     private val command = "set-teleportation-crystal-energy"
     @GameTest
-    fun noArgumentsRepliesUsageEvenToANonAdmin(helper: GameTestHelper) {
-        // Usage comes before the admin gate (house rule).
+    fun aNonAdminDoesNotEvenGetTheUsage(helper: GameTestHelper) {
+        // The command is wholly admin-only: to anyone else it does not exist.
         val visitor = MessageCapturingPlayer.join(helper, "CrystalCurious")
         try {
             visitor.runCommand(command)
+            helper.assertUnknownCommand(visitor, "the bare command as a non-admin")
+            helper.succeed()
+        } finally {
+            visitor.leave()
+        }
+    }
+
+    @GameTest
+    fun noArgumentsRepliesUsageToAnAdmin(helper: GameTestHelper) {
+        val admin = MessageCapturingPlayer.join(helper, "CrystalUsageBoss")
+        try {
+            admin.makeAdmin()
+            admin.messages.clear()
+            admin.runCommand(command)
             helper.assertValueEqual(
-                visitor.messages.map { it.string },
+                admin.messages.map { it.string },
                 listOf("USAGE /set-teleportation-crystal-energy <energy> [player]"),
                 "the reply to the bare command",
             )
             helper.succeed()
         } finally {
-            visitor.leave()
+            admin.leave()
         }
     }
 
@@ -38,11 +52,7 @@ class CrystalCommandGameTest {
         val visitor = MessageCapturingPlayer.join(helper, "CrystalPretender")
         try {
             visitor.runCommand("$command 0")
-            helper.assertValueEqual(
-                visitor.messages.map { it.string },
-                listOf("ERROR You must be an admin to use this command"),
-                "the reply to a non-admin",
-            )
+            helper.assertUnknownCommand(visitor, "the command as a non-admin")
             helper.assertValueEqual(CrystalEnergy.energyOf(visitor), 5, "a refused command changes nothing")
             helper.succeed()
         } finally {
