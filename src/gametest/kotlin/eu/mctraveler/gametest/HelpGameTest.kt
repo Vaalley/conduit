@@ -122,6 +122,21 @@ class HelpGameTest {
     }
 
     @GameTest(maxTicks = 100)
+    fun switchIsRemoved(helper: GameTestHelper) {
+        val player = MessageCapturingPlayer.join(helper, "HelpNoSwitch")
+        try {
+            helper.assertTrue(helper.level.server.commands.dispatcher.root.getChild("switch") == null, "/switch is still registered")
+            helper.assertTrue("switch" !in clientRoots(helper, player), "/switch is in the client's command tree")
+            helper.assertTrue("switch" !in allListedCommands(helper, player), "/switch is in /help")
+            val reply = helpMessage(player, "help switch").string
+            helper.assertTrue(reply.startsWith("ERROR"), "/help switch was answered: $reply")
+            helper.succeed()
+        } finally {
+            player.leave()
+        }
+    }
+
+    @GameTest(maxTicks = 100)
     fun aNonAdminNeverSeesAnAdminCommandOnAnyPage(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "HelpMember")
         val admin = MessageCapturingPlayer.join(helper, "HelpBoss")
@@ -278,7 +293,7 @@ class HelpGameTest {
         try {
             val mod = adminRoots + listOf(
                 "away", "chat", "shrug", "tableflip", "msg", "reply", "name", "balance", "pay", "store",
-                "map", "notepad", "passport", "postcard", "rtp", "dragonfight", "norain", "switch", "region",
+                "map", "notepad", "passport", "postcard", "rtp", "dragonfight", "norain", "region",
                 "spawn1", "spawn2",
             )
             for (name in mod) {

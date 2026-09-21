@@ -19,7 +19,6 @@
       "eu.mctraveler.gametest.PassportGameTest",
       "eu.mctraveler.gametest.AwayGameTest",
       "eu.mctraveler.gametest.NotepadGameTest",
-      "eu.mctraveler.gametest.SwitchSignpostGameTest",
       "eu.mctraveler.gametest.RespawnAndPortalsGameTest",
       "eu.mctraveler.gametest.RegionCommandGameTest",
       "eu.mctraveler.gametest.RegionAdminCommandGameTest",

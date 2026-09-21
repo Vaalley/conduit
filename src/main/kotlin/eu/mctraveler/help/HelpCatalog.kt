@@ -155,10 +155,6 @@ class HelpCatalog(
                     "Hides rain and thunder for you only. Other players still see the weather. Run it again to " +
                         "see the weather again.",
                 ),
-                "switch" to CommandHelp(
-                    "The old way of changing between the two maps. They have merged into one, so this now just " +
-                        "tells you where you are and where your other base ended up.",
-                ),
                 "region" to CommandHelp(
                     "A region protects a piece of land so other players cannot access it. You can add and remove " +
                         "friends while others cannot modify your area.\n" +
