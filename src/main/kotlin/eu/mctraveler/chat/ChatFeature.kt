@@ -7,6 +7,7 @@ import eu.mctraveler.geo.GeoIpFeature
 import eu.mctraveler.region.RegionTracker
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.moderation.ModerationFeature
+import eu.mctraveler.text.ChatMarkdown
 import eu.mctraveler.text.Paint
 import eu.mctraveler.vanish.VanishFeature
 import java.net.InetAddress
@@ -199,7 +200,10 @@ object ChatFeature {
         if (!ModerationFeature.allowMuted(sender)) return false
         when (val mode = ChatSelector.modeOf(sender.uuid)) {
             ChatSelector.Mode.DEFAULT, ChatSelector.Mode.SERVER -> {
-                sender.level().server.playerList.broadcastChatMessage(message, sender, chatBound(sender))
+                // Markdown rides as the message's unsigned content: the signed text stays exactly what the
+                // player typed (chat reporting, the Discord mirror), only what clients draw changes.
+                val shown = ChatMarkdown.format(message.signedContent())?.let(message::withUnsignedContent) ?: message
+                sender.level().server.playerList.broadcastChatMessage(shown, sender, chatBound(sender))
             }
             is ChatSelector.Mode.PLAYERS -> {
                 val recipients = mode.recipients.mapNotNull(sender.level().server.playerList::getPlayer)
@@ -210,7 +214,7 @@ object ChatFeature {
                 val names = recipients.joinToString(", ") { it.gameProfile.name }
                 val line = Paint(
                     Paint.green(sender.gameProfile.name), " ", Paint.gray("→"), " ",
-                    Paint.green(names), ": ", message.decoratedContent(),
+                    Paint.green(names), ": ", contentOf(message),
                 )
                 (recipients + sender).distinctBy { it.uuid }.forEach { it.sendSystemMessage(line) }
             }
@@ -229,13 +233,17 @@ object ChatFeature {
                 }
                 val line = Paint(
                     Paint.darkGray("["), Paint.yellow(region.title), Paint.darkGray("]"), " ",
-                    Paint.green(sender.gameProfile.name), ": ", message.decoratedContent(),
+                    Paint.green(sender.gameProfile.name), ": ", contentOf(message),
                 )
                 (recipients + sender).distinctBy { it.uuid }.forEach { it.sendSystemMessage(line) }
             }
         }
         return false
     }
+
+    /** What [message] says, with its markdown applied. */
+    private fun contentOf(message: PlayerChatMessage): Component =
+        ChatMarkdown.format(message.signedContent()) ?: message.decoratedContent()
 
     /** [CHAT_TYPE] bound with [player]'s username, in their rank's color, as the sender. */
     private fun chatBound(player: ServerPlayer): ChatType.Bound {

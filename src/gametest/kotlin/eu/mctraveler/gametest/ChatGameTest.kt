@@ -6,6 +6,7 @@ import net.minecraft.core.registries.Registries
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.network.chat.ChatType
 import net.minecraft.network.chat.ChatTypeDecoration
+import net.minecraft.network.chat.ClickEvent
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.contents.TranslatableContents
 import net.minecraft.resources.Identifier
@@ -118,6 +119,101 @@ class ChatGameTest {
             if (stranger.systemMessages().any { it.string.contains(content) }) {
                 throw helper.assertionException("unselected player received private chat")
             }
+        }
+    }
+
+    @GameTest
+    fun chatMarkdownStylesWhatClientsDrawButNotTheSignedText(helper: GameTestHelper) {
+        val server = helper.level.server
+        val speaker = TestPlayer.join(server, "MdSpeaker")
+        val listener = TestPlayer.join(server, "MdListener")
+        val raw = "**bold** and *italic* and __under__ and ~~gone~~ at https://example.com/a_b ${speaker.player.uuid}"
+        helper.runAfterDelay(2) { speaker.chat(raw) }
+        helper.succeedWhen {
+            val packet = listener.chatPackets().firstOrNull { it.body().content() == raw }
+                ?: throw helper.assertionException("the listener has not seen the markdown line")
+            val shown = packet.unsignedContent().orElse(null)
+                ?: throw helper.assertionException("the markdown line carries no styled content")
+            val runs = shown.toFlatList(shown.style)
+            fun run(text: String) = runs.firstOrNull { it.string == text }
+                ?: throw helper.assertionException("no run reads '$text' in ${shown.string}")
+            if (!run("bold").style.isBold) throw helper.assertionException("**bold** is not bold")
+            if (!run("italic").style.isItalic) throw helper.assertionException("*italic* is not italic")
+            if (!run("under").style.isUnderlined) throw helper.assertionException("__under__ is not underlined")
+            if (!run("gone").style.isStrikethrough) throw helper.assertionException("~~gone~~ is not struck through")
+            val link = run("https://example.com/a_b").style
+            if (!link.isUnderlined || link.clickEvent !is ClickEvent.OpenUrl) {
+                throw helper.assertionException("the link is not underlined and clickable")
+            }
+            if (shown.string.contains("**") || shown.string.contains("~~")) {
+                throw helper.assertionException("the delimiters are still shown: ${shown.string}")
+            }
+            // The Discord mirror is given what was typed: Discord draws its own markdown.
+            if (eu.mctraveler.chat.ChatBridge.poll(0).none { it.content == raw }) {
+                throw helper.assertionException("the bridge did not get the line as typed")
+            }
+        }
+    }
+
+    @GameTest
+    fun plainChatIsSentUntouched(helper: GameTestHelper) {
+        val server = helper.level.server
+        val speaker = TestPlayer.join(server, "MdPlainSpeaker")
+        val listener = TestPlayer.join(server, "MdPlainListener")
+        val raw = "2 * 3 = 6 and some_var_name ${speaker.player.uuid}"
+        helper.runAfterDelay(2) { speaker.chat(raw) }
+        helper.succeedWhen {
+            val packet = listener.chatPackets().firstOrNull { it.body().content() == raw }
+                ?: throw helper.assertionException("the listener has not seen the plain line")
+            if (packet.unsignedContent().isPresent) {
+                throw helper.assertionException("a line with no markdown was given styled content")
+            }
+        }
+    }
+
+    @GameTest
+    fun anEscapedDelimiterIsShownWithoutItsBackslash(helper: GameTestHelper) {
+        val server = helper.level.server
+        val speaker = TestPlayer.join(server, "MdEscSpeaker")
+        val listener = TestPlayer.join(server, "MdEscListener")
+        val raw = "\\*expression* ${speaker.player.uuid}"
+        helper.runAfterDelay(2) { speaker.chat(raw) }
+        helper.succeedWhen {
+            val packet = listener.chatPackets().firstOrNull { it.body().content() == raw }
+                ?: throw helper.assertionException("the listener has not seen the escaped line")
+            val shown = packet.unsignedContent().orElse(null)
+                ?: throw helper.assertionException("the escaped line was not rewritten")
+            if (shown.string != "*expression* ${speaker.player.uuid}") {
+                throw helper.assertionException("the escaped line reads '${shown.string}'")
+            }
+            if (shown.toFlatList(shown.style).any { it.style.isItalic }) {
+                throw helper.assertionException("an escaped delimiter still italicised the line")
+            }
+        }
+    }
+
+    @GameTest
+    fun markdownReachesSelectedPlayersAndPrivateMessages(helper: GameTestHelper) {
+        val server = helper.level.server
+        val speaker = TestPlayer.join(server, "MdPrivateA")
+        val recipient = TestPlayer.join(server, "MdPrivateB")
+        helper.runAfterDelay(2) {
+            speaker.runCommand("chat ${recipient.name}")
+            speaker.chat("**selected** ${speaker.player.uuid}")
+            speaker.runCommand("msg ${recipient.name} *whispered* ${speaker.player.uuid}")
+        }
+        helper.succeedWhen {
+            val selected = recipient.systemMessages().firstOrNull { it.string.contains("selected ${speaker.player.uuid}") }
+                ?: throw helper.assertionException("the selected recipient did not get the line")
+            if (selected.toFlatList(selected.style).none { it.string == "selected" && it.style.isBold }) {
+                throw helper.assertionException("**selected** is not bold in ${selected.string}")
+            }
+            val whisper = recipient.systemMessages().firstOrNull { it.string.contains("whispered") }
+                ?: throw helper.assertionException("the private message did not arrive")
+            if (whisper.toFlatList(whisper.style).none { it.string == "whispered" && it.style.isItalic }) {
+                throw helper.assertionException("*whispered* is not italic in ${whisper.string}")
+            }
+            if (whisper.string.contains('*')) throw helper.assertionException("stray delimiters: ${whisper.string}")
         }
     }
 
