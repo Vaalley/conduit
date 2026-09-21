@@ -16,7 +16,11 @@ import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
 import net.minecraft.commands.SharedSuggestionProvider
 import net.minecraft.core.Direction
+import net.minecraft.network.chat.ClickEvent
 import net.minecraft.network.chat.Component
+import net.minecraft.network.chat.HoverEvent
+import net.minecraft.network.chat.MutableComponent
+import net.minecraft.network.chat.Style
 import net.minecraft.server.level.ServerPlayer
 
 /**
@@ -38,6 +42,9 @@ object RegionCommands {
     private val startMarkers = HashMap<UUID, StartMarker>()
 
     private val NAME_REGEX = Regex("^[a-zA-Z0-9!_'?()#:,.+&@*\\- ]{3,30}$")
+
+    /** Shown when hovering a region in a `/rg locate` result. */
+    const val LOCATE_HINT = "Click to put the teleport command in your chat bar"
 
     private const val MAX_MEMBERS = 99
     private const val MIN_Y = -64
@@ -581,7 +588,7 @@ object RegionCommands {
         if (found.size == 1) {
             val region = found.single()
             return Paint(
-                Paint.yellow(region.title),
+                locateLabel(Paint.yellow(region.title), region),
                 " - ", locateCoordinates(region),
                 "/", Paint.green(RegionWorlds.locateInfo(region.world)),
             )
@@ -616,7 +623,7 @@ object RegionCommands {
         for (region in pageRegions) {
             player.sendSystemMessage(
                 Paint(
-                    " - ", Paint.yellow(region.title), " ",
+                    " - ", locateLabel(Paint.yellow(region.title), region), " ",
                     locateCoordinates(region, includeY = false), "/", Paint.gray(RegionWorlds.locateInfo(region.world)),
                 ),
             )
@@ -663,16 +670,30 @@ object RegionCommands {
     }
 
     /**
-     * The coordinates in a locate result take an admin straight to that Region.
-     * An old saved world with no live dimension remains visible but deliberately
-     * has no click command: there is nowhere valid to execute it.
+     * A region's name in a locate result, clickable: it prefills the command bar with the
+     * teleport to that region, ready for an admin to confirm (or adjust) with Enter. An old
+     * saved world with no live dimension stays visible but has no click: there is nowhere
+     * valid to teleport to.
      */
+    private fun locateLabel(text: MutableComponent, region: Region): Component {
+        val command = teleportCommand(region) ?: return text
+        return text.withStyle(
+            Style.EMPTY
+                .withClickEvent(ClickEvent.SuggestCommand(command))
+                .withHoverEvent(HoverEvent.ShowText(Component.literal(LOCATE_HINT))),
+        )
+    }
+
+    /** The coordinates in a locate result: clickable the same way as the region's name. */
     private fun locateCoordinates(region: Region, includeY: Boolean = true): Component {
-        val x = centerX(region)
-        val z = centerZ(region)
-        val coordinates = if (includeY) "$x/~/$z" else "$x/$z"
-        val dimension = RegionWorlds.dimensionFor(region.world)?.identifier() ?: return Paint.white(coordinates)
-        return Paint.white.runs("/execute in $dimension run tp @s $x ~ $z")(coordinates)
+        val coordinates = if (includeY) "${centerX(region)}/~/${centerZ(region)}" else "${centerX(region)}/${centerZ(region)}"
+        return locateLabel(Paint.white(coordinates), region)
+    }
+
+    /** The command that takes an admin to [region]'s centre, or null when its World is not live. */
+    private fun teleportCommand(region: Region): String? {
+        val dimension = RegionWorlds.dimensionFor(region.world)?.identifier() ?: return null
+        return "/execute in $dimension run tp @s ${centerX(region)} ~ ${centerZ(region)}"
     }
 
     // ---- shared lookups ----
