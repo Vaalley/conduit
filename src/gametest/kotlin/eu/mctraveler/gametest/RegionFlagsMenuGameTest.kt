@@ -1,5 +1,6 @@
 package eu.mctraveler.gametest
 
+import eu.mctraveler.region.Region
 import eu.mctraveler.region.RegionFlagsMenu
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.region.RegionTracker
@@ -90,7 +91,7 @@ class RegionFlagsMenuGameTest {
             )
             val lore = stack.get(DataComponents.LORE)?.lines().orEmpty().map { it.string }
             helper.assertTrue(lore.isNotEmpty(), "no lore on the EXPLOSIONS item")
-            helper.assertValueEqual(lore.first(), "Disallowed", "the default EXPLOSIONS status")
+            helper.assertValueEqual(lore.first(), "Disabled", "the default EXPLOSIONS status")
             helper.succeed()
         } finally {
             alice.leave()
@@ -98,7 +99,7 @@ class RegionFlagsMenuGameTest {
     }
 
     @GameTest
-    fun aTrueFalseFlagShowsTrueOrFalseRatherThanAllowedDisallowed(helper: GameTestHelper) {
+    fun anOnOffFlagShowsOnOrOff(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "TFItemB")
         try {
             val region = createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
@@ -113,7 +114,7 @@ class RegionFlagsMenuGameTest {
                 "the ANIMAL_PROTECTION item name",
             )
             val lore = stack.get(DataComponents.LORE)?.lines().orEmpty().map { it.string }
-            helper.assertValueEqual(lore.first(), "True", "the default ANIMAL_PROTECTION status")
+            helper.assertValueEqual(lore.first(), "On", "the default ANIMAL_PROTECTION status")
             helper.succeed()
         } finally {
             alice.leave()
@@ -165,7 +166,7 @@ class RegionFlagsMenuGameTest {
                 helper.assertTrue("EXPLOSIONS" in region.flags, "the click did not add EXPLOSIONS")
                 val stack = RegionFlagsMenu.openMenuOf(alice)!!.contents()[0]
                 val lore = stack.get(DataComponents.LORE)?.lines().orEmpty().map { it.string }
-                helper.assertValueEqual(lore.first(), "Allowed", "the redrawn EXPLOSIONS status")
+                helper.assertValueEqual(lore.first(), "Enabled", "the redrawn EXPLOSIONS status")
                 alice.leave()
                 helper.succeed()
             }
@@ -183,6 +184,7 @@ class RegionFlagsMenuGameTest {
         try {
             val region = createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
             alice.makeAdmin()
+            region.flags.add(Region.EMBASSY_FLAG)
             RegionFlagsMenu.openMain(alice, region)
 
             RegionFlagsMenu.openMenuOf(alice)!!.clicked(26, 0, ContainerInput.PICKUP, alice)
@@ -238,12 +240,13 @@ class RegionFlagsMenuGameTest {
         try {
             val region = createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
             alice.makeAdmin()
+            region.flags.add(Region.EMBASSY_FLAG)
             RegionFlagsMenu.openAdmin(alice, region)
 
             RegionFlagsMenu.openMenuOf(alice)!!.clicked(4, 0, ContainerInput.PICKUP, alice)
 
             helper.runAfterDelay(1) {
-                helper.assertFalse("EMBASSY" in region.flags, "clicking EMBASSY toggled it")
+                helper.assertTrue("EMBASSY" in region.flags, "clicking EMBASSY toggled it")
                 helper.assertValueEqual(
                     alice.messages.last(),
                     Paint.error("You cannot toggle the embassy flag"),
@@ -338,6 +341,53 @@ class RegionFlagsMenuGameTest {
         } catch (t: Throwable) {
             alice.leave()
             throw t
+        }
+    }
+
+    // ---- size map and embassy visibility ----
+
+    @GameTest
+    fun theTopRightSlotShowsTheRegionSizeAndClickingItDoesNothing(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "TFSizeA")
+        try {
+            val region = createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+            RegionFlagsMenu.openMain(alice, region)
+            val menu = RegionFlagsMenu.openMenuOf(alice)!!
+            val stack = menu.contents()[8]
+            helper.assertTrue(stack.`is`(Items.ABANDONED_CAMP_MAP), "slot 8 should be the abandoned camp map")
+            val width = region.maxX - region.minX + 1
+            val depth = region.maxZ - region.minZ + 1
+            val lore = stack.get(DataComponents.LORE)?.lines().orEmpty().map { it.string }
+            helper.assertValueEqual(lore.first(), "${width * depth} blocks", "the region size lore")
+
+            val flagsBefore = region.flags.toSet()
+            menu.clicked(8, 0, ContainerInput.PICKUP, alice)
+            helper.runAfterDelay(1) {
+                helper.assertValueEqual(region.flags.toSet(), flagsBefore, "clicking the size map changed flags")
+                helper.assertTrue(RegionFlagsMenu.openMenuOf(alice) === menu, "clicking the size map changed the menu")
+                alice.leave()
+                helper.succeed()
+            }
+        } catch (t: Throwable) {
+            alice.leave()
+            throw t
+        }
+    }
+
+    @GameTest
+    fun theEmbassyItemIsHiddenUnlessTheRegionIsAnEmbassy(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "TFEmbassyHideA")
+        try {
+            val region = createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+            alice.makeAdmin()
+            RegionFlagsMenu.openAdmin(alice, region)
+            helper.assertTrue(
+                RegionFlagsMenu.openMenuOf(alice)!!.contents()[4].isEmpty,
+                "the embassy item showed for a non-embassy region",
+            )
+            helper.succeed()
+        } finally {
+            alice.leave()
         }
     }
 }

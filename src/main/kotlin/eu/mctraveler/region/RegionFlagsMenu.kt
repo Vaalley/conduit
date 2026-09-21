@@ -61,6 +61,7 @@ object RegionFlagsMenu {
     private const val ROWS = 3
     private const val ADMIN_BUTTON_SLOT = 26
     private const val BACK_BUTTON_SLOT = 26
+    private const val SIZE_SLOT = 8
 
     /** Row-grouped slot layout for [RegionFlags.MAIN]'s 16 items (6 + 5 + 5). */
     private fun mainSlotFor(index: Int): Int = when {
@@ -132,9 +133,20 @@ object RegionFlagsMenu {
 
     // ---- drawing ----
 
-    private fun definitionsFor(page: Page): List<RegionFlags.Definition> = when (page) {
+    /** The embassy flag is only shown for a region that actually is an embassy. */
+    private fun definitionsFor(page: Page, region: Region): List<RegionFlags.Definition> = when (page) {
         Page.MAIN -> RegionFlags.MAIN
-        Page.ADMIN -> RegionFlags.ADMIN
+        Page.ADMIN -> RegionFlags.ADMIN.filter { it.id != Region.EMBASSY_FLAG || Region.EMBASSY_FLAG in region.flags }
+    }
+
+    private fun sizeItem(region: Region): ItemStack {
+        val width = region.maxX - region.minX + 1
+        val depth = region.maxZ - region.minZ + 1
+        return ItemStack(Items.ABANDONED_CAMP_MAP).apply {
+            set(DataComponents.CUSTOM_NAME, flagName("Region size"))
+            set(DataComponents.LORE, loreOf(listOf<Any>(Paint.white("${width.toLong() * depth} blocks"), "${width}x${depth}")))
+            hideAdditionalTooltip(this)
+        }
     }
 
     private fun slotFor(page: Page, index: Int): Int = when (page) {
@@ -144,10 +156,11 @@ object RegionFlagsMenu {
 
     private fun fill(contents: Container, page: Page, region: Region, isAdminViewer: Boolean) {
         for (slot in 0 until contents.containerSize) contents.setItem(slot, ItemStack.EMPTY)
-        val defs = definitionsFor(page)
+        val defs = definitionsFor(page, region)
         for ((index, def) in defs.withIndex()) {
             contents.setItem(slotFor(page, index), flagItem(region, def))
         }
+        contents.setItem(SIZE_SLOT, sizeItem(region))
         when (page) {
             Page.MAIN -> contents.setItem(ADMIN_BUTTON_SLOT, if (isAdminViewer) adminButtonItem() else fillerItem())
             Page.ADMIN -> contents.setItem(BACK_BUTTON_SLOT, backButtonItem())
@@ -159,6 +172,8 @@ object RegionFlagsMenu {
         val status = when (def.statusStyle) {
             RegionFlags.StatusStyle.ALLOWED_DISALLOWED -> if (allowed) Paint.green("Allowed") else Paint.red("Disallowed")
             RegionFlags.StatusStyle.TRUE_FALSE -> if (allowed) Paint.green("True") else Paint.red("False")
+            RegionFlags.StatusStyle.ENABLED_DISABLED -> if (allowed) Paint.green("Enabled") else Paint.red("Disabled")
+            RegionFlags.StatusStyle.ON_OFF -> if (allowed) Paint.green("On") else Paint.red("Off")
         }
         return ItemStack(def.icon).apply {
             set(DataComponents.CUSTOM_NAME, flagName(def.label))
@@ -188,7 +203,7 @@ object RegionFlagsMenu {
         }
 
     /** The widest a lore line may be — narrow, because a large GUI scale clips wider lines off-screen. */
-    private const val MAX_LORE_WIDTH = 16
+    private const val MAX_LORE_WIDTH = 22
 
     /**
      * Vanilla renders `custom_name` and lore lines in italic by default; every
@@ -338,7 +353,7 @@ object RegionFlagsMenu {
         override fun quickMoveStack(player: Player, index: Int): ItemStack = ItemStack.EMPTY
 
         private fun actionFor(slot: Int): ((ServerPlayer) -> Unit)? {
-            val defs = definitionsFor(page)
+            val defs = definitionsFor(page, region)
             val index = (0 until defs.size).firstOrNull { slotFor(page, it) == slot }
             if (index != null) {
                 val def = defs[index]
