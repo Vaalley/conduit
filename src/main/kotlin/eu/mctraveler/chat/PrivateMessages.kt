@@ -5,6 +5,7 @@ import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.suggestion.SuggestionProvider
 import eu.mctraveler.command.CommandTree
 import eu.mctraveler.moderation.ModerationFeature
+import eu.mctraveler.text.ChatMarkdown
 import eu.mctraveler.text.Paint
 import java.util.UUID
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback
@@ -116,7 +117,7 @@ object PrivateMessages {
     private fun deliver(sender: ServerPlayer, target: ServerPlayer, message: String) {
         val line = Paint(
             Paint.green(sender.gameProfile.name), " ", Paint.gray("→"), " ",
-            Paint.green(target.gameProfile.name), ": ", message,
+            Paint.green(target.gameProfile.name), ": ", ChatMarkdown.format(message) ?: message,
         )
         target.sendSystemMessage(line)
         sender.sendSystemMessage(line)
