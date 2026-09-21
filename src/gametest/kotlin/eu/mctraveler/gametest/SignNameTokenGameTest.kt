@@ -8,6 +8,9 @@ import net.minecraft.core.BlockPos
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.nbt.NbtOps
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket
+import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket
+import net.minecraft.util.ProblemReporter
+import net.minecraft.world.level.storage.TagValueInput
 import net.minecraft.network.protocol.game.ServerboundSignUpdatePacket
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.level.block.Blocks
@@ -46,6 +49,44 @@ class SignNameTokenGameTest {
         alice.leave()
         bob.leave()
         helper.succeed()
+    }
+
+    @GameTest(maxTicks = 40)
+    fun aReaderWhoEntersTheChunkLaterGetsTheirNameAfterTheChunk(helper: GameTestHelper) {
+        val donator = MessageCapturingPlayer.join(helper, "SignChunkDon")
+        RankFeature.setRank(donator, Rank.DONATOR)
+        val sign = placeSign(helper, donator)
+        writeFirstLine(helper, donator, "Hi <name>!")
+        val viewer = MessageCapturingPlayer.join(helper, "SignChunkLater")
+        PacketCapture.drain(viewer)
+
+        // What the server does for a reader who walks back into range, or reconnects.
+        val level = helper.level
+        val chunk = level.getChunkAt(helper.absolutePos(SIGN_AT))
+        viewer.connection.send(ClientboundLevelChunkWithLightPacket(chunk, level.lightEngine, null, null))
+
+        helper.runAfterDelay(3) {
+            val sent = PacketCapture.drain(viewer)
+            val chunkAt = sent.indexOfFirst { it is ClientboundLevelChunkWithLightPacket }
+            val signAt = sent.indexOfFirst { it is ClientboundBlockEntityDataPacket }
+            // A sign packet ahead of its chunk reaches a client that has no sign to update yet.
+            helper.assertTrue(chunkAt >= 0 && signAt > chunkAt, "the sign packet at $signAt must follow the chunk at $chunkAt")
+
+            // The packet as a client loads it.
+            val registry = level.registryAccess()
+            val client = SignBlockEntity(helper.absolutePos(SIGN_AT), sign.blockState)
+            client.loadWithComponents(
+                TagValueInput.create(ProblemReporter.DISCARDING, registry, (sent[signAt] as ClientboundBlockEntityDataPacket).tag),
+            )
+            helper.assertValueEqual(
+                client.getText(SignTextSlot.FRONT).getMessages(false)[0].string,
+                "Hi SignChunkLater!",
+                "the line a client loads from the follow-up",
+            )
+            donator.leave()
+            viewer.leave()
+            helper.succeed()
+        }
     }
 
     @GameTest(maxTicks = 40)
