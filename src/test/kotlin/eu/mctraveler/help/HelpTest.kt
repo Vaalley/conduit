@@ -206,7 +206,7 @@ class HelpTest {
         assertEquals(10 + 3, lines.size)
         assertEquals("            ( Help menu )            ", lines.first())
         assertEquals("Type /help <command> to find out what a specific command does.", lines[1])
-        assertEquals(HelpPages.STRIKE + " ( Page 1 2 3 ) " + HelpPages.STRIKE, lines.last())
+        assertEquals(HelpPages.STRIKE + "( Page 1 2 3 )" + HelpPages.STRIKE, lines.last())
 
         val all = runs(message)
         assertEquals(listOf("            ", "( Help menu )", "            "), all.take(3).map { it.text })
@@ -241,15 +241,15 @@ class HelpTest {
     }
 
     @Test
-    fun `required parameters are light gray and optional ones dark gray`() {
+    fun `required and optional parameters are the same gray`() {
         val all = runs(HelpPages(index()).listPage(1))
         fun after(command: String, count: Int): List<Pair<String, String?>> {
             val at = all.indexOfFirst { it.text == command }
             return all.drop(at + 1).filter { it.text != " " }.take(count).map { it.text to it.color }
         }
         assertEquals(listOf("<target>" to "gray", "<message>" to "gray"), after("/msg", 2))
-        assertEquals(listOf("[caption]" to "dark_gray"), after("/postcard", 1))
-        assertEquals(listOf("[option]" to "dark_gray"), after("/region", 1))
+        assertEquals(listOf("[caption]" to "gray"), after("/postcard", 1))
+        assertEquals(listOf("[option]" to "gray"), after("/region", 1))
     }
 
     // -- syntax --
@@ -308,15 +308,20 @@ class HelpTest {
                 "            ( Help menu )            ",
                 "/region, /rg",
                 "Available options are: rename, add",
+                "",
                 "A region protects land.",
                 "Call an admin for more.",
+                "",
             ),
             page.string.split('\n'),
         )
-        val colors = runs(page).associate { it.text to it.color }
+        val all = runs(page)
+        val colors = all.associate { it.text to it.color }
         assertEquals("white", colors["/region, /rg"])
-        assertEquals("gray", colors["Available options are: rename, add"])
-        assertNull(colors["A region protects land."])
+        assertTrue(all.single { it.text == "/region, /rg" }.bold)
+        assertEquals("white", colors["Available options are: rename, add"])
+        assertEquals("gray", colors["A region protects land."])
+        assertEquals("gray", colors["Call an admin for more."])
     }
 
     @Test
@@ -324,7 +329,8 @@ class HelpTest {
         val page = HelpPages(index()).render("msg").message.string.split('\n')
         assertEquals("/msg, /tell, /w", page[1])
         assertTrue(page.contains("/msg <target> <message>"), page.toString())
-        assertTrue(page.last().startsWith("No description"))
+        assertTrue(page[page.size - 2].startsWith("No description"), page.toString())
+        assertEquals("", page.last())
     }
 
     // -- markdown --

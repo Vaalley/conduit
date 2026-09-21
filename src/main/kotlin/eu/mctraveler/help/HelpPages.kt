@@ -55,12 +55,12 @@ class HelpPages<S>(private val index: HelpIndex<S>) {
             if (page == current) Paint.yellow.bold.underline(page)
             else Paint.yellow.runs("/help $page").hover(Paint.yellow("Go to page $page"))(page)
         }
-        val parts = mutableListOf<Any?>(strike(), Paint.yellow(" ( Page "))
+        val parts = mutableListOf<Any?>(strike(), Paint.yellow("( Page "))
         numbers.forEachIndexed { i, number ->
             if (i > 0) parts += Paint.yellow(" ")
             parts += number
         }
-        parts += Paint.yellow(" ) ")
+        parts += Paint.yellow(" )")
         parts += strike()
         return Paint(*parts.toTypedArray())
     }
@@ -68,12 +68,13 @@ class HelpPages<S>(private val index: HelpIndex<S>) {
     // -- one command --
 
     private fun commandPage(entry: HelpEntry<S>): Component {
-        val lines = mutableListOf<Component>(header(), Paint.white(entry.namesLine))
+        val lines = mutableListOf<Component>(header(), Paint.white.bold(entry.namesLine))
         val options = index.options(entry)
-        if (options.isNotEmpty()) lines += Paint.gray("Available options are: ${options.joinToString(", ")}")
+        if (options.isNotEmpty()) lines += Paint.white("Available options are: ${options.joinToString(", ")}")
+        lines += Component.empty()
         val info = entry.info
         if (info != null) {
-            info.description.split('\n').mapTo(lines) { Component.literal(it) }
+            info.description.split('\n').mapTo(lines) { Paint.gray(it) }
         } else {
             val usage = index.usageLines(entry)
             usage.take(MAX_USAGE_LINES).mapTo(lines) { usageLine(entry.name, it) }
@@ -82,6 +83,7 @@ class HelpPages<S>(private val index: HelpIndex<S>) {
             }
             lines += Paint.gray.italic("No description is available for this command.")
         }
+        lines += Component.empty()
         return joinLines(lines)
     }
 
@@ -107,6 +109,7 @@ class HelpPages<S>(private val index: HelpIndex<S>) {
             "Markdown on signs is available to Donators and admins. Writing <name> on a sign shows " +
                 "each reader their own name.",
         )
+        lines += Component.empty()
         return joinLines(lines)
     }
 
@@ -160,9 +163,8 @@ class HelpPages<S>(private val index: HelpIndex<S>) {
         val MARKDOWN_DECORATIONS: List<Char> = "klmno".toList()
         const val MARKDOWN_RESET = 'r'
 
-        /** `<x>` gray (the issue's light_gray), `[x]` dark gray, a plain word gray. */
-        fun syntaxToken(token: String): MutableComponent =
-            if (token.startsWith("[")) Paint.darkGray(token) else Paint.gray(token)
+        /** `<x>`, `[x]` and plain words are all the same gray — the brackets alone tell optional from required. */
+        fun syntaxToken(token: String): MutableComponent = Paint.gray(token)
 
         /** `%a green`, rendered in the very style the code produces. */
         fun codeSample(code: Char): MutableComponent {

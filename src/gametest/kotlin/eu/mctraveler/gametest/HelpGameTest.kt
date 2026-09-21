@@ -147,7 +147,9 @@ class HelpGameTest {
                 "Available options are: rename, add, remove, delete, start, end, extend, size, shrink, flags",
                 "a non-admin's options (no bounds/locate)",
             )
-            helper.assertTrue(lines[3].startsWith("A region protects a piece of land"), "the explanation: '${lines[3]}'")
+            helper.assertValueEqual(lines[3], "", "the blank line between the options and the explanation")
+            helper.assertTrue(lines[4].startsWith("A region protects a piece of land"), "the explanation: '${lines[4]}'")
+            helper.assertValueEqual(lines.last(), "", "the blank line that ends the page")
             helper.assertTrue(
                 lines.any { it.contains("Call for an admin to expand it for you.") },
                 "the admin-expansion note is missing",
@@ -162,8 +164,13 @@ class HelpGameTest {
             )
             helper.assertValueEqual(
                 runsOf(page).first { it.text.startsWith("Available options") }.color.orEmpty(),
-                "gray",
+                "white",
                 "the options line colour",
+            )
+            helper.assertValueEqual(
+                runsOf(page).first { it.text.startsWith("A region protects a piece of land") }.color.orEmpty(),
+                "gray",
+                "the explanation colour",
             )
 
             val adminLines = helpMessage(admin, "help region").string.split('\n')

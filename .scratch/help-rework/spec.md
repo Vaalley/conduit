@@ -7,13 +7,12 @@ the client's `/` suggestions too.
 
 ## Colours
 
-The issue uses dye names: its `light_gray` is Minecraft's `gray` (`Paint.gray`),
-its `gray` is the darker `dark_gray` (`Paint.darkGray`).
+The issue used dye names (`light_gray` = `Paint.gray`, `gray` = `Paint.darkGray`); after review both required and optional parameters are `Paint.gray`.
 
 - header, footer, hint: `Paint.yellow` (hint italic); struck-through runs are 12 spaces
 - command names: `Paint.white`
-- required `<x>` (and plain literals): `Paint.gray`; optional `[x]`: `Paint.darkGray`
-- header text `( Help menu )`; footer `[strike] ( Page 1 2 3 ) [strike]`, current
+- `<x>`, `[x]` and plain literals: `Paint.gray` (the brackets alone mark optional)
+- header text `( Help menu )`; footer `[strike]( Page 1 2 3 )[strike]` (no spaces outside the parentheses), current
   page bold + underlined, the others `runs("/help N")`
 
 ## The list
@@ -95,3 +94,9 @@ Newbie -> Traveler promotion. Vanilla already re-syncs on `/op` and `/deop`.
   client tree via `ClientboundCommandsPacket`, rank/promotion re-sync); existing
   crystal/embassy/rank tests now expect the unknown-command reply for
   non-admins on wholly admin-only roots.
+
+## Command page layout (after review)
+
+Header, then the names line (`/region, /rg`, white bold), the `Available options are: …`
+line (white), a blank line, the explanation (gray), and a blank line that ends the page so
+it does not run into the next chat message. `/help markdown` ends with the same blank line.
