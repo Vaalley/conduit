@@ -529,12 +529,31 @@ object RegionCommands {
         return null
     }
 
-    // ---- admin commands ----
+    // ---- admin commands (and /rg bounds, which Donators share) ----
+
+    /**
+     * `/rg bounds` is for admins and Donators, checked in the body so a malformed line still
+     * gets its usage. What a Donator may point it at is [boundsRefusal].
+     */
+    private fun boundsGate(player: ServerPlayer): Component? {
+        if (RegionsFeature.isAdmin(player)) return null
+        val donator = runCatching { RankFeature.rankOf(player) == eu.mctraveler.rank.Rank.DONATOR }.getOrDefault(false)
+        return if (donator) null else Paint.error("You must be a Donator or an admin to use this command")
+    }
+
+    /** An admin may read and set any region's Y bounds; a Donator only those of a region they belong to. */
+    private fun boundsRefusal(player: ServerPlayer, region: Region): Component? =
+        if (RegionsFeature.isAdmin(player) || region.isResident(player.uuid)) {
+            null
+        } else {
+            Paint.error("You are not a member of this region")
+        }
 
     private fun setBounds(player: ServerPlayer, rawMinY: Int, rawMaxY: Int): Component {
-        RegionsFeature.adminGate(player)?.let { return it }
+        boundsGate(player)?.let { return it }
         val region = RegionTracker.regionOf(player)
             ?: return Paint.error("You must stand in the region you want to set bounds for")
+        boundsRefusal(player, region)?.let { return it }
         val minY = minOf(rawMinY, rawMaxY)
         val maxY = maxOf(rawMinY, rawMaxY)
         if (minY < MIN_Y || maxY > MAX_Y) {
@@ -553,9 +572,10 @@ object RegionCommands {
     }
 
     private fun showBounds(player: ServerPlayer): Component {
-        RegionsFeature.adminGate(player)?.let { return it }
+        boundsGate(player)?.let { return it }
         val region = RegionTracker.regionOf(player)
             ?: return Paint.error("You must stand in a region to view bounds")
+        boundsRefusal(player, region)?.let { return it }
         return Paint(
             Paint.green(region.title),
             " bounds: Y ", Paint.white(region.minY), " to ", Paint.white(region.maxY),

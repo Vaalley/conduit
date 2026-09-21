@@ -306,6 +306,78 @@ class ChatGameTest {
         }
     }
 
+    /** The colour of the run reading [name] in [message], or null when no run reads exactly that. */
+    private fun nameColorIn(message: Component, name: String): String? =
+        message.toFlatList(message.style).firstOrNull { it.string == name }?.style?.color?.serialize()
+
+    @GameTest
+    fun aDonatorsGoldNameShowsInPrivateMessagesAndSelectedChat(helper: GameTestHelper) {
+        val server = helper.level.server
+        val donor = TestPlayer.join(server, "DonorMsgA")
+        eu.mctraveler.rank.RankFeature.setRank(donor.player, eu.mctraveler.rank.Rank.DONATOR)
+        val plain = TestPlayer.join(server, "DonorMsgB")
+        val marker = donor.player.uuid
+        helper.runAfterDelay(2) {
+            donor.runCommand("msg ${plain.name} whisper $marker")
+            donor.runCommand("chat ${plain.name}")
+            donor.chat("selected $marker")
+        }
+        helper.succeedWhen {
+            val whisper = plain.systemMessages().firstOrNull { it.string.contains("whisper $marker") }
+                ?: throw helper.assertionException("the private message did not arrive")
+            if (nameColorIn(whisper, "DonorMsgA") != "gold") {
+                throw helper.assertionException("the Donator's name in /msg is not gold: ${nameColorIn(whisper, "DonorMsgA")}")
+            }
+            if (nameColorIn(whisper, "DonorMsgB") != "green") {
+                throw helper.assertionException("an ordinary name in /msg is no longer plain green")
+            }
+            val selected = plain.systemMessages().firstOrNull { it.string.contains("selected $marker") }
+                ?: throw helper.assertionException("the selected-players line did not arrive")
+            if (nameColorIn(selected, "DonorMsgA") != "gold") {
+                throw helper.assertionException("the Donator's name in selected chat is not gold")
+            }
+        }
+    }
+
+    @GameTest
+    fun aDonatorsGoldNameShowsInJoinAwayAndLeaveAnnouncements(helper: GameTestHelper) {
+        val server = helper.level.server
+        val observer = TestPlayer.join(server, "DonorAnnObserver")
+        val donor = TestPlayer.join(server, "DonorAnnounced")
+        eu.mctraveler.rank.RankFeature.setRank(donor.player, eu.mctraveler.rank.Rank.DONATOR)
+        helper.runAfterDelay(4) {
+            donor.runCommand("away")
+            donor.disconnect()
+        }
+        helper.succeedWhen {
+            fun line(text: String) = observer.systemMessages().firstOrNull { it.string.contains("DonorAnnounced $text") }
+                ?: throw helper.assertionException("the observer has not seen '$text'")
+            for (text in listOf("joined", "is now away", "left.")) {
+                val colour = nameColorIn(line(text), "DonorAnnounced")
+                if (colour != "gold") throw helper.assertionException("the name in the '$text' line is $colour, not gold")
+            }
+        }
+    }
+
+    @GameTest
+    fun anOrdinaryPlayersAnnouncementsAreUnchanged(helper: GameTestHelper) {
+        val server = helper.level.server
+        val observer = TestPlayer.join(server, "PlainAnnObserver")
+        val plain = TestPlayer.join(server, "PlainAnnounced")
+        helper.runAfterDelay(4) {
+            plain.runCommand("away")
+            plain.disconnect()
+        }
+        helper.succeedWhen {
+            val away = observer.systemMessages().firstOrNull { it.string.contains("PlainAnnounced is now away") }
+                ?: throw helper.assertionException("no away line")
+            if (nameColorIn(away, "PlainAnnounced") != "green") throw helper.assertionException("the away name changed")
+            val left = observer.systemMessages().firstOrNull { it.string.contains("PlainAnnounced left.") }
+                ?: throw helper.assertionException("no leave line")
+            if (nameColorIn(left, "PlainAnnounced") != "red") throw helper.assertionException("the leave name is no longer red")
+        }
+    }
+
     @GameTest
     fun deathMessageReachesEveryDimensionExactlyOnce(helper: GameTestHelper) {
         val server = helper.level.server

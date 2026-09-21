@@ -85,7 +85,7 @@ object ChatFeature {
             ChatSelector.clear(handler.player.uuid)
             pendingJoins.removeIf { it.uuid == handler.player.uuid }
             if (announced.remove(handler.player.uuid)) {
-                val line = leaveLine(handler.player.gameProfile.name)
+                val line = leaveLineFor(handler.player)
                 if (VanishFeature.isVanished(handler.player)) {
                     // Non-admins already saw this player "leave" when they
                     // vanished; only admins get the real disconnect line.
@@ -211,10 +211,10 @@ object ChatFeature {
                     sender.sendSystemMessage(Paint.error("None of your chat recipients are online"))
                     return false
                 }
-                val names = recipients.joinToString(", ") { it.gameProfile.name }
+                val names = Paint(*recipients.flatMapIndexed { i, r -> listOfNotNull(if (i > 0) ", " else null, nameOf(r)) }.toTypedArray())
                 val line = Paint(
-                    Paint.green(sender.gameProfile.name), " ", Paint.gray("→"), " ",
-                    Paint.green(names), ": ", contentOf(message),
+                    nameOf(sender), " ", Paint.gray("→"), " ",
+                    names, ": ", contentOf(message),
                 )
                 (recipients + sender).distinctBy { it.uuid }.forEach { it.sendSystemMessage(line) }
             }
@@ -233,7 +233,7 @@ object ChatFeature {
                 }
                 val line = Paint(
                     Paint.darkGray("["), Paint.yellow(region.title), Paint.darkGray("]"), " ",
-                    Paint.green(sender.gameProfile.name), ": ", contentOf(message),
+                    nameOf(sender), ": ", contentOf(message),
                 )
                 (recipients + sender).distinctBy { it.uuid }.forEach { it.sendSystemMessage(line) }
             }
@@ -263,7 +263,7 @@ object ChatFeature {
             // Skip anyone who dropped between login and end of tick: no ghost announcements.
             val player = server.playerList.getPlayer(pending.uuid) ?: continue
             announced += pending.uuid
-            broadcast(server, joinLine(player.gameProfile.name, pending.country))
+            broadcast(server, joinLine(nameOf(player), pending.country))
         }
     }
 
@@ -271,21 +271,38 @@ object ChatFeature {
         server.playerList.broadcastSystemMessage(message, false)
     }
 
+    /**
+     * [player]'s name in a chat line that is not the chat message itself (private messages, region
+     * chat, announcements): their styled name when a Donator or a custom name makes it worth
+     * showing ([NameCosmetics.nameOr]), the plain green username otherwise.
+     */
+    internal fun nameOf(player: ServerPlayer): Component =
+        NameCosmetics.nameOr(player) { Paint.green(player.gameProfile.name) }
+
     /** `[+] <name> joined from <Country>` when a country is known. */
-    internal fun joinLine(name: String, country: String? = null): Component = Paint.gray(
+    internal fun joinLine(name: String, country: String? = null): Component =
+        joinLine(Paint.green(name), country)
+
+    internal fun joinLine(name: Component, country: String? = null): Component = Paint.gray(
         Paint.darkGray("["),
         Paint.green("+"),
         Paint.darkGray("]"),
         " ",
-        Paint.green(name),
+        name,
         " joined",
         country?.let { Paint.gray(" from ", Paint.green(it)) },
     )
 
     /** `[-] <name> left.` — the Portal's exact leave line (note the trailing period). */
-    internal fun leaveLine(name: String): Component = Paint.gray(
-        Paint.darkGray("["), Paint.red("-"), Paint.darkGray("]"), " ", Paint.red(name), " left.",
+    internal fun leaveLine(name: String): Component = leaveLine(Paint.red(name))
+
+    internal fun leaveLine(name: Component): Component = Paint.gray(
+        Paint.darkGray("["), Paint.red("-"), Paint.darkGray("]"), " ", name, " left.",
     )
+
+    /** The leave line for [player]: red name, or their styled name when [nameOf] would style it. */
+    internal fun leaveLineFor(player: ServerPlayer): Component =
+        leaveLine(NameCosmetics.nameOr(player) { Paint.red(player.gameProfile.name) })
 
     /**
      * The join line [player] would produce if they were connecting right now,
@@ -297,7 +314,7 @@ object ChatFeature {
             ?.takeUnless(::isPrivateAddress)
             ?.let(GeoIpFeature::lookup)
             ?.name
-        return joinLine(player.gameProfile.name, country)
+        return joinLine(nameOf(player), country)
     }
 
     private fun isPrivateAddress(address: InetAddress): Boolean =
