@@ -19,7 +19,8 @@ class HelpEntry<S>(
  * The commands a particular viewer can use, worked out from the live Brigadier
  * dispatcher: pure logic over a stub-able dispatcher, no Minecraft types.
  *
- * - Every root that the [source] `canUse` is listed, mod and vanilla alike.
+ * - Every root that the [source] `canUse` is listed, mod and vanilla alike, except
+ *   the catalog's `hidden` ones.
  * - Alias groups collapse to one entry, the primary name: a root that
  *   `redirect`s to another root is an alias of it (found generically), and the
  *   [catalog] declares aliases of separately registered trees (`rg` for `region`).
@@ -113,7 +114,11 @@ class HelpIndex<S> private constructor(
             viewerIsAdmin: Boolean,
             catalog: HelpCatalog,
         ): HelpIndex<S> {
-            val roots = dispatcher.root.children.filterIsInstance<LiteralCommandNode<S>>()
+            // A hidden command is not in the menu at all — nor is an alias of one.
+            val roots = dispatcher.root.children.filterIsInstance<LiteralCommandNode<S>>().filter { root ->
+                root.name !in catalog.hidden &&
+                    (root.redirect as? LiteralCommandNode<S>)?.name?.let { it !in catalog.hidden } != false
+            }
             val rootNames = roots.map { it.name }.toSet()
 
             // alias name -> primary name

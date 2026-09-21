@@ -100,3 +100,15 @@ Newbie -> Traveler promotion. Vanilla already re-syncs on `/op` and `/deop`.
 Header, then the names line (`/region, /rg`, white bold), the `Available options are: …`
 line (white), a blank line, the explanation (gray), and a blank line that ends the page so
 it does not run into the next chat message. `/help markdown` ends with the same blank line.
+
+## Vanilla commands (after review)
+
+- `VanillaHelp.HIDDEN` lists vanilla commands the menu never shows, for anyone (`execute`,
+  `scoreboard`, `tick`, `worldborder`, … — 32 names plus the vanilla spelling `advancement`).
+  It is a help-menu change only: they stay registered, an admin can still run them, and they
+  still tab-complete. A hidden name (or an alias of one) is also unknown to `/help <name>` and
+  never suggested.
+- The vanilla commands that stay listed have a description in `VanillaHelp.ENTRIES`, worded
+  from minecraft.wiki's command list. Aliases (`xp`, `tp`) come from the command tree.
+- `/teammsg` and its alias `/tm` are removed from the dispatcher for everyone
+  (`PrivateMessages`, next to the vanilla `/msg` it replaces).

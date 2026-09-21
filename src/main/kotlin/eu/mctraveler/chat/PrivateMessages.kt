@@ -44,7 +44,9 @@ object PrivateMessages {
     }
 
     private fun registerCommands(dispatcher: CommandDispatcher<CommandSourceStack>) {
-        CommandTree.removeRootCommands(dispatcher, "msg", "tell", "w")
+        // Vanilla's private messages are replaced below; its team messages (/teammsg and
+        // its alias /tm) are not offered to anyone.
+        CommandTree.removeRootCommands(dispatcher, "msg", "tell", "w", "teammsg", "tm")
 
         val msg = dispatcher.register(
             Commands.literal("msg").then(

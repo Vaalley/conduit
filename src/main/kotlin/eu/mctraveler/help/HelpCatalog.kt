@@ -24,11 +24,14 @@ data class CommandHelp(
 
 /**
  * The per-command help text, keyed by primary command name. Commands without an
- * entry (vanilla ones) fall back to their Brigadier usage in the help pages.
+ * entry fall back to their Brigadier usage in the help pages. [hidden] names are
+ * left out of the menu altogether.
  */
 class HelpCatalog(
     private val entries: Map<String, CommandHelp>,
     private val fallback: (String) -> CommandHelp? = { null },
+    /** Root commands the help menu never lists (see [VanillaHelp.HIDDEN]). */
+    val hidden: Set<String> = emptySet(),
 ) {
     fun of(name: String): CommandHelp? = entries[name] ?: fallback(name)
 
@@ -39,8 +42,10 @@ class HelpCatalog(
     companion object {
         val EMPTY = HelpCatalog(emptyMap())
 
-        /** The catalog of every command the mod registers. */
-        val DEFAULT: HelpCatalog by lazy { HelpCatalog(defaultEntries(), ::spawnHelp) }
+        /** The catalog of every command the mod registers, and of the vanilla ones it keeps in the menu. */
+        val DEFAULT: HelpCatalog by lazy {
+            HelpCatalog(defaultEntries() + VanillaHelp.ENTRIES, ::spawnHelp, VanillaHelp.HIDDEN)
+        }
 
         private val spawnCommand = Regex("spawn(\\d+)")
 

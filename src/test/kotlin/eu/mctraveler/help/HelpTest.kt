@@ -395,6 +395,42 @@ class HelpTest {
     }
 
     @Test
+    fun `a hidden command, and an alias of it, is not listed, found or suggested for anyone`() {
+        val dispatcher = dispatcher()
+        val execute = dispatcher.register(literal("execute").executes { 1 })
+        dispatcher.register(literal("exec").redirect(execute))
+        dispatcher.register(literal("gamemode").executes { 1 })
+        val hidden = HelpCatalog(emptyMap(), hidden = setOf("execute"))
+        for (admin in listOf(false, true)) {
+            val index = HelpIndex.build(dispatcher, Viewer(admin), admin, hidden)
+            assertFalse("execute" in names(index) || "exec" in names(index), "listed: ${names(index)}")
+            assertNull(index.find("execute"))
+            assertNull(index.find("/exec"))
+            assertFalse(index.names().any { it == "execute" || it == "exec" }, "suggested: ${index.names()}")
+            assertTrue("gamemode" in names(index))
+        }
+        assertTrue("execute" in names(HelpIndex.build(dispatcher, Viewer(true), true, catalog)))
+    }
+
+    @Test
+    fun `the default catalog hides the listed vanilla commands and describes the ones it keeps`() {
+        val hidden = HelpCatalog.DEFAULT.hidden
+        val requested = listOf(
+            "advancements", "attribute", "bossbar", "clear", "damage", "datapack", "defaultgamemode", "enchant",
+            "execute", "jfr", "loot", "particle", "place", "playsound", "posteffect", "random", "ride", "rotate",
+            "scoreboard", "seed", "setblock", "spreadplayers", "stopsound", "stopwatch", "summon", "swing",
+            "tellraw", "tick", "title", "transfer", "trigger", "worldborder",
+        )
+        for (name in requested) assertTrue(name in hidden, "/$name is not hidden")
+        for (name in listOf("gamemode", "give", "list", "me", "time", "teleport", "kill")) {
+            val info = HelpCatalog.DEFAULT.of(name)
+            assertNotNull(info, "/$name has no description")
+            assertTrue(info!!.description.isNotBlank())
+        }
+        assertTrue(hidden.none { it in VanillaHelp.ENTRIES }, "a hidden command also has a description")
+    }
+
+    @Test
     fun `the default catalog describes a redirect-free set of primary names and declares rg`() {
         assertEquals("region", HelpCatalog.DEFAULT.declaredAliases["rg"])
         assertTrue(HelpCatalog.DEFAULT.of("region")!!.description.contains("protects a piece of land"))

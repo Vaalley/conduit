@@ -14,6 +14,7 @@ import net.minecraft.network.chat.ClickEvent
 import net.minecraft.network.chat.Component
 import net.minecraft.network.protocol.game.ClientboundCommandsPacket
 import net.minecraft.resources.Identifier
+import net.minecraft.server.permissions.LevelBasedPermissionSet
 import net.minecraft.stats.Stats
 
 /**
@@ -33,7 +34,92 @@ class HelpGameTest {
         "rank", "vanish", "embassy", "economy", "set-teleportation-crystal-energy",
     )
 
+    /** Vanilla commands the help menu leaves out for everyone. */
+    private val hiddenRoots = listOf(
+        "advancement", "attribute", "bossbar", "clear", "damage", "datapack", "defaultgamemode", "enchant",
+        "execute", "jfr", "loot", "particle", "place", "playsound", "posteffect", "random", "ride", "rotate",
+        "scoreboard", "seed", "setblock", "spreadplayers", "stopsound", "stopwatch", "summon", "swing",
+        "tellraw", "tick", "title", "transfer", "trigger", "worldborder",
+    )
+
     // -- the list --
+
+    @GameTest(maxTicks = 100)
+    fun hiddenVanillaCommandsAreNeverListedForAnyone(helper: GameTestHelper) {
+        val player = MessageCapturingPlayer.join(helper, "HelpHiddenMember")
+        val admin = MessageCapturingPlayer.join(helper, "HelpHiddenBoss")
+        admin.makeAdmin()
+        try {
+            val dispatcher = helper.level.server.commands.dispatcher
+            for ((who, viewer) in listOf("a member" to player, "an admin" to admin)) {
+                val op = viewer === admin
+                val listed = allListedCommands(helper, viewer, op)
+                for (name in hiddenRoots) {
+                    helper.assertTrue(name !in listed, "$who's /help lists /$name")
+                    val reply = helpMessage(viewer, "help $name", op).string
+                    helper.assertTrue(reply.startsWith("ERROR"), "/help $name for $who was answered: $reply")
+                }
+            }
+            // The menu is all that changes: an admin can still run what it no longer lists.
+            for (name in listOf("execute", "tick", "scoreboard", "worldborder")) {
+                helper.assertTrue(dispatcher.root.getChild(name) != null, "/$name is gone from the server")
+            }
+            val boss = allListedCommands(helper, admin, op = true)
+            for (name in listOf("gamemode", "give", "time", "teleport", "list", "me")) {
+                helper.assertTrue(name in boss, "an admin's /help does not list /$name")
+            }
+            helper.succeed()
+        } finally {
+            player.leave()
+            admin.leave()
+        }
+    }
+
+    @GameTest(maxTicks = 100)
+    fun keptVanillaCommandsHaveADescription(helper: GameTestHelper) {
+        val admin = MessageCapturingPlayer.join(helper, "HelpVanillaDescriber")
+        admin.makeAdmin()
+        try {
+            for (name in listOf(
+                "gamemode", "give", "time", "teleport", "tp", "list", "me", "kill", "effect", "experience", "xp",
+                "fill", "clone", "gamerule", "weather", "difficulty", "op", "deop", "whitelist", "say", "team",
+                "tag", "locate", "reload", "stop", "save-all", "data", "function", "item", "recipe",
+            )) {
+                val reply = helpMessage(admin, "help $name", op = true).string
+                helper.assertTrue(!reply.startsWith("ERROR"), "/help $name failed: $reply")
+                helper.assertTrue(
+                    !reply.contains("No description is available"),
+                    "/help $name has no description: $reply",
+                )
+            }
+            val tp = helpMessage(admin, "help tp", op = true).string.split('\n')
+            helper.assertValueEqual(tp[1], "/teleport, /tp", "the teleport names line")
+            helper.succeed()
+        } finally {
+            admin.leave()
+        }
+    }
+
+    @GameTest(maxTicks = 100)
+    fun teammsgIsRemovedForEveryone(helper: GameTestHelper) {
+        val player = MessageCapturingPlayer.join(helper, "HelpNoTeamMsg")
+        val admin = MessageCapturingPlayer.join(helper, "HelpNoTeamMsgBoss")
+        admin.makeAdmin()
+        try {
+            val dispatcher = helper.level.server.commands.dispatcher
+            for (name in listOf("teammsg", "tm")) {
+                helper.assertTrue(dispatcher.root.getChild(name) == null, "/$name is still registered")
+                for ((who, viewer) in listOf("a member" to player, "an admin" to admin)) {
+                    helper.assertTrue(name !in clientRoots(helper, viewer), "/$name is in $who's client tree")
+                    helper.assertTrue(name !in allListedCommands(helper, viewer, viewer === admin), "/$name is in $who's /help")
+                }
+            }
+            helper.succeed()
+        } finally {
+            player.leave()
+            admin.leave()
+        }
+    }
 
     @GameTest(maxTicks = 100)
     fun aNonAdminNeverSeesAnAdminCommandOnAnyPage(helper: GameTestHelper) {
@@ -308,10 +394,21 @@ class HelpGameTest {
 
     // -- helpers --
 
-    /** Runs `/<command>` as [player] and returns the one message it produced. */
-    private fun helpMessage(player: MessageCapturingPlayer, command: String): Component {
+    /**
+     * Runs `/<command>` as [player] and returns the one message it produced. With [op] the
+     * source also carries an operator's vanilla permission level, which is what makes
+     * vanilla's op commands usable to it (being on the ops list alone does not in a gametest).
+     */
+    private fun helpMessage(player: MessageCapturingPlayer, command: String, op: Boolean = false): Component {
         player.messages.clear()
-        player.runCommand(command)
+        if (op) {
+            player.level().server.commands.performPrefixedCommand(
+                player.createCommandSourceStack().withPermission(LevelBasedPermissionSet.OWNER),
+                command,
+            )
+        } else {
+            player.runCommand(command)
+        }
         return player.messages.last()
     }
 
@@ -320,12 +417,16 @@ class HelpGameTest {
         firstPage.string.split('\n').last().substringAfter("Page").substringBefore(")").trim().split(' ').size
 
     /** Every command name listed on every page of [player]'s `/help`, in order. */
-    private fun allListedCommands(helper: GameTestHelper, player: MessageCapturingPlayer): List<String> {
-        val first = helpMessage(player, "help")
+    private fun allListedCommands(
+        helper: GameTestHelper,
+        player: MessageCapturingPlayer,
+        op: Boolean = false,
+    ): List<String> {
+        val first = helpMessage(player, "help", op)
         val pages = pageCount(first)
         val names = mutableListOf<String>()
         for (page in 1..pages) {
-            val message = if (page == 1) first else helpMessage(player, "help $page")
+            val message = if (page == 1) first else helpMessage(player, "help $page", op)
             val lines = message.string.split('\n')
             helper.assertValueEqual(lines.first().trim(), "( Help menu )", "the header of page $page")
             lines.drop(2).dropLast(1).mapTo(names) { it.substringBefore(' ').removePrefix("/") }
