@@ -115,8 +115,8 @@ object PrivateMessages {
     /** Sends the Portal's private-message line — identical for both parties — to each of them. */
     private fun deliver(sender: ServerPlayer, target: ServerPlayer, message: String) {
         val line = Paint(
-            Paint.green(sender.gameProfile.name), " ", Paint.gray("→"), " ",
-            Paint.green(target.gameProfile.name), ": ", message,
+            ChatFeature.nameOf(sender), " ", Paint.gray("→"), " ",
+            ChatFeature.nameOf(target), ": ", message,
         )
         target.sendSystemMessage(line)
         sender.sendSystemMessage(line)

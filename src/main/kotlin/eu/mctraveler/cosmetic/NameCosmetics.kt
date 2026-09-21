@@ -70,6 +70,22 @@ object NameCosmetics {
         return component
     }
 
+    /**
+     * [player]'s styled name ([forPlayer]) when it carries anything worth showing — a Donator's
+     * gold, or a tag, colour or gradient they set — and [plain] otherwise. Chat lines that are not
+     * the chat message itself (private messages, region chat, join/leave/away announcements) use
+     * this, so a name looks the same wherever it appears without changing what an ordinary
+     * player's lines look like. Never throws: a name that cannot be styled is shown plain.
+     */
+    fun nameOr(player: ServerPlayer, plain: () -> Component): Component = runCatching {
+        val players = MCTraveler.persistence?.players
+        val hasCosmetics = players != null &&
+            (players.nameTag(player.uuid) != null ||
+                players.nameColor(player.uuid) != null ||
+                players.nameGradient(player.uuid) != null)
+        if (RankFeature.rankOf(player) == Rank.DONATOR || hasCosmetics) forPlayer(player) else plain()
+    }.getOrElse { plain() }
+
     fun invalidate(uuid: UUID) {
         cache.remove(uuid)
         unreadableRecords.remove(uuid)

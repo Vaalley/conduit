@@ -107,7 +107,7 @@ object VanishFeature {
             if (viewer === player) continue
             viewer.sendSystemMessage(
                 if (RegionsFeature.isAdmin(viewer)) adminLine(name, "went into vanish mode")
-                else ChatFeature.leaveLine(name),
+                else ChatFeature.leaveLineFor(player),
                 false,
             )
         }
