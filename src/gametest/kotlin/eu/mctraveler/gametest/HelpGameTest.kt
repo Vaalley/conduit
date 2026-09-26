@@ -65,7 +65,7 @@ class HelpGameTest {
                 helper.assertTrue(dispatcher.root.getChild(name) != null, "/$name is gone from the server")
             }
             val boss = allListedCommands(helper, admin, op = true)
-            for (name in listOf("gamemode", "give", "time", "teleport", "list", "me")) {
+            for (name in listOf("gamemode", "give", "time", "teleport", "list")) {
                 helper.assertTrue(name in boss, "an admin's /help does not list /$name")
             }
             helper.succeed()
@@ -81,7 +81,7 @@ class HelpGameTest {
         admin.makeAdmin()
         try {
             for (name in listOf(
-                "gamemode", "give", "time", "teleport", "tp", "list", "me", "kill", "effect", "experience", "xp",
+                "gamemode", "give", "time", "teleport", "tp", "list", "kill", "effect", "experience", "xp",
                 "fill", "clone", "gamerule", "weather", "difficulty", "op", "deop", "whitelist", "say", "team",
                 "tag", "locate", "reload", "stop", "save-all", "data", "function", "item", "recipe",
             )) {
@@ -101,13 +101,13 @@ class HelpGameTest {
     }
 
     @GameTest(maxTicks = 100)
-    fun teammsgIsRemovedForEveryone(helper: GameTestHelper) {
+    fun teammsgAndMeAreRemovedForEveryone(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "HelpNoTeamMsg")
         val admin = MessageCapturingPlayer.join(helper, "HelpNoTeamMsgBoss")
         admin.makeAdmin()
         try {
             val dispatcher = helper.level.server.commands.dispatcher
-            for (name in listOf("teammsg", "tm")) {
+            for (name in listOf("teammsg", "tm", "me")) {
                 helper.assertTrue(dispatcher.root.getChild(name) == null, "/$name is still registered")
                 for ((who, viewer) in listOf("a member" to player, "an admin" to admin)) {
                     helper.assertTrue(name !in clientRoots(helper, viewer), "/$name is in $who's client tree")

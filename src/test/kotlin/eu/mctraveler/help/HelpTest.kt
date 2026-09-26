@@ -422,7 +422,7 @@ class HelpTest {
             "tellraw", "tick", "title", "transfer", "trigger", "worldborder",
         )
         for (name in requested) assertTrue(name in hidden, "/$name is not hidden")
-        for (name in listOf("gamemode", "give", "list", "me", "time", "teleport", "kill")) {
+        for (name in listOf("gamemode", "give", "list", "time", "teleport", "kill")) {
             val info = HelpCatalog.DEFAULT.of(name)
             assertNotNull(info, "/$name has no description")
             assertTrue(info!!.description.isNotBlank())

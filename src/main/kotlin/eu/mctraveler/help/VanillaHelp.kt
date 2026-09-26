@@ -79,7 +79,6 @@ object VanillaHelp {
         "locate" to CommandHelp(
             "Finds the nearest structure, biome or point of interest and tells you its coordinates.",
         ),
-        "me" to CommandHelp("Shows a short action about you in chat, such as \"* Steve waves\"."),
         "op" to CommandHelp("Makes a player an operator (admin)."),
         "pardon-ip" to CommandHelp("Removes an IP address from the ban list."),
         "perf" to CommandHelp(

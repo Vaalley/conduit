@@ -122,6 +122,11 @@ class StrawBedProtectionGameTest {
     }
 
     private fun sleepThenLeaveAtNight(helper: GameTestHelper, foot: BlockPos, player: MessageCapturingPlayer) {
+        // Vanilla also refuses rest while a hostile mob is nearby, and neighbouring tests spawn
+        // some; clear the ones close enough to the bed to count.
+        val around = net.minecraft.world.phys.AABB(helper.absolutePos(foot)).inflate(8.0, 5.0, 8.0)
+        helper.level.getEntities(null as net.minecraft.world.entity.Entity?, around) { it is net.minecraft.world.entity.monster.Enemy }
+            .forEach { it.discard() }
         val pos = helper.absolutePos(foot)
         val block = Blocks.STRAW_BED as StrawBedBlock
         val state = helper.level.getBlockState(pos)
