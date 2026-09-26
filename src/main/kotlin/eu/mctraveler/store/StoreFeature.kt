@@ -210,7 +210,7 @@ object StoreFeature {
         MCTraveler.persistence?.ledger?.read(uuid)?.none { it.reason == Reasons.FEE_STORE_CREATE } ?: false
 
     private fun confirmPrompt(): Component = Paint(
-        Paint.gray("Creating your first store costs ", Economy.format(StoreFees.CREATE), ". Continue?"),
+        Paint.gray("Every store costs ", Economy.format(StoreFees.CREATE), " to create. Continue?"),
         "\n",
         Paint.green.bold.runs("/store confirm")("[Accept]"),
         "  ",
