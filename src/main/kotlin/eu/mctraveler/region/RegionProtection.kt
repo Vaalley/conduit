@@ -806,12 +806,11 @@ object RegionProtection {
             return region == null || canModifyRegion(p, region) || refuse(p, region)
         }
         // A sulfur cube is bucketable and shearable, either of which lets a
-        // visitor carry one off — unlike a villager or chest boat, this is
-        // refused unconditionally inside a region, with no member exception:
-        // a sulfur cube stays exactly where it is once it wanders into
-        // someone's claim.
+        // visitor carry one off — a resident (or an admin, or a PUBLIC
+        // region) may still do that, exactly as vanilla intends, but a
+        // stranger may not: a sulfur cube stays put for anyone else.
         if (entity is SulfurCube) {
-            return region == null || refuse(p, region)
+            return region == null || canModifyRegion(p, region) || refuse(p, region)
         }
         if (isOwnedBy(entity, p)) return true
 
