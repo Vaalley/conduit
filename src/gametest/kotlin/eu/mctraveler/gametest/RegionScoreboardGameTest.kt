@@ -173,6 +173,28 @@ class RegionScoreboardGameTest {
     }
 
     @GameTest
+    fun anOfflineDonatorKeepsTheirGoldNameOnTheSidebar(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T13SbOffA")
+        val bob = MessageCapturingPlayer.join(helper, "T13SbOffB")
+        eu.mctraveler.rank.RankFeature.setRank(bob, eu.mctraveler.rank.Rank.DONATOR)
+        val region = createRegion(helper, alice, 0.0 to 0.0, 3.0 to 2.0)
+        alice.runCommand("rg add T13SbOffB")
+        val aliceView = SidebarView(alice)
+        bob.leave()
+
+        helper.runAfterDelay(2) {
+            eu.mctraveler.region.RegionTracker.redraw(helper.level.server, region)
+            val expected = eu.mctraveler.rank.Rank.DONATOR.chatColor("T13SbOffB")
+            helper.assertTrue(
+                expected in aliceView.refresh().lines,
+                "an offline Donator's row should still be gold",
+            )
+            alice.leave()
+            helper.succeed()
+        }
+    }
+
+    @GameTest
     fun longNamesAreTruncatedAndUnknownMembersAreSkipped(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T13SbLong")
         val region = createRegion(helper, alice, 0.0 to 0.0, 3.0 to 2.0)

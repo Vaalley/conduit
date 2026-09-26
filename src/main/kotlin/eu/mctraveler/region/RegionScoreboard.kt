@@ -1,5 +1,7 @@
 package eu.mctraveler.region
 
+import eu.mctraveler.rank.Rank
+import eu.mctraveler.rank.RankFeature
 import eu.mctraveler.text.Paint
 import java.util.Optional
 import java.util.UUID
@@ -148,10 +150,10 @@ object RegionScoreboard {
         for (uuid in region.members) {
             val name = RegionsFeature.usernameFor(server, uuid) ?: continue
             val ink = if (uuid == player.uuid) Paint.white else Paint.gray
-            // An online Donator keeps their styled name here too.
-            val text = server.playerList.getPlayer(uuid)
-                ?.let { online -> eu.mctraveler.chat.ChatFeature.nameOr(online) { ink(name.take(MAX_WIDTH)) } }
-                ?: ink(name.take(MAX_WIDTH))
+            // A Donator keeps their gold name here online or off — the rank is read from the
+            // stored record, not from a live player.
+            val donator = runCatching { RankFeature.rankOf(uuid) == Rank.DONATOR }.getOrDefault(false)
+            val text = if (donator) Rank.DONATOR.chatColor(name.take(MAX_WIDTH)) else ink(name.take(MAX_WIDTH))
             rows += Row(uuid.toString(), text, place)
             place++
         }

@@ -72,6 +72,9 @@ object RankFeature {
 
     fun rankOf(player: ServerPlayer): Rank = rankOf(store(), player.uuid)
 
+    /** [uuid]'s rank whether or not they are online — the stored record is what decides it. */
+    fun rankOf(uuid: UUID): Rank = rankOf(store(), uuid)
+
     fun setRank(player: ServerPlayer, rank: Rank) = store().setRank(player.uuid, rank.name)
 
     /**
