@@ -340,7 +340,7 @@ class ChatGameTest {
     }
 
     @GameTest
-    fun aDonatorsGoldNameShowsInJoinAwayAndLeaveAnnouncements(helper: GameTestHelper) {
+    fun aDonatorsGoldNameShowsInJoinAndAwayButTheLeaveLineStaysRed(helper: GameTestHelper) {
         val server = helper.level.server
         val observer = TestPlayer.join(server, "DonorAnnObserver")
         val donor = TestPlayer.join(server, "DonorAnnounced")
@@ -352,10 +352,12 @@ class ChatGameTest {
         helper.succeedWhen {
             fun line(text: String) = observer.systemMessages().firstOrNull { it.string.contains("DonorAnnounced $text") }
                 ?: throw helper.assertionException("the observer has not seen '$text'")
-            for (text in listOf("joined", "is now away", "left.")) {
+            for (text in listOf("joined", "is now away")) {
                 val colour = nameColorIn(line(text), "DonorAnnounced")
                 if (colour != "gold") throw helper.assertionException("the name in the '$text' line is $colour, not gold")
             }
+            val left = line("left.")
+            if (nameColorIn(left, "DonorAnnounced") != "red") throw helper.assertionException("a Donator's leave line is no longer red")
         }
     }
 

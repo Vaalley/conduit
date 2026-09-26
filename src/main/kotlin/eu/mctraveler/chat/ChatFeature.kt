@@ -312,9 +312,9 @@ object ChatFeature {
         Paint.darkGray("["), Paint.red("-"), Paint.darkGray("]"), " ", name, " left.",
     )
 
-    /** The leave line for [player]: red name, or their styled name when [nameOf] would style it. */
+    /** The leave line for [player]: always a red name, whatever their rank. */
     internal fun leaveLineFor(player: ServerPlayer): Component =
-        leaveLine(nameOr(player) { Paint.red(player.gameProfile.name) })
+        leaveLine(player.gameProfile.name)
 
     /**
      * The join line [player] would produce if they were connecting right now,
