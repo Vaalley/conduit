@@ -23,6 +23,7 @@ object CosmeticFeature {
     }
 
     private fun registerCommands(dispatcher: CommandDispatcher<CommandSourceStack>) {
+        LocatorColor.register(dispatcher)
         dispatcher.register(
             Commands.literal("name")
                 .executes { context ->

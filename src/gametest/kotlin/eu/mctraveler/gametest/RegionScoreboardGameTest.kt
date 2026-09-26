@@ -152,6 +152,27 @@ class RegionScoreboardGameTest {
     }
 
     @GameTest
+    fun aDonatorKeepsTheirStyledNameOnTheSidebar(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T13SbDonA")
+        val bob = MessageCapturingPlayer.join(helper, "T13SbDonB")
+        eu.mctraveler.rank.RankFeature.setRank(bob, eu.mctraveler.rank.Rank.DONATOR)
+        createRegion(helper, alice, 0.0 to 0.0, 3.0 to 2.0)
+        alice.runCommand("rg add T13SbDonB")
+        val aliceView = SidebarView(alice)
+
+        helper.runAfterDelay(2) {
+            val expected = eu.mctraveler.cosmetic.NameCosmetics.forPlayer(bob)
+            helper.assertTrue(
+                expected in aliceView.refresh().lines,
+                "the Donator's row should carry their styled name",
+            )
+            alice.leave()
+            bob.leave()
+            helper.succeed()
+        }
+    }
+
+    @GameTest
     fun longNamesAreTruncatedAndUnknownMembersAreSkipped(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T13SbLong")
         val region = createRegion(helper, alice, 0.0 to 0.0, 3.0 to 2.0)

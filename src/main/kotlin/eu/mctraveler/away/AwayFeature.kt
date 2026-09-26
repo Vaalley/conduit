@@ -185,7 +185,7 @@ object AwayFeature {
 
     /** The Portal's exact transition line: gray, with the username in green. */
     private fun broadcastTransition(player: ServerPlayer, suffix: String) {
-        val message = Paint.gray(Paint.green(player.gameProfile.name), suffix)
+        val message = Paint.gray(eu.mctraveler.chat.ChatFeature.nameOf(player), suffix)
         player.level().server.playerList.broadcastSystemMessage(message, false)
     }
 
