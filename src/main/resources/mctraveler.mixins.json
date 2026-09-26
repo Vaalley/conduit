@@ -45,6 +45,8 @@
     "RegionFarmlandMixin",
     "RegionBucketMixin",
     "RespawnAnchorPlacementMixin",
+    "StrawBedSleepTrackingMixin",
+    "StrawBedProtectionMixin",
     "EmbassyOriginMixin",
     "CrystalCraftingGuardMixin",
     "CrystalBundleWeightMixin",
