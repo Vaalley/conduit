@@ -47,6 +47,7 @@
     "RespawnAnchorPlacementMixin",
     "EmbassyOriginMixin",
     "CrystalCraftingGuardMixin",
+    "CrystalBundleWeightMixin",
     "CrystalAcceptCommandMixin",
     "MinecraftServerAccessor",
     "AbstractHorseOwnerAccessor",
