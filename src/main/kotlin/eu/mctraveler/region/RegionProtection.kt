@@ -35,6 +35,7 @@ import net.minecraft.world.entity.animal.equine.AbstractHorse
 import net.minecraft.world.entity.animal.nautilus.AbstractNautilus
 import net.minecraft.world.entity.animal.pig.Pig
 import net.minecraft.world.entity.monster.Enemy
+import net.minecraft.world.entity.monster.cubemob.SulfurCube
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.entity.decoration.BlockAttachedEntity
 import net.minecraft.world.entity.npc.villager.AbstractVillager
@@ -665,7 +666,14 @@ object RegionProtection {
     private fun isAlwaysProtected(entity: Entity): Boolean =
         entity is AbstractVillager || entity is AbstractChestBoat
 
-    /** An unnamed hostile: killable by anyone, even inside a region. */
+    /**
+     * An unnamed hostile: killable by anyone, even inside a region.
+     *
+     * A sulfur cube lives in the `monster` package but, like the animals it
+     * is grouped with here, does not implement [Enemy] — so it already falls
+     * through to [entityProtectedBy]'s ordinary `ANIMAL_PROTECTION` gate
+     * below rather than being culled on sight the way a real hostile is.
+     */
     private fun isCullableHostile(entity: Entity?): Boolean =
         entity is Enemy && entity !is ArmorStand && !entity.hasCustomName()
 
@@ -796,6 +804,14 @@ object RegionProtection {
         }
         if (entity is AbstractChestBoat) {
             return region == null || canModifyRegion(p, region) || refuse(p, region)
+        }
+        // A sulfur cube is bucketable and shearable, either of which lets a
+        // visitor carry one off — unlike a villager or chest boat, this is
+        // refused unconditionally inside a region, with no member exception:
+        // a sulfur cube stays exactly where it is once it wanders into
+        // someone's claim.
+        if (entity is SulfurCube) {
+            return region == null || refuse(p, region)
         }
         if (isOwnedBy(entity, p)) return true
 
