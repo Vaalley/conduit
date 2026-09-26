@@ -292,13 +292,16 @@ object StoreFeature {
             remaining -= count
         }
         StoreFrames.unmark(frame)
-        StoreFrames.clearLabel(frame)
         // The frame's own displayed item is the store's sample, not part of the
         // stock — deleting the store should still hand it back rather than
-        // leave it sitting in what is now a plain, unlocked item frame.
-        val displayed = frame.item
-        if (!displayed.isEmpty) {
-            Containers.dropItemStack(player.level(), frame.x, frame.y, frame.z, displayed)
+        // leave it sitting in what is now a plain, unlocked item frame. Drop a
+        // fresh copy of the record's own (never-labeled) item rather than the
+        // live labeled stack: unpatching a custom name/lore off an ItemStack
+        // leaves an explicit "removed" marker in its component patch, which
+        // makes it look different from — and refuse to stack with — a plain
+        // one, even though nothing about it looks different in a tooltip.
+        if (!frame.item.isEmpty) {
+            Containers.dropItemStack(player.level(), frame.x, frame.y, frame.z, item.copyWithCount(1))
             frame.setItem(ItemStack.EMPTY, false)
         }
         requireService().remove(frame.uuid)

@@ -247,11 +247,13 @@ class StoreGameTest {
             faceFrame(player, frame)
             player.runCommand("store delete")
             helper.assertTrue(frame.item.isEmpty, "a deleted store's frame kept its item")
+            val dropped = helper.level.getEntities(null, frame.boundingBox.inflate(2.0)) {
+                it is net.minecraft.world.entity.item.ItemEntity && it.item.`is`(Items.DIAMOND)
+            }.firstOrNull() as? net.minecraft.world.entity.item.ItemEntity
+            helper.assertTrue(dropped != null, "a deleted store's frame item was not dropped")
             helper.assertTrue(
-                helper.level.getEntities(null, frame.boundingBox.inflate(2.0)) {
-                    it is net.minecraft.world.entity.item.ItemEntity && it.item.`is`(Items.DIAMOND)
-                }.isNotEmpty(),
-                "a deleted store's frame item was not dropped",
+                ItemStack.isSameItemSameComponents(dropped!!.item, ItemStack(Items.DIAMOND)),
+                "the dropped frame item still carried the price-tag patch, so it won't stack with a plain one",
             )
             helper.succeed()
         } finally {

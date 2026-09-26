@@ -56,16 +56,6 @@ object StoreFrames {
         frame.setItem(labeled(current, record), false)
     }
 
-    /** The frame's item with its price-tag name and lore stripped back off. */
-    fun clearLabel(frame: ItemFrame) {
-        val current = frame.item
-        if (current.isEmpty) return
-        val plain = current.copy()
-        plain.remove(DataComponents.CUSTOM_NAME)
-        plain.remove(DataComponents.LORE)
-        frame.setItem(plain, false)
-    }
-
     private fun labeled(stack: ItemStack, record: StoreRecord): ItemStack {
         val copy = stack.copy()
         copy.set(DataComponents.CUSTOM_NAME, tagFor(record))
