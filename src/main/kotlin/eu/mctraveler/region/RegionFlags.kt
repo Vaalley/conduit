@@ -21,7 +21,7 @@ import net.minecraft.world.item.Items
 object RegionFlags {
 
     /** How a flag's current state reads in the GUI's status line. */
-    enum class StatusStyle { ALLOWED_DISALLOWED, TRUE_FALSE }
+    enum class StatusStyle { ALLOWED_DISALLOWED, TRUE_FALSE, ENABLED_DISABLED, ON_OFF }
 
     data class Definition(
         val id: String,
@@ -44,6 +44,7 @@ object RegionFlags {
             defaultAllowed = false,
             label = "Explosions",
             description = listOf("Allows explosions to damage blocks in this region"),
+            statusStyle = StatusStyle.ENABLED_DISABLED,
         ),
         Definition(
             id = "FIRE_DAMAGE",
@@ -51,6 +52,7 @@ object RegionFlags {
             defaultAllowed = false,
             label = "Fire damage",
             description = listOf("Allows fire to burn and spread into this region"),
+            statusStyle = StatusStyle.ENABLED_DISABLED,
         ),
         Definition(
             id = "GATES",
@@ -79,7 +81,7 @@ object RegionFlags {
             defaultAllowed = false,
             label = "Public chests",
             description = listOf("Allows non-members to open chests in this region"),
-            statusStyle = StatusStyle.TRUE_FALSE,
+            statusStyle = StatusStyle.ON_OFF,
         ),
         // Row 2 — automation & transport
         Definition(
@@ -131,14 +133,14 @@ object RegionFlags {
             defaultAllowed = true,
             label = "Animal protection",
             description = listOf("Protects animals and mobs in this region from non-members"),
-            statusStyle = StatusStyle.TRUE_FALSE,
+            statusStyle = StatusStyle.ON_OFF,
         ),
         Definition(
             id = "PVP",
             icon = Items.DIAMOND_SWORD,
             defaultAllowed = true,
             label = "PvP",
-            description = listOf("Allows player-versus-player combat in this region"),
+            description = listOf("Allows PvP combat in this region"),
         ),
         Definition(
             id = "WIND_CHARGES",
@@ -164,7 +166,7 @@ object RegionFlags {
             defaultAllowed = true,
             label = "Scoreboard",
             description = listOf("Shows the residents sidebar while standing in this region"),
-            statusStyle = StatusStyle.TRUE_FALSE,
+            statusStyle = StatusStyle.ENABLED_DISABLED,
             adminOnly = true,
         ),
         Definition(
@@ -173,7 +175,7 @@ object RegionFlags {
             defaultAllowed = false,
             label = "Admin",
             description = listOf("Marks this region as an admin region"),
-            statusStyle = StatusStyle.TRUE_FALSE,
+            statusStyle = StatusStyle.ON_OFF,
             adminOnly = true,
         ),
         Definition(
@@ -182,7 +184,7 @@ object RegionFlags {
             defaultAllowed = false,
             label = "Public",
             description = listOf("Opens this region up to everyone, as if they were a member"),
-            statusStyle = StatusStyle.TRUE_FALSE,
+            statusStyle = StatusStyle.ENABLED_DISABLED,
             adminOnly = true,
         ),
         Definition(
@@ -191,7 +193,7 @@ object RegionFlags {
             defaultAllowed = true,
             label = "Fall damage",
             description = listOf("Whether a fall can hurt players in this region"),
-            statusStyle = StatusStyle.TRUE_FALSE,
+            statusStyle = StatusStyle.ON_OFF,
             adminOnly = true,
         ),
         Definition(
