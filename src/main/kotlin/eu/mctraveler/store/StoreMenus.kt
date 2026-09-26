@@ -23,6 +23,25 @@ import net.minecraft.world.item.Items
 import net.minecraft.world.item.component.ItemLore
 
 object StoreMenus {
+    /** How many ticks must pass between one player's buy/sell clicks (below). */
+    private const val ACTION_COOLDOWN = 5
+
+    /** The server tick each player last had a buy/sell click accepted. */
+    private val lastAction = HashMap<java.util.UUID, Int>()
+
+    /**
+     * A fast double-click (or a client that resends the interaction packet)
+     * can otherwise reach [BuyMenu.clicked]/[SellMenu.clicked] twice for what
+     * was, from the player's chair, one click — doubling the purchase. The
+     * first click within [ACTION_COOLDOWN] ticks of the last one wins; every
+     * one after it is dropped silently.
+     */
+    private fun debounced(player: ServerPlayer): Boolean {
+        val now = player.level().server.tickCount
+        val last = lastAction.put(player.uuid, now)
+        return last != null && now - last < ACTION_COOLDOWN
+    }
+
     fun openStock(player: ServerPlayer, record: StoreRecord) {
         val sold = StoreFeature.recordItem(player, record)
         val rows = record.rows.coerceIn(3, 6)
@@ -48,7 +67,7 @@ object StoreMenus {
                 { id, inventory, _ ->
                     BuyMenu(id, inventory, player, record.frameId).also { fillBuy(player, it, record) }
                 },
-                Component.literal(title(player, record)),
+                containerTitle(player, record),
             ),
         )
     }
@@ -59,7 +78,7 @@ object StoreMenus {
                 { id, inventory, _ ->
                     SellMenu(id, inventory, player, record.frameId).also { fillSell(player, it, record) }
                 },
-                Component.literal(sellTitle(player, record)),
+                containerTitle(player, record),
             ),
         )
     }
@@ -96,11 +115,9 @@ object StoreMenus {
         }
     }
 
-    private fun title(player: ServerPlayer, record: StoreRecord): String =
-        "${StoreFeature.recordItem(player, record).hoverName.string} — ${Economy.format(record.pricePerItem)} each"
-
-    private fun sellTitle(player: ServerPlayer, record: StoreRecord): String =
-        "Buying ${StoreFeature.recordItem(player, record).hoverName.string} — ${Economy.format(record.pricePerItem)} each"
+    /** The menu's title: its "Buy"/"Sell" word in front of the item's own plain name in white. */
+    private fun containerTitle(player: ServerPlayer, record: StoreRecord): Component =
+        Paint(StoreFrames.wordFor(record), " ", Paint.white(StoreFeature.recordItem(player, record).hoverName))
 
     class StockMenu(
         containerId: Int,
@@ -145,6 +162,7 @@ object StoreMenus {
         override fun clicked(slot: Int, button: Int, input: ContainerInput, player: Player) {
             if (player !is ServerPlayer || slot !in 0 until contents.containerSize) return
             if (slot !in StoreLadder.QUANTITIES.indices) return
+            if (debounced(player)) return
             val quantity = StoreLadder.QUANTITIES[slot]
             player.level().server.execute {
                 if (player.containerMenu !== this) return@execute
@@ -213,6 +231,7 @@ object StoreMenus {
         override fun clicked(slot: Int, button: Int, input: ContainerInput, player: Player) {
             if (player !is ServerPlayer || slot !in 0 until contents.containerSize) return
             if (slot !in StoreLadder.QUANTITIES.indices) return
+            if (debounced(player)) return
             val quantity = StoreLadder.QUANTITIES[slot]
             player.level().server.execute {
                 if (player.containerMenu !== this) return@execute

@@ -4,6 +4,8 @@ import com.google.gson.JsonParser
 import net.minecraft.network.chat.Component
 import eu.mctraveler.MCTraveler
 import eu.mctraveler.economy.Economy
+import eu.mctraveler.economy.LedgerEntry
+import eu.mctraveler.economy.Reasons
 import eu.mctraveler.store.StoreFeature
 import eu.mctraveler.store.StoreFrames
 import eu.mctraveler.store.StoreLadder
@@ -14,6 +16,7 @@ import java.util.UUID
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
+import net.minecraft.core.component.DataComponents
 import net.minecraft.commands.arguments.EntityAnchorArgument
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.server.level.ServerPlayer
@@ -35,6 +38,7 @@ class StoreGameTest {
             try {
                 val economy = checkNotNull(MCTraveler.persistence).economy
                 economy.set(player.uuid, 0, "test")
+                skipFirstStorePrompt(player.uuid)
                 faceFrame(player, frame)
                 player.runCommand("store create 10")
                 helper.assertValueEqual(
@@ -62,6 +66,7 @@ class StoreGameTest {
             try {
                 val persistence = checkNotNull(MCTraveler.persistence)
                 persistence.economy.set(player.uuid, Economy.dollars(25), "test")
+                skipFirstStorePrompt(player.uuid)
                 faceFrame(player, frame)
                 player.runCommand("store create 0.05")
                 val record = checkNotNull(StoreFeature.requireService().byFrame(frame.uuid))
@@ -125,6 +130,7 @@ class StoreGameTest {
                 val persistence = checkNotNull(MCTraveler.persistence)
                 persistence.economy.set(owner.uuid, Economy.dollars(100), "test")
                 persistence.economy.set(seller.uuid, 0, "test")
+                skipFirstStorePrompt(owner.uuid)
                 faceFrame(owner, frame)
                 owner.runCommand("store buy 2 10")
                 val record = checkNotNull(StoreFeature.requireService().byFrame(frame.uuid))
@@ -169,10 +175,10 @@ class StoreGameTest {
         }
     }
 
-    // ---- issue #91: the frame's own price label ----
+    // ---- issue #91: the frame item's own price label ----
 
     @GameTest(maxTicks = 100)
-    fun creatingASellStoreLabelsTheFrameBuy(helper: GameTestHelper) {
+    fun creatingASellStoreLabelsTheItemBuy(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "StoreLabelSell")
         val frame = ItemFrame(helper.level, helper.absolutePos(BlockPos(2, 2, 2)), Direction.SOUTH)
         frame.setItem(ItemStack(Items.DIAMOND))
@@ -180,13 +186,17 @@ class StoreGameTest {
         helper.runAfterDelay(1) {
             try {
                 checkNotNull(MCTraveler.persistence).economy.set(player.uuid, Economy.dollars(25), "test")
+                skipFirstStorePrompt(player.uuid)
                 faceFrame(player, frame)
                 player.runCommand("store create 0.10")
-                helper.assertTrue(frame.isCustomNameVisible, "the new store's frame carried no label")
                 helper.assertValueEqual(
-                    checkNotNull(frame.customName),
-                    Paint(Paint.red.bold("Buy"), " ", Paint.gray("$0.10")),
-                    "a sell store's frame label",
+                    checkNotNull(frame.item.get(DataComponents.CUSTOM_NAME)),
+                    Paint(Paint.green.bold("Buy"), " ", Paint.white("$0.10")),
+                    "a sell store's item label",
+                )
+                helper.assertTrue(
+                    frame.item.get(DataComponents.LORE)?.lines().orEmpty().isEmpty(),
+                    "a labeled item carried lore lines",
                 )
                 helper.succeed()
             } finally {
@@ -198,7 +208,7 @@ class StoreGameTest {
     }
 
     @GameTest(maxTicks = 100)
-    fun creatingABuyOrderLabelsTheFrameSell(helper: GameTestHelper) {
+    fun creatingABuyOrderLabelsTheItemSell(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "StoreLabelBuy")
         val frame = ItemFrame(helper.level, helper.absolutePos(BlockPos(2, 2, 2)), Direction.SOUTH)
         frame.setItem(ItemStack(Items.DIAMOND))
@@ -206,12 +216,13 @@ class StoreGameTest {
         helper.runAfterDelay(1) {
             try {
                 checkNotNull(MCTraveler.persistence).economy.set(player.uuid, Economy.dollars(25), "test")
+                skipFirstStorePrompt(player.uuid)
                 faceFrame(player, frame)
                 player.runCommand("store buy 0.10")
                 helper.assertValueEqual(
-                    checkNotNull(frame.customName),
-                    Paint(Paint.green.bold("Sell"), " ", Paint.gray("$0.10")),
-                    "a buy order's frame label",
+                    checkNotNull(frame.item.get(DataComponents.CUSTOM_NAME)),
+                    Paint(Paint.red.bold("Sell"), " ", Paint.white("$0.10")),
+                    "a buy order's item label",
                 )
                 helper.succeed()
             } finally {
@@ -223,7 +234,7 @@ class StoreGameTest {
     }
 
     @GameTest
-    fun deletingAStoreClearsItsLabel(helper: GameTestHelper) {
+    fun deletingAStoreClearsTheLabelAndDropsTheFrameItem(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "StoreLabelClear")
         val frame = ItemFrame(helper.level, helper.absolutePos(BlockPos(2, 2, 2)), Direction.SOUTH)
         try {
@@ -235,12 +246,94 @@ class StoreGameTest {
             StoreFrames.label(frame, record)
             faceFrame(player, frame)
             player.runCommand("store delete")
-            helper.assertFalse(frame.isCustomNameVisible, "a deleted store still showed its label")
-            helper.assertTrue(frame.customName == null, "a deleted store's frame kept its name")
+            helper.assertTrue(frame.item.isEmpty, "a deleted store's frame kept its item")
+            helper.assertTrue(
+                helper.level.getEntities(null, frame.boundingBox.inflate(2.0)) {
+                    it is net.minecraft.world.entity.item.ItemEntity && it.item.`is`(Items.DIAMOND)
+                }.isNotEmpty(),
+                "a deleted store's frame item was not dropped",
+            )
             helper.succeed()
         } finally {
             frame.kill(helper.level)
             player.leave()
+        }
+    }
+
+    // ---- first-store confirmation prompt ----
+
+    @GameTest(maxTicks = 100)
+    fun aFirstStorePromptsAndConfirmingCreatesIt(helper: GameTestHelper) {
+        val player = MessageCapturingPlayer.join(helper, "StoreConfirmA")
+        val frame = ItemFrame(helper.level, helper.absolutePos(BlockPos(2, 2, 2)), Direction.SOUTH)
+        frame.setItem(ItemStack(Items.DIAMOND))
+        helper.level.addFreshEntity(frame)
+        helper.runAfterDelay(1) {
+            try {
+                val persistence = checkNotNull(MCTraveler.persistence)
+                persistence.economy.set(player.uuid, Economy.dollars(25), "test")
+                faceFrame(player, frame)
+                player.runCommand("store create 0.10")
+                helper.assertTrue(
+                    StoreFeature.requireService().byFrame(frame.uuid) == null,
+                    "the store was created before it was confirmed",
+                )
+                helper.assertValueEqual(
+                    persistence.economy.balanceOf(player.uuid),
+                    Economy.dollars(25),
+                    "the fee was charged before confirmation",
+                )
+                player.runCommand("store confirm")
+                val record = checkNotNull(StoreFeature.requireService().byFrame(frame.uuid))
+                helper.assertValueEqual(record.pricePerItem, 10L, "the confirmed store's price")
+                helper.assertValueEqual(
+                    persistence.economy.balanceOf(player.uuid),
+                    Economy.dollars(5),
+                    "the fee after confirming",
+                )
+                helper.succeed()
+            } finally {
+                StoreFeature.requireService().remove(frame.uuid)
+                frame.kill(helper.level)
+                player.leave()
+            }
+        }
+    }
+
+    @GameTest(maxTicks = 100)
+    fun denyingTheFirstStorePromptCancelsIt(helper: GameTestHelper) {
+        val player = MessageCapturingPlayer.join(helper, "StoreConfirmB")
+        val frame = ItemFrame(helper.level, helper.absolutePos(BlockPos(2, 2, 2)), Direction.SOUTH)
+        frame.setItem(ItemStack(Items.DIAMOND))
+        helper.level.addFreshEntity(frame)
+        helper.runAfterDelay(1) {
+            try {
+                val persistence = checkNotNull(MCTraveler.persistence)
+                persistence.economy.set(player.uuid, Economy.dollars(25), "test")
+                faceFrame(player, frame)
+                player.runCommand("store create 0.10")
+                player.runCommand("store deny")
+                helper.assertTrue(
+                    StoreFeature.requireService().byFrame(frame.uuid) == null,
+                    "a denied store was created anyway",
+                )
+                helper.assertValueEqual(
+                    persistence.economy.balanceOf(player.uuid),
+                    Economy.dollars(25),
+                    "a denied store still charged the fee",
+                )
+                player.runCommand("store confirm")
+                helper.assertValueEqual(
+                    player.messages.last(),
+                    Paint.error("You have nothing to confirm"),
+                    "confirming after a deny",
+                )
+                helper.succeed()
+            } finally {
+                StoreFeature.requireService().remove(frame.uuid)
+                frame.kill(helper.level)
+                player.leave()
+            }
         }
     }
 
@@ -433,6 +526,11 @@ class StoreGameTest {
             10,
             stock,
         )
+
+    /** Seeds [uuid]'s ledger so `/store create`/`/store buy` skips the first-timer confirmation prompt. */
+    private fun skipFirstStorePrompt(uuid: UUID) {
+        checkNotNull(MCTraveler.persistence).ledger.append(LedgerEntry(0L, uuid, 0L, 0L, Reasons.FEE_STORE_CREATE))
+    }
 
     private fun faceFrame(player: ServerPlayer, frame: ItemFrame) {
         player.setPos(frame.x, frame.y, frame.z + 3.0)

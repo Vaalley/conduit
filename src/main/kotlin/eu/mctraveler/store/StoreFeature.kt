@@ -142,6 +142,14 @@ object StoreFeature {
                         ),
                 )
                 .then(
+                    Commands.literal("confirm")
+                        .executes { context -> reply(context) { confirm(it) } },
+                )
+                .then(
+                    Commands.literal("deny")
+                        .executes { context -> reply(context) { deny(it) } },
+                )
+                .then(
                     Commands.literal("upgrade")
                         .executes { context -> reply(context) { upgrade(it) } },
                 )
@@ -152,16 +160,69 @@ object StoreFeature {
         )
     }
 
+    /** A `/store create`/`/store buy` a first-timer hasn't yet accepted the fee for. */
+    private data class PendingCreate(val price: Long, val kind: StoreKind, val wanted: Int?, val frameId: UUID, val tick: Int)
+
+    /** How long a confirmation prompt stays good for — a full minute, generous for reading it. */
+    private const val CONFIRM_WINDOW_TICKS = 1200
+
+    private val pendingCreate = HashMap<UUID, PendingCreate>()
+
     private fun create(player: ServerPlayer, price: Long, kind: StoreKind, wanted: Int?): Component {
         val frame = StoreFrames.lookedAtFrame(player)
             ?: return Paint.error("You need to look at an item frame")
-        val item = frame.item
-        if (item.isEmpty) return Paint.error("That item frame is empty")
+        if (frame.item.isEmpty) return Paint.error("That item frame is empty")
         if (requireService().byFrame(frame.uuid) != null) {
             return Paint.error("That item frame is already a store")
         }
         if (!RegionProtection.allowsEntityInteract(player, InteractionHand.MAIN_HAND, frame)) {
             return Paint.error("You can't create a store here")
+        }
+        // A player's very first store asks first — every later one goes straight through.
+        if (isFirstStore(player.uuid)) {
+            pendingCreate[player.uuid] = PendingCreate(price, kind, wanted, frame.uuid, player.level().server.tickCount)
+            return confirmPrompt()
+        }
+        return chargeAndCreate(player, frame, price, kind, wanted)
+    }
+
+    private fun confirm(player: ServerPlayer): Component {
+        val pending = pendingCreate.remove(player.uuid)
+            ?: return Paint.error("You have nothing to confirm")
+        if (player.level().server.tickCount - pending.tick > CONFIRM_WINDOW_TICKS) {
+            return Paint.error("That confirmation expired — try again")
+        }
+        val frame = player.level().getEntity(pending.frameId) as? ItemFrame
+            ?: return Paint.error("That item frame is gone")
+        if (!RegionProtection.allowsEntityInteract(player, InteractionHand.MAIN_HAND, frame)) {
+            return Paint.error("You can't create a store here")
+        }
+        return chargeAndCreate(player, frame, pending.price, pending.kind, pending.wanted)
+    }
+
+    private fun deny(player: ServerPlayer): Component {
+        pendingCreate.remove(player.uuid)
+        return Paint.info("Store creation cancelled")
+    }
+
+    /** Whether [uuid] has never had a store-creation fee charged — the ledger is the record of it. */
+    private fun isFirstStore(uuid: UUID): Boolean =
+        MCTraveler.persistence?.ledger?.read(uuid)?.none { it.reason == Reasons.FEE_STORE_CREATE } ?: false
+
+    private fun confirmPrompt(): Component = Paint(
+        Paint.gray("Creating your first store costs ", Economy.format(StoreFees.CREATE), ". Continue?"),
+        "\n",
+        Paint.green.bold.runs("/store confirm")("[Accept]"),
+        "  ",
+        Paint.red.bold.runs("/store deny")("[Deny]"),
+    )
+
+    /** The fee-charging, record-building half of store creation, shared by a direct create and a confirmed one. */
+    private fun chargeAndCreate(player: ServerPlayer, frame: ItemFrame, price: Long, kind: StoreKind, wanted: Int?): Component {
+        val item = frame.item
+        if (item.isEmpty) return Paint.error("That item frame is empty")
+        if (requireService().byFrame(frame.uuid) != null) {
+            return Paint.error("That item frame is already a store")
         }
         val persistence = MCTraveler.persistence
             ?: return Paint.error("The economy is unavailable")
@@ -188,29 +249,7 @@ object StoreFeature {
         StoreFrames.mark(frame)
         StoreFrames.label(frame, record)
         requireService().add(record)
-        return if (kind == StoreKind.BUY) {
-            Paint.store(
-                "Store created (-",
-                Economy.format(StoreFees.CREATE),
-                ") — buying ",
-                item.hoverName,
-                " for ",
-                Economy.format(price),
-                " each",
-                wanted?.let { " (up to $it)" } ?: "",
-                ".",
-            )
-        } else {
-            Paint.store(
-                "Store created (-",
-                Economy.format(StoreFees.CREATE),
-                ") — selling ",
-                item.hoverName,
-                " for ",
-                Economy.format(price),
-                " each. Right-click it to add stock.",
-            )
-        }
+        return Paint.success("Store created! ", Paint.red("-", Economy.format(StoreFees.CREATE)))
     }
 
     private fun upgrade(player: ServerPlayer): Component {
@@ -254,6 +293,14 @@ object StoreFeature {
         }
         StoreFrames.unmark(frame)
         StoreFrames.clearLabel(frame)
+        // The frame's own displayed item is the store's sample, not part of the
+        // stock — deleting the store should still hand it back rather than
+        // leave it sitting in what is now a plain, unlocked item frame.
+        val displayed = frame.item
+        if (!displayed.isEmpty) {
+            Containers.dropItemStack(player.level(), frame.x, frame.y, frame.z, displayed)
+            frame.setItem(ItemStack.EMPTY, false)
+        }
         requireService().remove(frame.uuid)
         return Paint.store("Store deleted, ", record.stock, " items dropped")
     }

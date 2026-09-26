@@ -3,10 +3,13 @@ package eu.mctraveler.store
 import eu.mctraveler.economy.Economy
 import eu.mctraveler.mixin.StoreFrameAccessor
 import eu.mctraveler.text.Paint
+import net.minecraft.core.component.DataComponents
 import net.minecraft.network.chat.Component
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.entity.decoration.ItemFrame
 import net.minecraft.world.entity.projectile.ProjectileUtil
+import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.component.ItemLore
 import net.minecraft.world.phys.EntityHitResult
 import net.minecraft.world.phys.HitResult
 
@@ -40,22 +43,42 @@ object StoreFrames {
     fun isMarked(frame: ItemFrame): Boolean = frame.entityTags().contains(TAG)
 
     /**
-     * Issue #91: a store's frame carries its price as a name tag, so a
-     * passer-by sees what it costs before they ever open it — "Buy $<price>"
-     * for a store you can buy from, "Sell $<price>" for one that's buying.
+     * Issue #91: the item sitting in a store's frame carries its own price as
+     * its display name, so a passer-by looking at the frame sees "Buy $<price>"
+     * for a store they can buy from, "Sell $<price>" for one that's buying —
+     * vanilla renders a named item's floating label whenever a player looks
+     * at the frame holding it, the same way it does for a named map. No lore
+     * lines survive underneath it.
      */
     fun label(frame: ItemFrame, record: StoreRecord) {
-        frame.customName = labelFor(record)
-        frame.isCustomNameVisible = true
+        val current = frame.item
+        if (current.isEmpty) return
+        frame.setItem(labeled(current, record), false)
     }
 
+    /** The frame's item with its price-tag name and lore stripped back off. */
     fun clearLabel(frame: ItemFrame) {
-        frame.customName = null
-        frame.isCustomNameVisible = false
+        val current = frame.item
+        if (current.isEmpty) return
+        val plain = current.copy()
+        plain.remove(DataComponents.CUSTOM_NAME)
+        plain.remove(DataComponents.LORE)
+        frame.setItem(plain, false)
     }
 
-    private fun labelFor(record: StoreRecord): Component = when (record.kind) {
-        StoreKind.SELL -> Paint(Paint.red.bold("Buy"), " ", Paint.gray(Economy.format(record.pricePerItem)))
-        StoreKind.BUY -> Paint(Paint.green.bold("Sell"), " ", Paint.gray(Economy.format(record.pricePerItem)))
+    private fun labeled(stack: ItemStack, record: StoreRecord): ItemStack {
+        val copy = stack.copy()
+        copy.set(DataComponents.CUSTOM_NAME, tagFor(record))
+        copy.set(DataComponents.LORE, ItemLore(emptyList()))
+        return copy
+    }
+
+    /** The "Buy $<price>"/"Sell $<price>" tag: what a passer-by can do at this frame. */
+    fun tagFor(record: StoreRecord): Component = Paint(wordFor(record), " ", Paint.white(Economy.format(record.pricePerItem)))
+
+    /** Just the styled word — "Buy" or "Sell" — with no price, for the menu title. */
+    fun wordFor(record: StoreRecord): Component = when (record.kind) {
+        StoreKind.SELL -> Paint.green.bold("Buy")
+        StoreKind.BUY -> Paint.red.bold("Sell")
     }
 }
