@@ -28,6 +28,8 @@ import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 import net.minecraft.world.level.GameType
 import net.minecraft.world.level.block.Blocks
+import net.minecraft.world.level.block.CakeBlock
+import net.minecraft.world.level.block.CandleBlock
 import net.minecraft.world.level.block.EndPortalFrameBlock
 import net.minecraft.world.SimpleMenuProvider
 import net.minecraft.world.level.block.entity.ChestBlockEntity
@@ -751,6 +753,109 @@ class RegionProtectionGameTest {
         helper.assertBlockProperty(STONE_AT, net.minecraft.world.level.block.ComposterBlock.LEVEL, 0)
         alice.leave()
         bob.leave()
+        helper.succeed()
+    }
+
+    // ---- cakes and candles ----
+
+    @GameTest
+    fun aNonMemberCannotEatOrDecorateARegionCake(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T41CakeA")
+        val bob = MessageCapturingPlayer.join(helper, "T41CakeB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(STONE_AT.below(), Blocks.STONE)
+        helper.setBlock(STONE_AT, Blocks.CAKE)
+        bob.standAt(helper, 2.0, 2.0, 1.0)
+        bob.foodData.setFoodLevel(10)
+        bob.messages.clear()
+
+        // A hungry stranger's empty-handed right-click would eat a slice.
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY)
+        helper.assertFalse(bob.usesHeldItemOn(helper, STONE_AT), "a non-member ate a region cake")
+        helper.assertBlockProperty(STONE_AT, CakeBlock.BITES, 0)
+        helper.assertValueEqual(bob.foodData.foodLevel, 10, "the food level of the stranger who was refused the cake")
+        helper.assertTrue(bob.wasRefusedBy("T41CakeA's Place"), "eating a region cake emitted no refusal")
+
+        // A candle on a cake turns it into a candle cake.
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.CANDLE))
+        helper.assertFalse(bob.usesHeldItemOn(helper, STONE_AT), "a non-member put a candle on a region cake")
+        helper.assertBlockPresent(Blocks.CAKE, STONE_AT)
+        helper.assertValueEqual(bob.mainHandItem.count, 1, "the candle the refused stranger kept")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aResidentStillEatsTheirOwnCake(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T41CakeOwn")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(STONE_AT.below(), Blocks.STONE)
+        helper.setBlock(STONE_AT, Blocks.CAKE)
+        alice.standAt(helper, 2.0, 2.0, 1.0)
+        alice.foodData.setFoodLevel(10)
+        alice.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY)
+
+        alice.usesHeldItemOn(helper, STONE_AT)
+        helper.assertBlockProperty(STONE_AT, CakeBlock.BITES, 1)
+        alice.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aNonMemberCannotPlaceLightOrSnuffACandle(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T41CandleA")
+        val bob = MessageCapturingPlayer.join(helper, "T41CandleB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(STONE_AT.below(), Blocks.STONE)
+        bob.standAt(helper, 2.0, 2.0, 1.0)
+        val candle = Blocks.CANDLE.defaultBlockState()
+        helper.setBlock(STONE_AT, candle.setValue(CandleBlock.LIT, false))
+        bob.messages.clear()
+
+        // Another candle onto the same block would add to the stack.
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.CANDLE))
+        helper.assertFalse(bob.usesHeldItemOn(helper, STONE_AT), "a non-member added a candle to a region candle")
+        helper.assertBlockProperty(STONE_AT, CandleBlock.CANDLES, 1)
+        helper.assertTrue(bob.wasRefusedBy("T41CandleA's Place"), "adding a candle emitted no refusal")
+
+        // Lighting it.
+        for (lighter in listOf(Items.FLINT_AND_STEEL, Items.FIRE_CHARGE)) {
+            bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(lighter))
+            helper.assertFalse(bob.usesHeldItemOn(helper, STONE_AT), "a non-member lit a region candle with $lighter")
+            helper.assertBlockProperty(STONE_AT, CandleBlock.LIT, false)
+        }
+
+        // Snuffing a lit one, empty-handed.
+        helper.setBlock(STONE_AT, candle.setValue(CandleBlock.LIT, true))
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY)
+        helper.assertFalse(bob.usesHeldItemOn(helper, STONE_AT), "a non-member snuffed a region candle")
+        helper.assertBlockProperty(STONE_AT, CandleBlock.LIT, true)
+
+        // And the candle on a cake.
+        helper.setBlock(STONE_AT, Blocks.CANDLE_CAKE.defaultBlockState().setValue(CandleBlock.LIT, true))
+        bob.foodData.setFoodLevel(10)
+        helper.assertFalse(bob.usesHeldItemOn(helper, STONE_AT), "a non-member ate or snuffed a region candle cake")
+        helper.assertBlockPresent(Blocks.CANDLE_CAKE, STONE_AT)
+        helper.assertBlockProperty(STONE_AT, CandleBlock.LIT, true)
+        helper.assertValueEqual(bob.foodData.foodLevel, 10, "the food level of the stranger refused the candle cake")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aResidentStillSnuffsTheirOwnCandle(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T41CandleOwn")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(STONE_AT.below(), Blocks.STONE)
+        helper.setBlock(STONE_AT, Blocks.CANDLE.defaultBlockState().setValue(CandleBlock.LIT, true))
+        alice.standAt(helper, 2.0, 2.0, 1.0)
+        alice.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY)
+
+        alice.usesHeldItemOn(helper, STONE_AT)
+        helper.assertBlockProperty(STONE_AT, CandleBlock.LIT, false)
+        alice.leave()
         helper.succeed()
     }
 
