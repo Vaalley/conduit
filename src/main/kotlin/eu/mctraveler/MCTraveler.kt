@@ -6,6 +6,7 @@ import eu.mctraveler.chat.ChatFeature
 import eu.mctraveler.chat.PrivateMessages
 import eu.mctraveler.crystal.CrystalFeature
 import eu.mctraveler.economy.EconomyFeature
+import eu.mctraveler.cosmetic.LocatorColor
 import eu.mctraveler.economy.NameCosmeticRefund
 import eu.mctraveler.embassy.EmbassiesFeature
 import eu.mctraveler.geo.GeoIpFeature
@@ -86,6 +87,7 @@ object MCTraveler : ModInitializer {
         // not create a player record before RankFeature's welcome check.
         EconomyFeature.register()
         NameCosmeticRefund.register()
+        LocatorColor.register()
         StoreFeature.register()
         eu.mctraveler.rtp.RtpFeature.register()
         eu.mctraveler.dragonfight.DragonFightFeature.register()

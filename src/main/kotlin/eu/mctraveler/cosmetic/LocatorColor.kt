@@ -31,7 +31,11 @@ object LocatorColor {
 
     private const val USAGE = "/locator-color <color|#hex|reset>"
 
-    fun register(dispatcher: CommandDispatcher<CommandSourceStack>) {
+    fun register() {
+        net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback.EVENT.register { dispatcher, _, _ -> register(dispatcher) }
+    }
+
+    private fun register(dispatcher: CommandDispatcher<CommandSourceStack>) {
         dispatcher.register(
             Commands.literal("locator-color")
                 .executes { context -> reply(context) { Paint.usage(USAGE) } }
