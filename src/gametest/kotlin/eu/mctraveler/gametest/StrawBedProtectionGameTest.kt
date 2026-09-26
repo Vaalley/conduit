@@ -3,6 +3,9 @@ package eu.mctraveler.gametest
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
+import net.minecraft.core.registries.Registries
+import net.minecraft.world.clock.ClockTimeMarkers
+import net.minecraft.world.clock.WorldClocks
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.world.level.block.AbstractBedBlock
 import net.minecraft.world.level.block.Block
@@ -99,12 +102,32 @@ class StrawBedProtectionGameTest {
 
     /** [player] starts sleeping at the straw bed's [foot], then immediately gets up. */
     private fun sleepThenLeave(helper: GameTestHelper, foot: BlockPos, player: MessageCapturingPlayer) {
+        atNight(helper) { sleepThenLeaveAtNight(helper, foot, player) }
+    }
+
+    /**
+     * Vanilla only lets anyone sleep at night, whatever hour the test world is at, so the
+     * overworld clock is moved to night for the duration and put back afterwards.
+     */
+    private fun atNight(helper: GameTestHelper, body: () -> Unit) {
+        val clocks = helper.level.clockManager()
+        val clock = helper.level.registryAccess().lookupOrThrow(Registries.WORLD_CLOCK).getOrThrow(WorldClocks.OVERWORLD)
+        val before = clocks.getInstance(clock).totalTicks()
+        clocks.moveToTimeMarker(clock, ClockTimeMarkers.NIGHT)
+        try {
+            body()
+        } finally {
+            clocks.setTotalTicks(clock, before)
+        }
+    }
+
+    private fun sleepThenLeaveAtNight(helper: GameTestHelper, foot: BlockPos, player: MessageCapturingPlayer) {
         val pos = helper.absolutePos(foot)
         val block = Blocks.STRAW_BED as StrawBedBlock
         val state = helper.level.getBlockState(pos)
         val bedRule = block.getBedRule(helper.level, pos)
         val started = player.startSleepInBed(block, state, bedRule, pos)
-        helper.assertTrue(started.right().isPresent, "the player could not start sleeping in the straw bed")
+        helper.assertTrue(started.right().isPresent, "the player could not start sleeping in the straw bed: ${started.left().map { it.message()?.string ?: "?" }.orElse("?")}")
         player.stopSleepInBed(true, true)
     }
 }

@@ -525,7 +525,7 @@ object RegionProtection {
             RegionInteractables.BlockUse.CONTAINER_VIEW,
             -> true
 
-            RegionInteractables.BlockUse.REQUIRES_MEMBERSHIP -> refuse(player, region)
+            RegionInteractables.BlockUse.REQUIRES_MEMBERSHIP -> refuse(player, region).also { resyncFood(player, state) }
 
             RegionInteractables.BlockUse.CAMPFIRE ->
                 if (RegionInteractables.changesCampfire(held)) refuse(player, region) else true
@@ -872,6 +872,23 @@ object RegionProtection {
      */
     private fun resyncInventory(player: ServerPlayer) {
         player.containerMenu.sendAllDataToRemote()
+    }
+
+    /**
+     * A refused right-click on a cake or candle cake leaves the client showing the slice it
+     * predicted it ate — a ghost hunger bar the server never agreed to. Fabric resyncs the block
+     * but not the food level, so it is resent here.
+     */
+    private fun resyncFood(player: ServerPlayer, state: BlockState) {
+        if (state.block !is net.minecraft.world.level.block.CakeBlock &&
+            state.block !is net.minecraft.world.level.block.CandleCakeBlock
+        ) {
+            return
+        }
+        val food = player.foodData
+        player.connection.send(
+            net.minecraft.network.protocol.game.ClientboundSetHealthPacket(player.health, food.foodLevel, food.saturationLevel),
+        )
     }
 
     /** Sends the Portal's refusal message when its cooldown permits, and always answers "not allowed". */

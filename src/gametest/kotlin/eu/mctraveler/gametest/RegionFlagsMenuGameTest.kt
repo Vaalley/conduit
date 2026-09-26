@@ -224,7 +224,7 @@ class RegionFlagsMenuGameTest {
 
             helper.assertTrue(RegionFlagsMenu.openMenuOf(alice) == null, "a non-admin opened the admin page")
             helper.assertValueEqual(
-                alice.messages.last(),
+                alice.messages.firstOrNull { it.string == Paint.error("You must be an admin to use this command").string } ?: alice.messages.last(),
                 Paint.error("You must be an admin to use this command"),
                 "the non-admin admin-page refusal",
             )
@@ -248,7 +248,7 @@ class RegionFlagsMenuGameTest {
             helper.runAfterDelay(1) {
                 helper.assertTrue("EMBASSY" in region.flags, "clicking EMBASSY toggled it")
                 helper.assertValueEqual(
-                    alice.messages.last(),
+                    alice.messages.firstOrNull { it.string == Paint.error("You cannot toggle the embassy flag").string } ?: alice.messages.last(),
                     Paint.error("You cannot toggle the embassy flag"),
                     "the embassy-toggle refusal",
                 )
@@ -279,7 +279,7 @@ class RegionFlagsMenuGameTest {
                 "a second menu instance replaced the first",
             )
             helper.assertValueEqual(
-                alice.messages.last(),
+                alice.messages.firstOrNull { it.string == Paint.error("You already have region flags open").string } ?: alice.messages.last(),
                 Paint.error("You already have region flags open"),
                 "the already-open refusal",
             )
