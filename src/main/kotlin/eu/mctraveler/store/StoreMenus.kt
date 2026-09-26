@@ -153,6 +153,12 @@ object StoreMenus {
                     refresh(player, record)
                     return@execute
                 }
+                val sold = StoreFeature.recordItem(player, record)
+                if (!hasRoomFor(player, sold, quantity)) {
+                    player.sendSystemMessage(Paint.error("Your inventory is full"))
+                    refresh(player, record)
+                    return@execute
+                }
                 val total = StoreLadder.priceFor(record.pricePerItem, quantity)
                 val persistence = eu.mctraveler.MCTraveler.persistence ?: return@execute
                 if (!persistence.economy.withdraw(player.uuid, total, Reasons.store(record.frameId))) {
@@ -313,6 +319,28 @@ object StoreMenus {
                 },
             )
         }
+    }
+
+    /**
+     * Issue #91: whether [player]'s main inventory has room for [amount] more
+     * of [sold] — an empty slot holds a full stack, and a slot already
+     * carrying [sold] holds whatever is left below its stack size. Checked
+     * before a purchase is charged, so a full inventory refuses the buy
+     * instead of dropping the items on the ground.
+     */
+    private fun hasRoomFor(player: ServerPlayer, sold: ItemStack, amount: Int): Boolean {
+        var free = 0
+        for (stack in player.inventory.getNonEquipmentItems()) {
+            free += if (stack.isEmpty) {
+                sold.maxStackSize
+            } else if (ItemStack.isSameItemSameComponents(stack, sold)) {
+                (sold.maxStackSize - stack.count).coerceAtLeast(0)
+            } else {
+                0
+            }
+            if (free >= amount) return true
+        }
+        return free >= amount
     }
 
     private fun matchingCount(player: ServerPlayer, wanted: ItemStack): Int =

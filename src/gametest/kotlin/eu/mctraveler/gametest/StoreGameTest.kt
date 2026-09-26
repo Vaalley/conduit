@@ -1,6 +1,7 @@
 package eu.mctraveler.gametest
 
 import com.google.gson.JsonParser
+import net.minecraft.network.chat.Component
 import eu.mctraveler.MCTraveler
 import eu.mctraveler.economy.Economy
 import eu.mctraveler.store.StoreFeature
@@ -168,6 +169,142 @@ class StoreGameTest {
         }
     }
 
+    // ---- issue #91: the frame's own price label ----
+
+    @GameTest(maxTicks = 100)
+    fun creatingASellStoreLabelsTheFrameBuy(helper: GameTestHelper) {
+        val player = MessageCapturingPlayer.join(helper, "StoreLabelSell")
+        val frame = ItemFrame(helper.level, helper.absolutePos(BlockPos(2, 2, 2)), Direction.SOUTH)
+        frame.setItem(ItemStack(Items.DIAMOND))
+        helper.level.addFreshEntity(frame)
+        helper.runAfterDelay(1) {
+            try {
+                checkNotNull(MCTraveler.persistence).economy.set(player.uuid, Economy.dollars(25), "test")
+                faceFrame(player, frame)
+                player.runCommand("store create 0.10")
+                helper.assertTrue(frame.isCustomNameVisible, "the new store's frame carried no label")
+                helper.assertValueEqual(
+                    checkNotNull(frame.customName),
+                    Paint(Paint.red.bold("Buy"), " ", Paint.gray("$0.10")),
+                    "a sell store's frame label",
+                )
+                helper.succeed()
+            } finally {
+                StoreFeature.requireService().remove(frame.uuid)
+                frame.kill(helper.level)
+                player.leave()
+            }
+        }
+    }
+
+    @GameTest(maxTicks = 100)
+    fun creatingABuyOrderLabelsTheFrameSell(helper: GameTestHelper) {
+        val player = MessageCapturingPlayer.join(helper, "StoreLabelBuy")
+        val frame = ItemFrame(helper.level, helper.absolutePos(BlockPos(2, 2, 2)), Direction.SOUTH)
+        frame.setItem(ItemStack(Items.DIAMOND))
+        helper.level.addFreshEntity(frame)
+        helper.runAfterDelay(1) {
+            try {
+                checkNotNull(MCTraveler.persistence).economy.set(player.uuid, Economy.dollars(25), "test")
+                faceFrame(player, frame)
+                player.runCommand("store buy 0.10")
+                helper.assertValueEqual(
+                    checkNotNull(frame.customName),
+                    Paint(Paint.green.bold("Sell"), " ", Paint.gray("$0.10")),
+                    "a buy order's frame label",
+                )
+                helper.succeed()
+            } finally {
+                StoreFeature.requireService().remove(frame.uuid)
+                frame.kill(helper.level)
+                player.leave()
+            }
+        }
+    }
+
+    @GameTest
+    fun deletingAStoreClearsItsLabel(helper: GameTestHelper) {
+        val player = MessageCapturingPlayer.join(helper, "StoreLabelClear")
+        val frame = ItemFrame(helper.level, helper.absolutePos(BlockPos(2, 2, 2)), Direction.SOUTH)
+        try {
+            frame.setItem(ItemStack(Items.DIAMOND))
+            helper.level.addFreshEntity(frame)
+            val record = record(player, frame, stock = 0)
+            StoreFeature.requireService().add(record)
+            StoreFrames.mark(frame)
+            StoreFrames.label(frame, record)
+            faceFrame(player, frame)
+            player.runCommand("store delete")
+            helper.assertFalse(frame.isCustomNameVisible, "a deleted store still showed its label")
+            helper.assertTrue(frame.customName == null, "a deleted store's frame kept its name")
+            helper.succeed()
+        } finally {
+            frame.kill(helper.level)
+            player.leave()
+        }
+    }
+
+    // ---- issue #91: a full inventory refuses the buy ----
+
+    @GameTest(maxTicks = 100)
+    fun aFullInventoryRefusesToBuy(helper: GameTestHelper) {
+        val owner = MessageCapturingPlayer.join(helper, "StoreFullOwner")
+        val buyer = MessageCapturingPlayer.join(helper, "StoreFullBuyer")
+        val frame = ItemFrame(helper.level, helper.absolutePos(BlockPos(2, 2, 2)), Direction.SOUTH)
+        frame.setItem(ItemStack(Items.DIAMOND))
+        helper.level.addFreshEntity(frame)
+        try {
+            // A tick after joining, not before: a brand-new account's join
+            // bonus lands a tick late, and setting the balance before that
+            // would only have the bonus overwrite it right back.
+            helper.runAfterDelay(1) {
+                try {
+                    val persistence = checkNotNull(MCTraveler.persistence)
+                    persistence.economy.set(buyer.uuid, Economy.dollars(100), "test")
+                    val record = record(owner, frame, stock = 20)
+                    StoreFeature.requireService().add(record)
+                    val items = buyer.inventory.getNonEquipmentItems()
+                    for (i in items.indices) items[i] = ItemStack(Items.COBBLESTONE, 64)
+                    StoreMenus.openBuy(buyer, record)
+                    val menu = buyer.containerMenu as StoreMenus.BuyMenu
+                    menu.clicked(0, 0, ContainerInput.PICKUP, buyer)
+                    helper.runAfterDelay(1) {
+                        try {
+                            helper.assertValueEqual(
+                                buyer.saying(Paint.error("Your inventory is full").string),
+                                Paint.error("Your inventory is full"),
+                                "full-inventory refusal",
+                            )
+                            helper.assertValueEqual(
+                                persistence.economy.balanceOf(buyer.uuid),
+                                Economy.dollars(100),
+                                "buyer was charged despite a full inventory",
+                            )
+                            val unchanged = checkNotNull(StoreFeature.requireService().byFrame(frame.uuid))
+                            helper.assertValueEqual(unchanged.stock, 20, "stock changed despite a full inventory")
+                            helper.succeed()
+                        } finally {
+                            StoreFeature.requireService().remove(frame.uuid)
+                            frame.kill(helper.level)
+                            buyer.leave()
+                            owner.leave()
+                        }
+                    }
+                } catch (failure: Throwable) {
+                    frame.kill(helper.level)
+                    buyer.leave()
+                    owner.leave()
+                    throw failure
+                }
+            }
+        } catch (failure: Throwable) {
+            frame.kill(helper.level)
+            buyer.leave()
+            owner.leave()
+            throw failure
+        }
+    }
+
     @GameTest
     fun createLocksRealFrame(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "StoreCreate")
@@ -301,4 +438,15 @@ class StoreGameTest {
         player.setPos(frame.x, frame.y, frame.z + 3.0)
         player.lookAt(EntityAnchorArgument.Anchor.EYES, Vec3.atCenterOf(frame.blockPosition()))
     }
+
+    /**
+     * The message reading exactly [text]. A deferred assertion like the buy
+     * menu's runs a tick after the click, and the gametest framework
+     * broadcasts every finished test's result to every player in the meantime,
+     * so the refusal is rarely the last thing this player heard.
+     */
+    private fun MessageCapturingPlayer.saying(text: String): Component =
+        checkNotNull(messages.firstOrNull { it.string == text }) {
+            "$name heard no message saying \"$text\""
+        }
 }

@@ -48,7 +48,9 @@ object StoreFeature {
             for (level in server.getAllLevels()) {
                 for (entity in level.getAllEntities()) {
                     val frame = entity as? ItemFrame ?: continue
-                    if (requireService().byFrame(frame.uuid) != null) StoreFrames.mark(frame)
+                    val record = requireService().byFrame(frame.uuid) ?: continue
+                    StoreFrames.mark(frame)
+                    StoreFrames.label(frame, record)
                 }
             }
         }
@@ -172,20 +174,20 @@ object StoreFeature {
                 ")",
             )
         }
-        StoreFrames.mark(frame)
-        requireService().add(
-            StoreRecord(
-                frameId = frame.uuid,
-                owner = player.uuid,
-                dimension = player.level().dimension().identifier().toString(),
-                pos = frame.blockPosition(),
-                item = StoreCodec.encode(player, item),
-                pricePerItem = price,
-                stock = 0,
-                kind = kind,
-                wanted = wanted,
-            ),
+        val record = StoreRecord(
+            frameId = frame.uuid,
+            owner = player.uuid,
+            dimension = player.level().dimension().identifier().toString(),
+            pos = frame.blockPosition(),
+            item = StoreCodec.encode(player, item),
+            pricePerItem = price,
+            stock = 0,
+            kind = kind,
+            wanted = wanted,
         )
+        StoreFrames.mark(frame)
+        StoreFrames.label(frame, record)
+        requireService().add(record)
         return if (kind == StoreKind.BUY) {
             Paint.store(
                 "Store created (-",
@@ -251,6 +253,7 @@ object StoreFeature {
             remaining -= count
         }
         StoreFrames.unmark(frame)
+        StoreFrames.clearLabel(frame)
         requireService().remove(frame.uuid)
         return Paint.store("Store deleted, ", record.stock, " items dropped")
     }
