@@ -6,6 +6,7 @@ import eu.mctraveler.hooks.MixinHooks
 import eu.mctraveler.crystal.CrystalCrafting
 import eu.mctraveler.crystal.CrystalDamageDisplay
 import eu.mctraveler.crystal.CrystalRequests
+import eu.mctraveler.embassy.EmbassyAnchors
 import eu.mctraveler.embassy.EmbassyOrigins
 import eu.mctraveler.identity.IdentityRemaps
 import eu.mctraveler.importer.OrphanedSaveClaimFeature
@@ -188,6 +189,10 @@ object MixinHooksImpl : MixinHooks {
 
     override fun allowsDecorationMove(level: Level, pos: BlockPos): Boolean =
         RegionEnvironment.allowsDecorationMove(level, pos)
+
+    override fun respawnAnchorPlaced(level: Level, pos: BlockPos, state: BlockState) {
+        EmbassyAnchors.onAnchorPlaced(level, pos, state)
+    }
 
     override fun allowsPistonMove(
         level: Level,

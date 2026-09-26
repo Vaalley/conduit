@@ -17,6 +17,7 @@ import net.minecraft.world.item.Items
 import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.block.RespawnAnchorBlock
+import net.minecraft.world.level.block.state.BlockState
 
 /**
  * The respawn anchor in the middle of every embassy: the teleporter a visitor
@@ -106,6 +107,29 @@ object EmbassyAnchors {
         // refused just as it is here.
         if (player.mainHandItem.`is`(Items.GLOWSTONE) && charges < EmbassyPlots.ANCHOR_CHARGES) return true
         return false
+    }
+
+    /**
+     * Issue #88: a respawn anchor is Nucleus-built full ([EmbassyPlots.populate]),
+     * but breaking and re-placing one — repositioning an embassy's anchor, say —
+     * drops it as a plain item with no charge, since vanilla never carries the
+     * `CHARGE` block-state property into the dropped stack. Anywhere inside an
+     * embassy, that would leave the plot's one teleporter looking blown out
+     * (story 15's guard only ever stops it going *to* zero by force, not
+     * starting there), so any respawn anchor placed inside an embassy region
+     * comes back out fully charged instead.
+     */
+    fun onAnchorPlaced(level: Level, pos: BlockPos, state: BlockState) {
+        if (!state.`is`(Blocks.RESPAWN_ANCHOR)) return
+        val region = RegionsFeature.regionAt(level, pos) ?: return
+        if (Region.EMBASSY_FLAG !in region.flags) return
+        // Re-read rather than trust `state`: setPlacedBy fires after the block is
+        // already in the world, so this is the placed state itself, but reading
+        // it back is what every other seam in this file does before touching it.
+        val current = level.getBlockState(pos)
+        if (!current.`is`(Blocks.RESPAWN_ANCHOR)) return
+        if (current.getValue(RespawnAnchorBlock.CHARGE) == EmbassyPlots.ANCHOR_CHARGES) return
+        level.setBlockAndUpdate(pos, current.setValue(RespawnAnchorBlock.CHARGE, EmbassyPlots.ANCHOR_CHARGES))
     }
 
     /** [player] has just stepped onto the block at [feet]. */

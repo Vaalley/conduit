@@ -44,6 +44,7 @@
     "SleepRequirementMixin",
     "RegionFarmlandMixin",
     "RegionBucketMixin",
+    "RespawnAnchorPlacementMixin",
     "EmbassyOriginMixin",
     "CrystalCraftingGuardMixin",
     "CrystalAcceptCommandMixin",
