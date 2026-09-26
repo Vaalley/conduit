@@ -1,6 +1,5 @@
 package eu.mctraveler.region
 
-import eu.mctraveler.cosmetic.NameCosmetics
 import eu.mctraveler.text.Paint
 import java.util.Optional
 import java.util.UUID
@@ -149,9 +148,9 @@ object RegionScoreboard {
         for (uuid in region.members) {
             val name = RegionsFeature.usernameFor(server, uuid) ?: continue
             val ink = if (uuid == player.uuid) Paint.white else Paint.gray
-            // An online Donator (or anyone with a name tag/colour) keeps their styled name here too.
+            // An online Donator keeps their styled name here too.
             val text = server.playerList.getPlayer(uuid)
-                ?.let { online -> NameCosmetics.nameOr(online) { ink(name.take(MAX_WIDTH)) } }
+                ?.let { online -> eu.mctraveler.chat.ChatFeature.nameOr(online) { ink(name.take(MAX_WIDTH)) } }
                 ?: ink(name.take(MAX_WIDTH))
             rows += Row(uuid.toString(), text, place)
             place++

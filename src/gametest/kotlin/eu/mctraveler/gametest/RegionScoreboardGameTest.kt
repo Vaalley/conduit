@@ -161,7 +161,7 @@ class RegionScoreboardGameTest {
         val aliceView = SidebarView(alice)
 
         helper.runAfterDelay(2) {
-            val expected = eu.mctraveler.cosmetic.NameCosmetics.forPlayer(bob)
+            val expected = eu.mctraveler.rank.RankFeature.nameColor(bob)(bob.gameProfile.name)
             helper.assertTrue(
                 expected in aliceView.refresh().lines,
                 "the Donator's row should carry their styled name",

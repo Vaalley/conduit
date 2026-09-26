@@ -2,7 +2,6 @@ package eu.mctraveler.chat
 
 import com.mojang.brigadier.CommandDispatcher
 import com.mojang.brigadier.arguments.StringArgumentType
-import eu.mctraveler.cosmetic.NameCosmetics
 import eu.mctraveler.geo.GeoIpFeature
 import eu.mctraveler.region.RegionTracker
 import eu.mctraveler.region.RegionsFeature
@@ -248,7 +247,7 @@ object ChatFeature {
     /** [CHAT_TYPE] bound with [player]'s username, in their rank's color, as the sender. */
     private fun chatBound(player: ServerPlayer): ChatType.Bound {
         val holder = player.level().registryAccess().lookupOrThrow(Registries.CHAT_TYPE).getOrThrow(CHAT_TYPE)
-        val name = NameCosmetics.forPlayer(player)
+        val name = eu.mctraveler.rank.RankFeature.nameColor(player)(player.gameProfile.name)
         return ChatType.Bound(holder, name, Optional.empty())
     }
 
@@ -273,11 +272,24 @@ object ChatFeature {
 
     /**
      * [player]'s name in a chat line that is not the chat message itself (private messages, region
-     * chat, announcements): their styled name when a Donator or a custom name makes it worth
-     * showing ([NameCosmetics.nameOr]), the plain green username otherwise.
+     * chat, announcements): their rank-coloured name when they are a Donator (gold),
+     * the plain green username otherwise ([nameOr]).
      */
     internal fun nameOf(player: ServerPlayer): Component =
-        NameCosmetics.nameOr(player) { Paint.green(player.gameProfile.name) }
+        nameOr(player) { Paint.green(player.gameProfile.name) }
+
+    /**
+     * [player]'s rank-coloured name when they are a Donator, and [plain] for everyone else — the
+     * one place a name is worth styling now that custom name cosmetics are gone. Never throws: an
+     * unreadable rank shows the plain name.
+     */
+    internal fun nameOr(player: ServerPlayer, plain: () -> Component): Component = runCatching {
+        if (eu.mctraveler.rank.RankFeature.rankOf(player) == eu.mctraveler.rank.Rank.DONATOR) {
+            eu.mctraveler.rank.RankFeature.nameColor(player)(player.gameProfile.name)
+        } else {
+            plain()
+        }
+    }.getOrElse { plain() }
 
     /** `[+] <name> joined from <Country>` when a country is known. */
     internal fun joinLine(name: String, country: String? = null): Component =
@@ -302,7 +314,7 @@ object ChatFeature {
 
     /** The leave line for [player]: red name, or their styled name when [nameOf] would style it. */
     internal fun leaveLineFor(player: ServerPlayer): Component =
-        leaveLine(NameCosmetics.nameOr(player) { Paint.red(player.gameProfile.name) })
+        leaveLine(nameOr(player) { Paint.red(player.gameProfile.name) })
 
     /**
      * The join line [player] would produce if they were connecting right now,

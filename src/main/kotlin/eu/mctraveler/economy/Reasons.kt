@@ -6,9 +6,9 @@ object Reasons {
     const val JOIN_BONUS = "join-bonus"
     const val FEE_STORE_CREATE = "fee:store-create"
     const val FEE_STORE_UPGRADE = "fee:store-upgrade"
-    const val FEE_COSMETIC_TAG = "fee:cosmetic-tag"
-    const val FEE_COSMETIC_COLOR = "fee:cosmetic-color"
-    const val FEE_COSMETIC_GRADIENT = "fee:cosmetic-gradient"
+
+    /** Paid back once per player when the /name cosmetics were removed. */
+    const val REFUND_NAME_COSMETICS = "refund:name-cosmetics"
 
     fun pay(other: UUID): String = "pay:$other"
 
