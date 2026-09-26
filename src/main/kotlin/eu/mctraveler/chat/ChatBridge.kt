@@ -2,7 +2,6 @@ package eu.mctraveler.chat
 
 import java.util.concurrent.ConcurrentLinkedDeque
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents
-import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.PlayerChatMessage
 
 /**
@@ -28,7 +27,8 @@ object ChatBridge {
 		ServerMessageEvents.CHAT_MESSAGE.register { message, sender, _ ->
 			if (ChatSelector.modeOf(sender.uuid) == ChatSelector.Mode.SERVER) return@register
 			val playerMessage = message as? PlayerChatMessage ?: return@register
-			val content = sanitize(playerMessage.decoratedContent())
+			// What the player typed, markdown markers and all: Discord renders its own.
+			val content = sanitize(playerMessage.signedContent())
 			if (content.isNotEmpty()) {
 				record(sender.gameProfile.name, content)
 			}
@@ -53,8 +53,8 @@ object ChatBridge {
 		messages.filter { it.timestamp > since }.takeLast(100)
 }
 
-private fun sanitize(content: Component): String {
-	return content.string
+private fun sanitize(content: String): String {
+	return content
 		.replace(LINE_BREAKS, " ")
 		.replace("§", "")
 		.trim()
