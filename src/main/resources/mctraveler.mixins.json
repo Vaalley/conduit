@@ -44,6 +44,8 @@
     "SleepRequirementMixin",
     "RegionFarmlandMixin",
     "RegionBucketMixin",
+    "StrawBedSleepTrackingMixin",
+    "StrawBedProtectionMixin",
     "EmbassyOriginMixin",
     "CrystalCraftingGuardMixin",
     "CrystalBundleWeightMixin",

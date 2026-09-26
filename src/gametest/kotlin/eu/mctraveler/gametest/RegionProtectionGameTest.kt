@@ -1061,6 +1061,83 @@ class RegionProtectionGameTest {
         helper.succeed()
     }
 
+    // ---- sulfur cube ----
+
+    @GameTest
+    fun aSulfurCubeIsProtectedLikeAnAnimalDespiteLivingInTheMonsterPackage(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T14SulfurAttackA")
+        val bob = MessageCapturingPlayer.join(helper, "T14SulfurAttackB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        val cube = helper.spawnWithNoFreeWill(EntityTypes.SULFUR_CUBE, BlockPos(2, 2, 2))
+        bob.standAt(helper, 4.25, 2.0, 2.0)
+        bob.messages.clear()
+
+        bob.attacks(cube)
+
+        helper.assertValueEqual(cube.health, cube.maxHealth, "a stranger hurt a protected sulfur cube")
+        helper.assertTrue(bob.wasRefusedBy("T14SulfurAttackA's Place"), "no entity-attack refusal for the sulfur cube")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aResidentMayStillAttackTheirOwnSulfurCube(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T14SulfurAttackC")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        val cube = helper.spawnWithNoFreeWill(EntityTypes.SULFUR_CUBE, BlockPos(2, 2, 2))
+        alice.standAt(helper, 2.25, 2.0, 2.0)
+
+        alice.attacks(cube)
+
+        helper.assertTrue(cube.health < cube.maxHealth, "a resident could not attack their own sulfur cube")
+        alice.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aResidentMayInteractWithASulfurCubeInsideTheirOwnRegion(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T14SulfurInteractA")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        val cube = helper.spawnWithNoFreeWill(EntityTypes.SULFUR_CUBE, BlockPos(2, 2, 2))
+
+        helper.assertTrue(
+            RegionProtection.allowsEntityInteract(alice, InteractionHand.MAIN_HAND, cube),
+            "a resident could not interact with a sulfur cube in their own region",
+        )
+        alice.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aStrangerCannotInteractWithASulfurCubeInsideSomeonesRegion(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T14SulfurInteractC")
+        val bob = MessageCapturingPlayer.join(helper, "T14SulfurInteractD")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        val cube = helper.spawnWithNoFreeWill(EntityTypes.SULFUR_CUBE, BlockPos(2, 2, 2))
+
+        helper.assertFalse(
+            RegionProtection.allowsEntityInteract(bob, InteractionHand.MAIN_HAND, cube),
+            "a stranger could interact with someone else's sulfur cube",
+        )
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun interactingWithASulfurCubeIsAllowedOutsideAnyRegion(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T14SulfurInteractB")
+        val cube = helper.spawnWithNoFreeWill(EntityTypes.SULFUR_CUBE, BlockPos(2, 2, 2))
+
+        helper.assertTrue(
+            RegionProtection.allowsEntityInteract(alice, InteractionHand.MAIN_HAND, cube),
+            "a sulfur cube outside any region refused an interaction",
+        )
+        alice.leave()
+        helper.succeed()
+    }
+
     @GameTest
     fun pvpIsAllowedInARegionByDefault(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T14PvpA")
