@@ -4,6 +4,7 @@ import eu.mctraveler.text.Paint
 import net.minecraft.core.component.DataComponents
 import net.minecraft.nbt.CompoundTag
 import net.minecraft.network.chat.Component
+import net.minecraft.world.item.ItemInstance
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 import net.minecraft.world.item.component.CustomData
@@ -133,13 +134,19 @@ object CrystalItem {
     }
 
     /**
-     * True if [stack] is one of our crystals — minted here, or by Nucleus
+     * True if [instance] is one of our crystals — minted here, or by Nucleus
      * before the port (see [BUKKIT_VALUES]). Safe from any thread.
+     *
+     * Takes an [ItemInstance] rather than an [ItemStack] specifically so a
+     * bundle's stored [net.minecraft.world.item.ItemStackTemplate] contents —
+     * which carry no live [ItemStack] — can be checked too (see
+     * [eu.mctraveler.mixin.CrystalBundleWeightMixin]); an [ItemStack] already
+     * satisfies this interface, so every existing call site is unaffected.
      */
     @JvmStatic
-    fun isCrystal(stack: ItemStack): Boolean {
-        if (!stack.`is`(Items.ECHO_SHARD)) return false
-        val data = customData(stack) ?: return false
+    fun isCrystal(instance: ItemInstance): Boolean {
+        if (!instance.`is`(Items.ECHO_SHARD)) return false
+        val data = customData(instance) ?: return false
         return data.getBooleanOr(MARKER, false) ||
             data.getCompoundOrEmpty(BUKKIT_VALUES).getBooleanOr(LEGACY_MARKER, false)
     }
@@ -158,6 +165,6 @@ object CrystalItem {
             .orElse(MAX_TIER)
     }
 
-    private fun customData(stack: ItemStack): CompoundTag? =
-        stack.get(DataComponents.CUSTOM_DATA)?.copyTag()
+    private fun customData(instance: ItemInstance): CompoundTag? =
+        instance.get(DataComponents.CUSTOM_DATA)?.copyTag()
 }
