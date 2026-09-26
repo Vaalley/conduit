@@ -9,7 +9,6 @@ import eu.mctraveler.importer.WorldLayout
 import eu.mctraveler.importer.WorldMerge
 import eu.mctraveler.region.Region
 import eu.mctraveler.region.RegionService
-import eu.mctraveler.worlds.BankedPositions
 import eu.mctraveler.worlds.DimensionRole
 import java.nio.file.Files
 import java.nio.file.Path
@@ -90,9 +89,6 @@ class MergedSave private constructor(
 
     /** The swept `regions.json`, read back with the very reader the live server uses. */
     fun regions(): List<Region> = RegionService(runDir.resolve("regions.json")).roots
-
-    /** The artifact the merge left for the `/switch` signpost, if it banked anybody. */
-    fun bankedPositions(): Path = runDir.resolve("mctraveler/${BankedPositions.FILE_NAME}")
 
     /** [uuid]'s save as the player sweep rewrote it. */
     fun playerSave(uuid: UUID): Path = levelDir.resolve("playerdata/$uuid.dat")

@@ -155,11 +155,7 @@ class RankGameTest {
         val stranger = MessageCapturingPlayer.join(helper, "RankSetStranger")
         val target = MessageCapturingPlayer.join(helper, "RankSetTarget")
         stranger.runCommand("rank set RankSetTarget donator")
-        helper.assertValueEqual(
-            stranger.messages.last(),
-            Paint.error("You must be an admin to use this command"),
-            "a non-admin /rank set reply",
-        )
+        helper.assertUnknownCommand(stranger, "a non-admin /rank set")
         helper.assertTrue(RankFeature.rankOf(target) != Rank.DONATOR, "a non-admin changed someone's rank")
         stranger.leave()
         target.leave()

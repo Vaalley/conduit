@@ -1,5 +1,6 @@
 package eu.mctraveler.crystal
 
+import eu.mctraveler.command.Audience
 import com.mojang.brigadier.Command
 import com.mojang.brigadier.CommandDispatcher
 import com.mojang.brigadier.arguments.IntegerArgumentType
@@ -36,8 +37,9 @@ object CrystalCommands {
     fun register(dispatcher: CommandDispatcher<CommandSourceStack>) {
         dispatcher.register(
             Commands.literal(NAME)
-                // Usage comes before the admin gate (house rule): telling
-                // someone how to type a command gives nothing away.
+                .requires(Audience.ADMIN.gate)
+                // Wholly admin-only: the gate above hides the root from everyone else.
+                // The in-body adminGate below stays as a second line.
                 .executes { ctx -> reply(ctx) { Paint.usage("/$NAME <energy> [player]") } }
                 .then(
                     Commands.argument("energy", IntegerArgumentType.integer())

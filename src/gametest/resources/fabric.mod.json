@@ -8,6 +8,7 @@
   "entrypoints": {
     "fabric-gametest": [
       "eu.mctraveler.gametest.ScaffoldGameTest",
+      "eu.mctraveler.gametest.HelpGameTest",
       "eu.mctraveler.gametest.PersistenceGameTest",
       "eu.mctraveler.gametest.XpOrbMergeGameTest",
       "eu.mctraveler.gametest.MotdGameTest",
@@ -19,7 +20,6 @@
       "eu.mctraveler.gametest.PassportGameTest",
       "eu.mctraveler.gametest.AwayGameTest",
       "eu.mctraveler.gametest.NotepadGameTest",
-      "eu.mctraveler.gametest.SwitchSignpostGameTest",
       "eu.mctraveler.gametest.RespawnAndPortalsGameTest",
       "eu.mctraveler.gametest.RegionCommandGameTest",
       "eu.mctraveler.gametest.RegionAdminCommandGameTest",
