@@ -46,6 +46,7 @@
     "RegionBucketMixin",
     "EmbassyOriginMixin",
     "CrystalCraftingGuardMixin",
+    "CrystalBundleWeightMixin",
     "CrystalAcceptCommandMixin",
     "MinecraftServerAccessor",
     "AbstractHorseOwnerAccessor",
