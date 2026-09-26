@@ -518,6 +518,124 @@ class StoreGameTest {
         }
     }
 
+    // ---- /store admin ----
+
+    @GameTest
+    fun adminModeIsAbsentFromANonAdminsCommandTree(helper: GameTestHelper) {
+        val server = helper.level.server
+        val stranger = MessageCapturingPlayer.join(helper, "StoreAdminTreeA")
+        val admin = MessageCapturingPlayer.join(helper, "StoreAdminTreeB")
+        admin.makeAdmin()
+        try {
+            val node = server.commands.dispatcher.root.getChild("store")?.getChild("admin")
+                ?: throw helper.assertionException("the /store admin command is not registered at all")
+            helper.assertFalse(
+                node.requirement.test(stranger.createCommandSourceStack()),
+                "/store admin is visible to a non-admin's command tree",
+            )
+            helper.assertTrue(
+                node.requirement.test(admin.createCommandSourceStack()),
+                "/store admin is hidden from an admin's command tree",
+            )
+            helper.succeed()
+        } finally {
+            stranger.leave()
+            admin.leave()
+        }
+    }
+
+    @GameTest
+    fun adminModeIsOffByDefaultAndTogglesWithAMessage(helper: GameTestHelper) {
+        val admin = MessageCapturingPlayer.join(helper, "StoreAdminToggle")
+        admin.makeAdmin()
+        try {
+            admin.runCommand("store admin")
+            helper.assertValueEqual(
+                admin.messages.last(),
+                Paint.info("Store admin mode is now on — you can view and modify any store"),
+                "turning admin mode on",
+            )
+            admin.runCommand("store admin")
+            helper.assertValueEqual(
+                admin.messages.last(),
+                Paint.info("Store admin mode is now off — you interact with stores like anyone else"),
+                "turning admin mode back off",
+            )
+            helper.succeed()
+        } finally {
+            admin.leave()
+        }
+    }
+
+    @GameTest
+    fun anAdminSeesAStoreAsAVisitorUntilAdminModeIsOn(helper: GameTestHelper) {
+        val owner = MessageCapturingPlayer.join(helper, "StoreAdminOwnerA")
+        val admin = MessageCapturingPlayer.join(helper, "StoreAdminViewA")
+        admin.makeAdmin()
+        val frame = ItemFrame(helper.level, helper.absolutePos(BlockPos(2, 2, 2)), Direction.SOUTH)
+        try {
+            helper.level.addFreshEntity(frame)
+            val record = record(owner, frame, stock = 4)
+            StoreFeature.requireService().add(record)
+            StoreFrames.mark(frame)
+
+            interactWith(admin, frame)
+            helper.assertTrue(admin.containerMenu is StoreMenus.BuyMenu, "an admin with admin mode off saw the stock menu")
+            admin.closeContainer()
+
+            admin.runCommand("store admin")
+            interactWith(admin, frame)
+            helper.assertTrue(admin.containerMenu is StoreMenus.StockMenu, "an admin with admin mode on did not see the stock menu")
+            helper.succeed()
+        } finally {
+            StoreFeature.requireService().remove(frame.uuid)
+            frame.kill(helper.level)
+            owner.leave()
+            admin.leave()
+        }
+    }
+
+    /** Simulates [player] right-clicking [frame] with an empty main hand — the store's own open trigger. */
+    private fun interactWith(player: ServerPlayer, frame: ItemFrame) {
+        net.fabricmc.fabric.api.event.player.UseEntityCallback.EVENT.invoker().interact(
+            player,
+            player.level(),
+            net.minecraft.world.InteractionHand.MAIN_HAND,
+            frame,
+            net.minecraft.world.phys.EntityHitResult(frame),
+        )
+    }
+
+    @GameTest
+    fun adminModeGatesDeletingAnotherOwnersStore(helper: GameTestHelper) {
+        val owner = MessageCapturingPlayer.join(helper, "StoreAdminOwnerB")
+        val admin = MessageCapturingPlayer.join(helper, "StoreAdminViewB")
+        admin.makeAdmin()
+        val frame = ItemFrame(helper.level, helper.absolutePos(BlockPos(2, 2, 2)), Direction.SOUTH)
+        try {
+            frame.setItem(ItemStack(Items.DIAMOND))
+            helper.level.addFreshEntity(frame)
+            val record = record(owner, frame, stock = 0)
+            StoreFeature.requireService().add(record)
+            StoreFrames.mark(frame)
+            faceFrame(admin, frame)
+
+            admin.runCommand("store delete")
+            helper.assertValueEqual(admin.messages.last(), Paint.error("This isn't your store"), "delete with admin mode off")
+            helper.assertTrue(StoreFeature.requireService().byFrame(frame.uuid) != null, "the store was deleted with admin mode off")
+
+            admin.runCommand("store admin")
+            admin.runCommand("store delete")
+            helper.assertTrue(StoreFeature.requireService().byFrame(frame.uuid) == null, "admin mode did not allow the delete")
+            helper.succeed()
+        } finally {
+            StoreFeature.requireService().remove(frame.uuid)
+            frame.kill(helper.level)
+            owner.leave()
+            admin.leave()
+        }
+    }
+
     private fun record(player: ServerPlayer, frame: ItemFrame, stock: Int): StoreRecord =
         StoreRecord(
             frame.uuid,

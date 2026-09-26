@@ -17,6 +17,7 @@ import net.fabricmc.fabric.api.event.Event
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback
 import net.fabricmc.fabric.api.event.player.UseEntityCallback
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
 import net.minecraft.core.BlockPos
@@ -39,6 +40,17 @@ object StoreFeature {
 
     fun requireService(): StoreService =
         checkNotNull(service) { "the Store service is not started" }
+
+    /**
+     * Admins whose `/store admin` mode is currently on — off by default, per
+     * player, and never persisted. Off, an admin interacts with a store like
+     * anyone else: buy/sell only, no editing another owner's stock. On, they
+     * get the owner's own view of every store: stock, upgrade, delete.
+     */
+    private val adminMode = HashSet<UUID>()
+
+    private fun isAdminMode(player: ServerPlayer): Boolean =
+        RegionsFeature.isAdmin(player) && player.uuid in adminMode
 
     fun register() {
         ServerLifecycleEvents.SERVER_STARTING.register { server ->
@@ -68,7 +80,7 @@ object StoreFeature {
                     InteractionResult.SUCCESS
                 } else {
                     if (player is ServerPlayer) {
-                        if (record.owner == player.uuid || RegionsFeature.isAdmin(player)) {
+                        if (record.owner == player.uuid || isAdminMode(player)) {
                             StoreMenus.openStock(player, record)
                         } else if (record.kind == StoreKind.BUY) {
                             StoreMenus.openSell(player, record)
@@ -90,6 +102,8 @@ object StoreFeature {
         RegionProtection.exemptMenu {
             it is StoreMenus.StockMenu || it is StoreMenus.BuyMenu || it is StoreMenus.SellMenu
         }
+        ServerPlayConnectionEvents.DISCONNECT.register { handler, _ -> adminMode.remove(handler.player.uuid) }
+        ServerLifecycleEvents.SERVER_STOPPED.register { adminMode.clear() }
     }
 
     fun recordItem(player: ServerPlayer, record: StoreRecord): ItemStack =
@@ -99,7 +113,11 @@ object StoreFeature {
         dispatcher.register(
             Commands.literal("store")
                 .executes {
-                    reply(it) { Paint.usage("/store create <price>, /store buy <price> [max], /store upgrade, or /store delete") }
+                    reply(it) {
+                        Paint.usage(
+                            "/store create <price>, /store buy <price> [max], /store upgrade, /store delete, or /store admin",
+                        )
+                    }
                 }
                 .then(
                     Commands.literal("create")
@@ -148,6 +166,13 @@ object StoreFeature {
                 .then(
                     Commands.literal("deny")
                         .executes { context -> reply(context) { deny(it) } },
+                )
+                .then(
+                    // Hidden from the command tree for non-admins — same shape as
+                    // /vanish: a stranger never even sees it in tab-completion.
+                    Commands.literal("admin")
+                        .requires { source -> source.player?.let(RegionsFeature::isAdmin) ?: true }
+                        .executes { context -> reply(context) { toggleAdminMode(it) } },
                 )
                 .then(
                     Commands.literal("upgrade")
@@ -252,12 +277,30 @@ object StoreFeature {
         return Paint.success("Store created! ", Paint.red("-", Economy.format(StoreFees.CREATE)))
     }
 
+    /**
+     * `/store admin`: an admin's own toggle for whether they currently see
+     * every store as its owner would (stock, upgrade, delete) or as an
+     * ordinary visitor would (buy/sell only). Off by default and never
+     * persisted — the `.requires` gate on the command already keeps a
+     * non-admin from reaching this, so this is a backstop, not the primary
+     * control.
+     */
+    private fun toggleAdminMode(player: ServerPlayer): Component {
+        RegionsFeature.adminGate(player)?.let { return it }
+        return if (!adminMode.add(player.uuid)) {
+            adminMode.remove(player.uuid)
+            Paint.info("Store admin mode is now off — you interact with stores like anyone else")
+        } else {
+            Paint.info("Store admin mode is now on — you can view and modify any store")
+        }
+    }
+
     private fun upgrade(player: ServerPlayer): Component {
         val frame = StoreFrames.lookedAtFrame(player)
             ?: return Paint.error("You need to look at a store")
         val record = requireService().byFrame(frame.uuid)
             ?: return Paint.error("You need to look at a store")
-        if (record.owner != player.uuid && !RegionsFeature.isAdmin(player)) {
+        if (record.owner != player.uuid && !isAdminMode(player)) {
             return Paint.error("This isn't your store")
         }
         if (record.rows >= 6) return Paint.error("This store is already upgraded")
@@ -281,7 +324,7 @@ object StoreFeature {
             ?: return Paint.error("You need to look at a store")
         val record = requireService().byFrame(frame.uuid)
             ?: return Paint.error("You need to look at a store")
-        if (record.owner != player.uuid && !RegionsFeature.isAdmin(player)) {
+        if (record.owner != player.uuid && !isAdminMode(player)) {
             return Paint.error("This isn't your store")
         }
         val item = recordItem(player, record)
