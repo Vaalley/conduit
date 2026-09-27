@@ -57,7 +57,7 @@ val mcaSelectorVersion = "2.8-mctraveler1"
 //   shasum -a 256 <jar>
 // whenever the patch changes, and never take the new value from a jar that just
 // failed this check.
-val mcaSelectorSha256 = "f7d088d34019803ccf978a4e978176b0ddbc95d5d96d2e6cfd85997b54b041b1"
+val mcaSelectorSha256 = "e0abcbb32a219da00ac79b0c21adcc52583c51c3e7a32a9023f50c4ff58129bc"
 
 // Where the built jar is expected to live. Outside the repo, because it is 18 MB
 // of somebody else's build output; durable, because rebuilding it is a minute of
