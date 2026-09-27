@@ -727,35 +727,40 @@ class CrystalMenuGameTest {
     fun playerOpensAHeadForEveryoneElseOnline(helper: GameTestHelper) {
         val chooser = MessageCapturingPlayer.join(helper, "TCChooser")
         val other = MessageCapturingPlayer.join(helper, "TCChosen")
-        CrystalEnergy.setEnergy(chooser, 5)
-        chooser.usesCrystal(tier = 3)
-        PacketCapture.drain(chooser)
+        // A second player's join is not always reflected in the player list the
+        // instant this returns; opening the menu right away could build it from
+        // a list that has not caught up yet (observed on CI as a missing head).
+        helper.runAfterDelay(2) {
+            CrystalEnergy.setEnergy(chooser, 5)
+            chooser.usesCrystal(tier = 3)
+            PacketCapture.drain(chooser)
 
-        helper.afterClick(chooser, PLAYER_SLOT, chooser, other) {
-            helper.assertValueEqual(
-                PacketCapture.drainOf<ClientboundOpenScreenPacket>(chooser).last().title.string,
-                CrystalMenu.PLAYERS_TITLE,
-                "the head menu's title",
-            )
-            val menu = CrystalMenu.openMenuOf(chooser)
-            helper.assertTrue(
-                menu != null,
-                "the Player destination opened no menu, left ${chooser.containerMenu.javaClass.simpleName}",
-            )
-            helper.assertValueEqual(menu!!.kind, CrystalMenu.Kind.PLAYERS, "the second menu's kind")
-            val heads = menu.contents().filter { !it.isEmpty }
-            helper.assertTrue(
-                heads.any { head ->
-                    head.`is`(Items.PLAYER_HEAD) &&
-                        head.get(DataComponents.CUSTOM_NAME)?.string == "TCChosen" &&
-                        head.get(DataComponents.PROFILE)?.name()?.orElse(null) == "TCChosen" &&
-                        head.get(DataComponents.LORE)?.lines()?.map { it.string } ==
-                        listOf("Click to teleport to this player")
-                },
-                "no head for TCChosen, found ${heads.map { it.get(DataComponents.CUSTOM_NAME)?.string }}",
-            )
-            // Opening the head GUI is not itself a destination.
-            helper.assertValueEqual(CrystalEnergy.energyOf(chooser), 5, "energy after opening the head menu")
+            helper.afterClick(chooser, PLAYER_SLOT, chooser, other) {
+                helper.assertValueEqual(
+                    PacketCapture.drainOf<ClientboundOpenScreenPacket>(chooser).last().title.string,
+                    CrystalMenu.PLAYERS_TITLE,
+                    "the head menu's title",
+                )
+                val menu = CrystalMenu.openMenuOf(chooser)
+                helper.assertTrue(
+                    menu != null,
+                    "the Player destination opened no menu, left ${chooser.containerMenu.javaClass.simpleName}",
+                )
+                helper.assertValueEqual(menu!!.kind, CrystalMenu.Kind.PLAYERS, "the second menu's kind")
+                val heads = menu.contents().filter { !it.isEmpty }
+                helper.assertTrue(
+                    heads.any { head ->
+                        head.`is`(Items.PLAYER_HEAD) &&
+                            head.get(DataComponents.CUSTOM_NAME)?.string == "TCChosen" &&
+                            head.get(DataComponents.PROFILE)?.name()?.orElse(null) == "TCChosen" &&
+                            head.get(DataComponents.LORE)?.lines()?.map { it.string } ==
+                            listOf("Click to teleport to this player")
+                    },
+                    "no head for TCChosen, found ${heads.map { it.get(DataComponents.CUSTOM_NAME)?.string }}",
+                )
+                // Opening the head GUI is not itself a destination.
+                helper.assertValueEqual(CrystalEnergy.energyOf(chooser), 5, "energy after opening the head menu")
+            }
         }
     }
 
@@ -766,54 +771,59 @@ class CrystalMenuGameTest {
         val requester = MessageCapturingPlayer.join(helper, "TCAsker")
         val target = MessageCapturingPlayer.join(helper, "TCAsked")
         CrystalRequests.clear()
-        CrystalEnergy.setEnergy(requester, 5)
-        requester.usesCrystal(tier = 3)
+        // A second player's join is not always reflected in the player list the
+        // instant this returns; opening the menu right away could build it from
+        // a list that has not caught up yet (observed on CI as a missing head).
+        helper.runAfterDelay(2) {
+            CrystalEnergy.setEnergy(requester, 5)
+            requester.usesCrystal(tier = 3)
 
-        helper.afterClick(requester, PLAYER_SLOT) {
-            val heads = CrystalMenu.openMenuOf(requester)!!
-            val slot = heads.contents().indexOfFirst {
-                it.get(DataComponents.CUSTOM_NAME)?.string == "TCAsked"
-            }
-            helper.assertTrue(slot >= 0, "no head for the target")
-            requester.messages.clear()
-            target.messages.clear()
+            helper.afterClick(requester, PLAYER_SLOT) {
+                val heads = CrystalMenu.openMenuOf(requester)!!
+                val slot = heads.contents().indexOfFirst {
+                    it.get(DataComponents.CUSTOM_NAME)?.string == "TCAsked"
+                }
+                helper.assertTrue(slot >= 0, "no head for the target")
+                requester.messages.clear()
+                target.messages.clear()
 
-            helper.afterClick(requester, slot, requester, target) {
-                helper.assertOnlyMessage(
-                    requester,
-                    Paint.success("Request sent to ", Paint.green("TCAsked")),
-                    "the requester's confirmation",
-                )
-                helper.assertValueEqual(CrystalEnergy.energyOf(requester), 5, "energy after asking")
+                helper.afterClick(requester, slot, requester, target) {
+                    helper.assertOnlyMessage(
+                        requester,
+                        Paint.success("Request sent to ", Paint.green("TCAsked")),
+                        "the requester's confirmation",
+                    )
+                    helper.assertValueEqual(CrystalEnergy.energyOf(requester), 5, "energy after asking")
 
-                val invitation = target.spokenMessages().singleOrNull()
-                helper.assertTrue(
-                    invitation != null,
-                    "the target was told ${target.spokenMessages().map { it.string }}",
-                )
-                helper.assertValueEqual(
-                    invitation!!.string,
-                    "INFO TCAsker wants to teleport to you - click here to accept",
-                    "the invitation text",
-                )
-                // The INFO prefix is not clickable and never was — Nucleus
-                // appended its message to the prefix component too, so the
-                // click event sits on the body the player actually reads.
-                val click = invitation.clickEvents().singleOrNull()
-                helper.assertTrue(
-                    click is ClickEvent.RunCommand &&
-                        click.command().removePrefix("/") ==
-                        "${CrystalRequests.ACCEPT_COMMAND} TCAsker",
-                    "the invitation is not clickable to accept, found ${invitation.clickEvents()}",
-                )
-                helper.assertTrue(
-                    invitation.runsOf("TCAsker").all { it.color == "aqua" },
-                    "the requester's name should be aqua in ${invitation.textRuns()}",
-                )
-                helper.assertTrue(
-                    invitation.runsOf("here").all { it.color == "aqua" },
-                    "\"here\" should be aqua in ${invitation.textRuns()}",
-                )
+                    val invitation = target.spokenMessages().singleOrNull()
+                    helper.assertTrue(
+                        invitation != null,
+                        "the target was told ${target.spokenMessages().map { it.string }}",
+                    )
+                    helper.assertValueEqual(
+                        invitation!!.string,
+                        "INFO TCAsker wants to teleport to you - click here to accept",
+                        "the invitation text",
+                    )
+                    // The INFO prefix is not clickable and never was — Nucleus
+                    // appended its message to the prefix component too, so the
+                    // click event sits on the body the player actually reads.
+                    val click = invitation.clickEvents().singleOrNull()
+                    helper.assertTrue(
+                        click is ClickEvent.RunCommand &&
+                            click.command().removePrefix("/") ==
+                            "${CrystalRequests.ACCEPT_COMMAND} TCAsker",
+                        "the invitation is not clickable to accept, found ${invitation.clickEvents()}",
+                    )
+                    helper.assertTrue(
+                        invitation.runsOf("TCAsker").all { it.color == "aqua" },
+                        "the requester's name should be aqua in ${invitation.textRuns()}",
+                    )
+                    helper.assertTrue(
+                        invitation.runsOf("here").all { it.color == "aqua" },
+                        "\"here\" should be aqua in ${invitation.textRuns()}",
+                    )
+                }
             }
         }
     }
@@ -1046,24 +1056,29 @@ class CrystalMenuGameTest {
         val requester = MessageCapturingPlayer.join(helper, "TCGoneA")
         val leaver = MessageCapturingPlayer.join(helper, "TCGoneB")
         CrystalRequests.clear()
-        CrystalEnergy.setEnergy(requester, 5)
-        requester.usesCrystal(tier = 3)
+        // A second player's join is not always reflected in the player list the
+        // instant this returns; opening the menu right away could build it from
+        // a list that has not caught up yet (observed on CI as a missing head).
+        helper.runAfterDelay(2) {
+            CrystalEnergy.setEnergy(requester, 5)
+            requester.usesCrystal(tier = 3)
 
-        helper.afterClick(requester, PLAYER_SLOT) {
-            val slot = CrystalMenu.openMenuOf(requester)!!.contents().indexOfFirst {
-                it.get(DataComponents.CUSTOM_NAME)?.string == "TCGoneB"
-            }
-            helper.assertTrue(slot >= 0, "no head for the player about to leave")
-            leaver.leave()
-            requester.messages.clear()
+            helper.afterClick(requester, PLAYER_SLOT) {
+                val slot = CrystalMenu.openMenuOf(requester)!!.contents().indexOfFirst {
+                    it.get(DataComponents.CUSTOM_NAME)?.string == "TCGoneB"
+                }
+                helper.assertTrue(slot >= 0, "no head for the player about to leave")
+                leaver.leave()
+                requester.messages.clear()
 
-            helper.afterClick(requester, slot, requester) {
-                helper.assertOnlyMessage(
-                    requester,
-                    Paint.error(Paint.red("TCGoneB"), " is not online"),
-                    "the departed-target refusal",
-                )
-                helper.assertValueEqual(CrystalEnergy.energyOf(requester), 5, "energy after a vanished target")
+                helper.afterClick(requester, slot, requester) {
+                    helper.assertOnlyMessage(
+                        requester,
+                        Paint.error(Paint.red("TCGoneB"), " is not online"),
+                        "the departed-target refusal",
+                    )
+                    helper.assertValueEqual(CrystalEnergy.energyOf(requester), 5, "energy after a vanished target")
+                }
             }
         }
     }
