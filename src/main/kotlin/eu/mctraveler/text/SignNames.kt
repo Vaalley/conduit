@@ -1,8 +1,10 @@
 package eu.mctraveler.text
 
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.function.BiFunction
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents
 import net.minecraft.core.BlockPos
 import net.minecraft.core.RegistryAccess
 import net.minecraft.nbt.NbtOps
@@ -50,6 +52,7 @@ object SignNames {
 
     fun register() {
         ServerLifecycleEvents.SERVER_STOPPED.register { clear() }
+        ServerTickEvents.END_SERVER_TICK.register { sendFollowUps() }
     }
 
     // ---- Token detection -------------------------------------------------
@@ -113,7 +116,10 @@ object SignNames {
     /** True when at least one loaded chunk holds a `<name>` sign. */
     fun hasTokenChunks(): Boolean = tokenChunks.isNotEmpty()
 
-    fun clear() = tokenChunks.clear()
+    fun clear() {
+        tokenChunks.clear()
+        followUps.clear()
+    }
 
     /** Called from a mixin once a sign is in the world, and after markdown is applied on edit. */
     fun onSignLoadedOrChanged(level: Level, pos: BlockPos, sign: SignBlockEntity) {
@@ -171,21 +177,41 @@ object SignNames {
                 if (tokenChunks.isEmpty()) return packet
                 val key = ChunkPos.pack(packet.x, packet.z)
                 if (key !in tokenChunks) return packet
-                val level = viewer.level()
-                level.server.execute {
-                    val chunk = level.chunkSource.getChunkNow(packet.x, packet.z) ?: return@execute
-                    for (be in chunk.blockEntities.values) {
-                        if (be is SignBlockEntity &&
-                            (hasToken(be.getText(SignTextSlot.FRONT)) || hasToken(be.getText(SignTextSlot.BACK)))
-                        ) {
-                            personalizedPacket(be, viewer)?.let { viewer.connection.send(it) }
-                        }
-                    }
-                }
+                // Not sent from here: this hook runs before the chunk packet is written, and a
+                // sign packet that reaches the client ahead of its chunk is dropped (there is
+                // no sign to update yet). Queued, and sent once the tick's chunks are out.
+                followUps.add(FollowUp(viewer, viewer.level(), packet.x, packet.z))
                 return packet
             }
 
             else -> return packet
+        }
+    }
+
+    /** A chunk sent to [viewer] that holds a `<name>` sign, waiting for its personalised sign packets. */
+    private class FollowUp(val viewer: ServerPlayer, val level: ServerLevel, val x: Int, val z: Int)
+
+    private val followUps = ConcurrentLinkedQueue<FollowUp>()
+
+    /**
+     * Sends the personalised sign packets for every chunk queued this tick. Runs at the end of
+     * the tick so each one leaves after the chunk it belongs to: the chunk packet is written
+     * inside the tick, and packets on a connection keep the order they were written in.
+     */
+    private fun sendFollowUps() {
+        while (true) {
+            val followUp = followUps.poll() ?: return
+            val viewer = followUp.viewer
+            // Gone, or moved to another dimension since (a new chunk send covers that).
+            if (viewer.hasDisconnected() || viewer.level() !== followUp.level) continue
+            val chunk = followUp.level.chunkSource.getChunkNow(followUp.x, followUp.z) ?: continue
+            for (be in chunk.blockEntities.values.toList()) {
+                if (be is SignBlockEntity &&
+                    (hasToken(be.getText(SignTextSlot.FRONT)) || hasToken(be.getText(SignTextSlot.BACK)))
+                ) {
+                    personalizedPacket(be, viewer)?.let { viewer.connection.send(it) }
+                }
+            }
         }
     }
 

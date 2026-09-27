@@ -1,6 +1,5 @@
 package eu.mctraveler.tablist
 
-import eu.mctraveler.cosmetic.NameCosmetics
 import eu.mctraveler.text.Paint
 import java.util.EnumSet
 import java.util.Locale
@@ -93,7 +92,7 @@ object TabListFeature {
     @JvmStatic
     fun tabDisplayName(player: ServerPlayer): Component = Paint(
         if (eu.mctraveler.away.AwayFeature.isAway(player)) Paint.gray("[Away] ") else null,
-        NameCosmetics.forPlayer(player),
+        eu.mctraveler.rank.RankFeature.nameColor(player)(player.gameProfile.name),
         " ",
         Paint.darkGray("[${player.connection?.latency() ?: 0}ms]"),
     )

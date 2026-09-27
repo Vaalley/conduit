@@ -17,6 +17,7 @@ import net.fabricmc.fabric.api.event.Event
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents
 import net.fabricmc.fabric.api.event.player.AttackEntityCallback
 import net.fabricmc.fabric.api.event.player.UseEntityCallback
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
 import net.minecraft.core.BlockPos
@@ -40,6 +41,17 @@ object StoreFeature {
     fun requireService(): StoreService =
         checkNotNull(service) { "the Store service is not started" }
 
+    /**
+     * Admins whose `/store admin` mode is currently on — off by default, per
+     * player, and never persisted. Off, an admin interacts with a store like
+     * anyone else: buy/sell only, no editing another owner's stock. On, they
+     * get the owner's own view of every store: stock, upgrade, delete.
+     */
+    private val adminMode = HashSet<UUID>()
+
+    private fun isAdminMode(player: ServerPlayer): Boolean =
+        RegionsFeature.isAdmin(player) && player.uuid in adminMode
+
     fun register() {
         ServerLifecycleEvents.SERVER_STARTING.register { server ->
             service = StoreService(server.serverDirectory.resolve("mctraveler").resolve("stores.json"))
@@ -48,7 +60,9 @@ object StoreFeature {
             for (level in server.getAllLevels()) {
                 for (entity in level.getAllEntities()) {
                     val frame = entity as? ItemFrame ?: continue
-                    if (requireService().byFrame(frame.uuid) != null) StoreFrames.mark(frame)
+                    val record = requireService().byFrame(frame.uuid) ?: continue
+                    StoreFrames.mark(frame)
+                    StoreFrames.label(frame, record)
                 }
             }
         }
@@ -66,7 +80,7 @@ object StoreFeature {
                     InteractionResult.SUCCESS
                 } else {
                     if (player is ServerPlayer) {
-                        if (record.owner == player.uuid || RegionsFeature.isAdmin(player)) {
+                        if (record.owner == player.uuid || isAdminMode(player)) {
                             StoreMenus.openStock(player, record)
                         } else if (record.kind == StoreKind.BUY) {
                             StoreMenus.openSell(player, record)
@@ -88,6 +102,8 @@ object StoreFeature {
         RegionProtection.exemptMenu {
             it is StoreMenus.StockMenu || it is StoreMenus.BuyMenu || it is StoreMenus.SellMenu
         }
+        ServerPlayConnectionEvents.DISCONNECT.register { handler, _ -> adminMode.remove(handler.player.uuid) }
+        ServerLifecycleEvents.SERVER_STOPPED.register { adminMode.clear() }
     }
 
     fun recordItem(player: ServerPlayer, record: StoreRecord): ItemStack =
@@ -97,7 +113,11 @@ object StoreFeature {
         dispatcher.register(
             Commands.literal("store")
                 .executes {
-                    reply(it) { Paint.usage("/store create <price>, /store buy <price> [max], /store upgrade, or /store delete") }
+                    reply(it) {
+                        Paint.usage(
+                            "/store create <price>, /store buy <price> [max], /store upgrade, /store delete, or /store admin",
+                        )
+                    }
                 }
                 .then(
                     Commands.literal("create")
@@ -140,6 +160,21 @@ object StoreFeature {
                         ),
                 )
                 .then(
+                    Commands.literal("confirm")
+                        .executes { context -> reply(context) { confirm(it) } },
+                )
+                .then(
+                    Commands.literal("deny")
+                        .executes { context -> reply(context) { deny(it) } },
+                )
+                .then(
+                    // Hidden from the command tree for non-admins — same shape as
+                    // /vanish: a stranger never even sees it in tab-completion.
+                    Commands.literal("admin")
+                        .requires { source -> source.player?.let(RegionsFeature::isAdmin) ?: true }
+                        .executes { context -> reply(context) { toggleAdminMode(it) } },
+                )
+                .then(
                     Commands.literal("upgrade")
                         .executes { context -> reply(context) { upgrade(it) } },
                 )
@@ -150,16 +185,69 @@ object StoreFeature {
         )
     }
 
+    /** A `/store create`/`/store buy` a first-timer hasn't yet accepted the fee for. */
+    private data class PendingCreate(val price: Long, val kind: StoreKind, val wanted: Int?, val frameId: UUID, val tick: Int)
+
+    /** How long a confirmation prompt stays good for — a full minute, generous for reading it. */
+    private const val CONFIRM_WINDOW_TICKS = 1200
+
+    private val pendingCreate = HashMap<UUID, PendingCreate>()
+
     private fun create(player: ServerPlayer, price: Long, kind: StoreKind, wanted: Int?): Component {
         val frame = StoreFrames.lookedAtFrame(player)
             ?: return Paint.error("You need to look at an item frame")
-        val item = frame.item
-        if (item.isEmpty) return Paint.error("That item frame is empty")
+        if (frame.item.isEmpty) return Paint.error("That item frame is empty")
         if (requireService().byFrame(frame.uuid) != null) {
             return Paint.error("That item frame is already a store")
         }
         if (!RegionProtection.allowsEntityInteract(player, InteractionHand.MAIN_HAND, frame)) {
             return Paint.error("You can't create a store here")
+        }
+        // A player's very first store asks first — every later one goes straight through.
+        if (isFirstStore(player.uuid)) {
+            pendingCreate[player.uuid] = PendingCreate(price, kind, wanted, frame.uuid, player.level().server.tickCount)
+            return confirmPrompt()
+        }
+        return chargeAndCreate(player, frame, price, kind, wanted)
+    }
+
+    private fun confirm(player: ServerPlayer): Component {
+        val pending = pendingCreate.remove(player.uuid)
+            ?: return Paint.error("You have nothing to confirm")
+        if (player.level().server.tickCount - pending.tick > CONFIRM_WINDOW_TICKS) {
+            return Paint.error("That confirmation expired — try again")
+        }
+        val frame = player.level().getEntity(pending.frameId) as? ItemFrame
+            ?: return Paint.error("That item frame is gone")
+        if (!RegionProtection.allowsEntityInteract(player, InteractionHand.MAIN_HAND, frame)) {
+            return Paint.error("You can't create a store here")
+        }
+        return chargeAndCreate(player, frame, pending.price, pending.kind, pending.wanted)
+    }
+
+    private fun deny(player: ServerPlayer): Component {
+        pendingCreate.remove(player.uuid)
+        return Paint.info("Store creation cancelled")
+    }
+
+    /** Whether [uuid] has never had a store-creation fee charged — the ledger is the record of it. */
+    private fun isFirstStore(uuid: UUID): Boolean =
+        MCTraveler.persistence?.ledger?.read(uuid)?.none { it.reason == Reasons.FEE_STORE_CREATE } ?: false
+
+    private fun confirmPrompt(): Component = Paint(
+        Paint.gray("Every store costs ", Economy.format(StoreFees.CREATE), " to create. Continue?"),
+        "\n",
+        Paint.green.bold.runs("/store confirm")("[Accept]"),
+        "  ",
+        Paint.red.bold.runs("/store deny")("[Deny]"),
+    )
+
+    /** The fee-charging, record-building half of store creation, shared by a direct create and a confirmed one. */
+    private fun chargeAndCreate(player: ServerPlayer, frame: ItemFrame, price: Long, kind: StoreKind, wanted: Int?): Component {
+        val item = frame.item
+        if (item.isEmpty) return Paint.error("That item frame is empty")
+        if (requireService().byFrame(frame.uuid) != null) {
+            return Paint.error("That item frame is already a store")
         }
         val persistence = MCTraveler.persistence
             ?: return Paint.error("The economy is unavailable")
@@ -172,42 +260,38 @@ object StoreFeature {
                 ")",
             )
         }
-        StoreFrames.mark(frame)
-        requireService().add(
-            StoreRecord(
-                frameId = frame.uuid,
-                owner = player.uuid,
-                dimension = player.level().dimension().identifier().toString(),
-                pos = frame.blockPosition(),
-                item = StoreCodec.encode(player, item),
-                pricePerItem = price,
-                stock = 0,
-                kind = kind,
-                wanted = wanted,
-            ),
+        val record = StoreRecord(
+            frameId = frame.uuid,
+            owner = player.uuid,
+            dimension = player.level().dimension().identifier().toString(),
+            pos = frame.blockPosition(),
+            item = StoreCodec.encode(player, item),
+            pricePerItem = price,
+            stock = 0,
+            kind = kind,
+            wanted = wanted,
         )
-        return if (kind == StoreKind.BUY) {
-            Paint.store(
-                "Store created (-",
-                Economy.format(StoreFees.CREATE),
-                ") — buying ",
-                item.hoverName,
-                " for ",
-                Economy.format(price),
-                " each",
-                wanted?.let { " (up to $it)" } ?: "",
-                ".",
-            )
+        StoreFrames.mark(frame)
+        StoreFrames.label(frame, record)
+        requireService().add(record)
+        return Paint.success("Store created! ", Paint.red("-", Economy.format(StoreFees.CREATE)))
+    }
+
+    /**
+     * `/store admin`: an admin's own toggle for whether they currently see
+     * every store as its owner would (stock, upgrade, delete) or as an
+     * ordinary visitor would (buy/sell only). Off by default and never
+     * persisted — the `.requires` gate on the command already keeps a
+     * non-admin from reaching this, so this is a backstop, not the primary
+     * control.
+     */
+    private fun toggleAdminMode(player: ServerPlayer): Component {
+        RegionsFeature.adminGate(player)?.let { return it }
+        return if (!adminMode.add(player.uuid)) {
+            adminMode.remove(player.uuid)
+            Paint.info("Store admin mode is now off — you interact with stores like anyone else")
         } else {
-            Paint.store(
-                "Store created (-",
-                Economy.format(StoreFees.CREATE),
-                ") — selling ",
-                item.hoverName,
-                " for ",
-                Economy.format(price),
-                " each. Right-click it to add stock.",
-            )
+            Paint.info("Store admin mode is now on — you can view and modify any store")
         }
     }
 
@@ -216,7 +300,7 @@ object StoreFeature {
             ?: return Paint.error("You need to look at a store")
         val record = requireService().byFrame(frame.uuid)
             ?: return Paint.error("You need to look at a store")
-        if (record.owner != player.uuid && !RegionsFeature.isAdmin(player)) {
+        if (record.owner != player.uuid && !isAdminMode(player)) {
             return Paint.error("This isn't your store")
         }
         if (record.rows >= 6) return Paint.error("This store is already upgraded")
@@ -240,7 +324,7 @@ object StoreFeature {
             ?: return Paint.error("You need to look at a store")
         val record = requireService().byFrame(frame.uuid)
             ?: return Paint.error("You need to look at a store")
-        if (record.owner != player.uuid && !RegionsFeature.isAdmin(player)) {
+        if (record.owner != player.uuid && !isAdminMode(player)) {
             return Paint.error("This isn't your store")
         }
         val item = recordItem(player, record)
@@ -251,6 +335,18 @@ object StoreFeature {
             remaining -= count
         }
         StoreFrames.unmark(frame)
+        // The frame's own displayed item is the store's sample, not part of the
+        // stock — deleting the store should still hand it back rather than
+        // leave it sitting in what is now a plain, unlocked item frame. Drop a
+        // fresh copy of the record's own (never-labeled) item rather than the
+        // live labeled stack: unpatching a custom name/lore off an ItemStack
+        // leaves an explicit "removed" marker in its component patch, which
+        // makes it look different from — and refuse to stack with — a plain
+        // one, even though nothing about it looks different in a tooltip.
+        if (!frame.item.isEmpty) {
+            Containers.dropItemStack(player.level(), frame.x, frame.y, frame.z, item.copyWithCount(1))
+            frame.setItem(ItemStack.EMPTY, false)
+        }
         requireService().remove(frame.uuid)
         return Paint.store("Store deleted, ", record.stock, " items dropped")
     }

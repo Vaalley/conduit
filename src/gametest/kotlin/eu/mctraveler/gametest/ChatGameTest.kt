@@ -6,6 +6,7 @@ import net.minecraft.core.registries.Registries
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.network.chat.ChatType
 import net.minecraft.network.chat.ChatTypeDecoration
+import net.minecraft.network.chat.ClickEvent
 import net.minecraft.network.chat.Component
 import net.minecraft.network.chat.contents.TranslatableContents
 import net.minecraft.resources.Identifier
@@ -122,6 +123,101 @@ class ChatGameTest {
     }
 
     @GameTest
+    fun chatMarkdownStylesWhatClientsDrawButNotTheSignedText(helper: GameTestHelper) {
+        val server = helper.level.server
+        val speaker = TestPlayer.join(server, "MdSpeaker")
+        val listener = TestPlayer.join(server, "MdListener")
+        val raw = "**bold** and *italic* and __under__ and ~~gone~~ at https://example.com/a_b ${speaker.player.uuid}"
+        helper.runAfterDelay(2) { speaker.chat(raw) }
+        helper.succeedWhen {
+            val packet = listener.chatPackets().firstOrNull { it.body().content() == raw }
+                ?: throw helper.assertionException("the listener has not seen the markdown line")
+            val shown = packet.unsignedContent().orElse(null)
+                ?: throw helper.assertionException("the markdown line carries no styled content")
+            val runs = shown.toFlatList(shown.style)
+            fun run(text: String) = runs.firstOrNull { it.string == text }
+                ?: throw helper.assertionException("no run reads '$text' in ${shown.string}")
+            if (!run("bold").style.isBold) throw helper.assertionException("**bold** is not bold")
+            if (!run("italic").style.isItalic) throw helper.assertionException("*italic* is not italic")
+            if (!run("under").style.isUnderlined) throw helper.assertionException("__under__ is not underlined")
+            if (!run("gone").style.isStrikethrough) throw helper.assertionException("~~gone~~ is not struck through")
+            val link = run("https://example.com/a_b").style
+            if (!link.isUnderlined || link.clickEvent !is ClickEvent.OpenUrl) {
+                throw helper.assertionException("the link is not underlined and clickable")
+            }
+            if (shown.string.contains("**") || shown.string.contains("~~")) {
+                throw helper.assertionException("the delimiters are still shown: ${shown.string}")
+            }
+            // The Discord mirror is given what was typed: Discord draws its own markdown.
+            if (eu.mctraveler.chat.ChatBridge.poll(0).none { it.content == raw }) {
+                throw helper.assertionException("the bridge did not get the line as typed")
+            }
+        }
+    }
+
+    @GameTest
+    fun plainChatIsSentUntouched(helper: GameTestHelper) {
+        val server = helper.level.server
+        val speaker = TestPlayer.join(server, "MdPlainSpeaker")
+        val listener = TestPlayer.join(server, "MdPlainListener")
+        val raw = "2 * 3 = 6 and some_var_name ${speaker.player.uuid}"
+        helper.runAfterDelay(2) { speaker.chat(raw) }
+        helper.succeedWhen {
+            val packet = listener.chatPackets().firstOrNull { it.body().content() == raw }
+                ?: throw helper.assertionException("the listener has not seen the plain line")
+            if (packet.unsignedContent().isPresent) {
+                throw helper.assertionException("a line with no markdown was given styled content")
+            }
+        }
+    }
+
+    @GameTest
+    fun anEscapedDelimiterIsShownWithoutItsBackslash(helper: GameTestHelper) {
+        val server = helper.level.server
+        val speaker = TestPlayer.join(server, "MdEscSpeaker")
+        val listener = TestPlayer.join(server, "MdEscListener")
+        val raw = "\\*expression* ${speaker.player.uuid}"
+        helper.runAfterDelay(2) { speaker.chat(raw) }
+        helper.succeedWhen {
+            val packet = listener.chatPackets().firstOrNull { it.body().content() == raw }
+                ?: throw helper.assertionException("the listener has not seen the escaped line")
+            val shown = packet.unsignedContent().orElse(null)
+                ?: throw helper.assertionException("the escaped line was not rewritten")
+            if (shown.string != "*expression* ${speaker.player.uuid}") {
+                throw helper.assertionException("the escaped line reads '${shown.string}'")
+            }
+            if (shown.toFlatList(shown.style).any { it.style.isItalic }) {
+                throw helper.assertionException("an escaped delimiter still italicised the line")
+            }
+        }
+    }
+
+    @GameTest
+    fun markdownReachesSelectedPlayersAndPrivateMessages(helper: GameTestHelper) {
+        val server = helper.level.server
+        val speaker = TestPlayer.join(server, "MdPrivateA")
+        val recipient = TestPlayer.join(server, "MdPrivateB")
+        helper.runAfterDelay(2) {
+            speaker.runCommand("chat ${recipient.name}")
+            speaker.chat("**selected** ${speaker.player.uuid}")
+            speaker.runCommand("msg ${recipient.name} *whispered* ${speaker.player.uuid}")
+        }
+        helper.succeedWhen {
+            val selected = recipient.systemMessages().firstOrNull { it.string.contains("selected ${speaker.player.uuid}") }
+                ?: throw helper.assertionException("the selected recipient did not get the line")
+            if (selected.toFlatList(selected.style).none { it.string == "selected" && it.style.isBold }) {
+                throw helper.assertionException("**selected** is not bold in ${selected.string}")
+            }
+            val whisper = recipient.systemMessages().firstOrNull { it.string.contains("whispered") }
+                ?: throw helper.assertionException("the private message did not arrive")
+            if (whisper.toFlatList(whisper.style).none { it.string == "whispered" && it.style.isItalic }) {
+                throw helper.assertionException("*whispered* is not italic in ${whisper.string}")
+            }
+            if (whisper.string.contains('*')) throw helper.assertionException("stray delimiters: ${whisper.string}")
+        }
+    }
+
+    @GameTest
     fun resettingChatSelectorRestoresTheNormalBroadcast(helper: GameTestHelper) {
         val server = helper.level.server
         val speaker = TestPlayer.join(server, "SelectorResetA")
@@ -207,6 +303,80 @@ class ChatGameTest {
                 throw helper.assertionException("a player who never reached play was announced")
             }
             helper.succeed()
+        }
+    }
+
+    /** The colour of the run reading [name] in [message], or null when no run reads exactly that. */
+    private fun nameColorIn(message: Component, name: String): String? =
+        message.toFlatList(message.style).firstOrNull { it.string == name }?.style?.color?.serialize()
+
+    @GameTest
+    fun aDonatorsGoldNameShowsInPrivateMessagesAndSelectedChat(helper: GameTestHelper) {
+        val server = helper.level.server
+        val donor = TestPlayer.join(server, "DonorMsgA")
+        eu.mctraveler.rank.RankFeature.setRank(donor.player, eu.mctraveler.rank.Rank.DONATOR)
+        val plain = TestPlayer.join(server, "DonorMsgB")
+        val marker = donor.player.uuid
+        helper.runAfterDelay(2) {
+            donor.runCommand("msg ${plain.name} whisper $marker")
+            donor.runCommand("chat ${plain.name}")
+            donor.chat("selected $marker")
+        }
+        helper.succeedWhen {
+            val whisper = plain.systemMessages().firstOrNull { it.string.contains("whisper $marker") }
+                ?: throw helper.assertionException("the private message did not arrive")
+            if (nameColorIn(whisper, "DonorMsgA") != "gold") {
+                throw helper.assertionException("the Donator's name in /msg is not gold: ${nameColorIn(whisper, "DonorMsgA")}")
+            }
+            if (nameColorIn(whisper, "DonorMsgB") != "green") {
+                throw helper.assertionException("an ordinary name in /msg is no longer plain green")
+            }
+            val selected = plain.systemMessages().firstOrNull { it.string.contains("selected $marker") }
+                ?: throw helper.assertionException("the selected-players line did not arrive")
+            if (nameColorIn(selected, "DonorMsgA") != "gold") {
+                throw helper.assertionException("the Donator's name in selected chat is not gold")
+            }
+        }
+    }
+
+    @GameTest
+    fun aDonatorsGoldNameShowsInJoinAndAwayButTheLeaveLineStaysRed(helper: GameTestHelper) {
+        val server = helper.level.server
+        val observer = TestPlayer.join(server, "DonorAnnObserver")
+        val donor = TestPlayer.join(server, "DonorAnnounced")
+        eu.mctraveler.rank.RankFeature.setRank(donor.player, eu.mctraveler.rank.Rank.DONATOR)
+        helper.runAfterDelay(4) {
+            donor.runCommand("away")
+            donor.disconnect()
+        }
+        helper.succeedWhen {
+            fun line(text: String) = observer.systemMessages().firstOrNull { it.string.contains("DonorAnnounced $text") }
+                ?: throw helper.assertionException("the observer has not seen '$text'")
+            for (text in listOf("joined", "is now away")) {
+                val colour = nameColorIn(line(text), "DonorAnnounced")
+                if (colour != "gold") throw helper.assertionException("the name in the '$text' line is $colour, not gold")
+            }
+            val left = line("left.")
+            if (nameColorIn(left, "DonorAnnounced") != "red") throw helper.assertionException("a Donator's leave line is no longer red")
+        }
+    }
+
+    @GameTest
+    fun anOrdinaryPlayersAnnouncementsAreUnchanged(helper: GameTestHelper) {
+        val server = helper.level.server
+        val observer = TestPlayer.join(server, "PlainAnnObserver")
+        val plain = TestPlayer.join(server, "PlainAnnounced")
+        helper.runAfterDelay(4) {
+            plain.runCommand("away")
+            plain.disconnect()
+        }
+        helper.succeedWhen {
+            val away = observer.systemMessages().firstOrNull { it.string.contains("PlainAnnounced is now away") }
+                ?: throw helper.assertionException("no away line")
+            if (nameColorIn(away, "PlainAnnounced") != "green") throw helper.assertionException("the away name changed")
+            val left = observer.systemMessages().firstOrNull { it.string.contains("PlainAnnounced left.") }
+                ?: throw helper.assertionException("no leave line")
+            if (nameColorIn(left, "PlainAnnounced") != "red") throw helper.assertionException("the leave name is no longer red")
         }
     }
 

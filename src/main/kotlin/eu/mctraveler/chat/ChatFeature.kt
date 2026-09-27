@@ -2,11 +2,11 @@ package eu.mctraveler.chat
 
 import com.mojang.brigadier.CommandDispatcher
 import com.mojang.brigadier.arguments.StringArgumentType
-import eu.mctraveler.cosmetic.NameCosmetics
 import eu.mctraveler.geo.GeoIpFeature
 import eu.mctraveler.region.RegionTracker
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.moderation.ModerationFeature
+import eu.mctraveler.text.ChatMarkdown
 import eu.mctraveler.text.Paint
 import eu.mctraveler.vanish.VanishFeature
 import java.net.InetAddress
@@ -84,7 +84,7 @@ object ChatFeature {
             ChatSelector.clear(handler.player.uuid)
             pendingJoins.removeIf { it.uuid == handler.player.uuid }
             if (announced.remove(handler.player.uuid)) {
-                val line = leaveLine(handler.player.gameProfile.name)
+                val line = leaveLineFor(handler.player)
                 if (VanishFeature.isVanished(handler.player)) {
                     // Non-admins already saw this player "leave" when they
                     // vanished; only admins get the real disconnect line.
@@ -199,7 +199,10 @@ object ChatFeature {
         if (!ModerationFeature.allowMuted(sender)) return false
         when (val mode = ChatSelector.modeOf(sender.uuid)) {
             ChatSelector.Mode.DEFAULT, ChatSelector.Mode.SERVER -> {
-                sender.level().server.playerList.broadcastChatMessage(message, sender, chatBound(sender))
+                // Markdown rides as the message's unsigned content: the signed text stays exactly what the
+                // player typed (chat reporting, the Discord mirror), only what clients draw changes.
+                val shown = ChatMarkdown.format(message.signedContent())?.let(message::withUnsignedContent) ?: message
+                sender.level().server.playerList.broadcastChatMessage(shown, sender, chatBound(sender))
             }
             is ChatSelector.Mode.PLAYERS -> {
                 val recipients = mode.recipients.mapNotNull(sender.level().server.playerList::getPlayer)
@@ -207,10 +210,10 @@ object ChatFeature {
                     sender.sendSystemMessage(Paint.error("None of your chat recipients are online"))
                     return false
                 }
-                val names = recipients.joinToString(", ") { it.gameProfile.name }
+                val names = Paint(*recipients.flatMapIndexed { i, r -> listOfNotNull(if (i > 0) ", " else null, nameOf(r)) }.toTypedArray())
                 val line = Paint(
-                    Paint.green(sender.gameProfile.name), " ", Paint.gray("→"), " ",
-                    Paint.green(names), ": ", message.decoratedContent(),
+                    nameOf(sender), " ", Paint.gray("→"), " ",
+                    names, ": ", contentOf(message),
                 )
                 (recipients + sender).distinctBy { it.uuid }.forEach { it.sendSystemMessage(line) }
             }
@@ -229,7 +232,7 @@ object ChatFeature {
                 }
                 val line = Paint(
                     Paint.darkGray("["), Paint.yellow(region.title), Paint.darkGray("]"), " ",
-                    Paint.green(sender.gameProfile.name), ": ", message.decoratedContent(),
+                    nameOf(sender), ": ", contentOf(message),
                 )
                 (recipients + sender).distinctBy { it.uuid }.forEach { it.sendSystemMessage(line) }
             }
@@ -237,10 +240,14 @@ object ChatFeature {
         return false
     }
 
+    /** What [message] says, with its markdown applied. */
+    private fun contentOf(message: PlayerChatMessage): Component =
+        ChatMarkdown.format(message.signedContent()) ?: message.decoratedContent()
+
     /** [CHAT_TYPE] bound with [player]'s username, in their rank's color, as the sender. */
     private fun chatBound(player: ServerPlayer): ChatType.Bound {
         val holder = player.level().registryAccess().lookupOrThrow(Registries.CHAT_TYPE).getOrThrow(CHAT_TYPE)
-        val name = NameCosmetics.forPlayer(player)
+        val name = eu.mctraveler.rank.RankFeature.nameColor(player)(player.gameProfile.name)
         return ChatType.Bound(holder, name, Optional.empty())
     }
 
@@ -255,7 +262,7 @@ object ChatFeature {
             // Skip anyone who dropped between login and end of tick: no ghost announcements.
             val player = server.playerList.getPlayer(pending.uuid) ?: continue
             announced += pending.uuid
-            broadcast(server, joinLine(player.gameProfile.name, pending.country))
+            broadcast(server, joinLine(nameOf(player), pending.country))
         }
     }
 
@@ -263,21 +270,51 @@ object ChatFeature {
         server.playerList.broadcastSystemMessage(message, false)
     }
 
+    /**
+     * [player]'s name in a chat line that is not the chat message itself (private messages, region
+     * chat, announcements): their rank-coloured name when they are a Donator (gold),
+     * the plain green username otherwise ([nameOr]).
+     */
+    internal fun nameOf(player: ServerPlayer): Component =
+        nameOr(player) { Paint.green(player.gameProfile.name) }
+
+    /**
+     * [player]'s rank-coloured name when they are a Donator, and [plain] for everyone else — the
+     * one place a name is worth styling now that custom name cosmetics are gone. Never throws: an
+     * unreadable rank shows the plain name.
+     */
+    internal fun nameOr(player: ServerPlayer, plain: () -> Component): Component = runCatching {
+        if (eu.mctraveler.rank.RankFeature.rankOf(player) == eu.mctraveler.rank.Rank.DONATOR) {
+            eu.mctraveler.rank.RankFeature.nameColor(player)(player.gameProfile.name)
+        } else {
+            plain()
+        }
+    }.getOrElse { plain() }
+
     /** `[+] <name> joined from <Country>` when a country is known. */
-    internal fun joinLine(name: String, country: String? = null): Component = Paint.gray(
+    internal fun joinLine(name: String, country: String? = null): Component =
+        joinLine(Paint.green(name), country)
+
+    internal fun joinLine(name: Component, country: String? = null): Component = Paint.gray(
         Paint.darkGray("["),
         Paint.green("+"),
         Paint.darkGray("]"),
         " ",
-        Paint.green(name),
+        name,
         " joined",
         country?.let { Paint.gray(" from ", Paint.green(it)) },
     )
 
     /** `[-] <name> left.` — the Portal's exact leave line (note the trailing period). */
-    internal fun leaveLine(name: String): Component = Paint.gray(
-        Paint.darkGray("["), Paint.red("-"), Paint.darkGray("]"), " ", Paint.red(name), " left.",
+    internal fun leaveLine(name: String): Component = leaveLine(Paint.red(name))
+
+    internal fun leaveLine(name: Component): Component = Paint.gray(
+        Paint.darkGray("["), Paint.red("-"), Paint.darkGray("]"), " ", name, " left.",
     )
+
+    /** The leave line for [player]: always a red name, whatever their rank. */
+    internal fun leaveLineFor(player: ServerPlayer): Component =
+        leaveLine(player.gameProfile.name)
 
     /**
      * The join line [player] would produce if they were connecting right now,
@@ -289,7 +326,7 @@ object ChatFeature {
             ?.takeUnless(::isPrivateAddress)
             ?.let(GeoIpFeature::lookup)
             ?.name
-        return joinLine(player.gameProfile.name, country)
+        return joinLine(nameOf(player), country)
     }
 
     private fun isPrivateAddress(address: InetAddress): Boolean =

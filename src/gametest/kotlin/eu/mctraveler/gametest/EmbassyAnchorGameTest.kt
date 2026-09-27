@@ -325,6 +325,47 @@ class EmbassyAnchorGameTest {
         helper.succeed()
     }
 
+    // ---- issue #88: re-placing an anchor inside an embassy ----
+
+    @GameTest
+    fun aFreshAnchorPlacedInsideAnEmbassyComesBackFullyCharged(helper: GameTestHelper) {
+        // Vanilla never carries CHARGE into the dropped item, so a mined and
+        // re-placed anchor always starts empty; inside an embassy, it should
+        // come back full instead, same as the one `/embassy create` built.
+        val level = embassies(helper)
+        val plot = ChunkPos(800, 800)
+        val player = MessageCapturingPlayer.join(helper, "T02Recharge")
+        val region = embassyOn(level, plot, "Recharge Hall", player.uuid, destination())
+        val anchor = anchorOf(plot)
+
+        level.setBlockAndUpdate(anchor, Blocks.AIR.defaultBlockState())
+        level.setBlockAndUpdate(anchor, Blocks.RESPAWN_ANCHOR.defaultBlockState())
+        Blocks.RESPAWN_ANCHOR.setPlacedBy(level, anchor, level.getBlockState(anchor), player, ItemStack(Items.RESPAWN_ANCHOR))
+
+        assertAnchorIntact(helper, level, anchor, "after being re-placed inside the embassy")
+        cleanUp(helper, region, plot, player)
+        helper.succeed()
+    }
+
+    @GameTest
+    fun anAnchorPlacedOutsideAnEmbassyIsNotAutoCharged(helper: GameTestHelper) {
+        val level = embassies(helper)
+        val player = MessageCapturingPlayer.join(helper, "T02NoAuto")
+        val pos = BlockPos(2400, 0, 2400)
+
+        level.setBlockAndUpdate(pos, Blocks.RESPAWN_ANCHOR.defaultBlockState())
+        Blocks.RESPAWN_ANCHOR.setPlacedBy(level, pos, level.getBlockState(pos), player, ItemStack(Items.RESPAWN_ANCHOR))
+
+        helper.assertValueEqual(
+            level.getBlockState(pos).getValue(RespawnAnchorBlock.CHARGE),
+            0,
+            "an anchor placed outside any embassy",
+        )
+        level.setBlockAndUpdate(pos, Blocks.AIR.defaultBlockState())
+        player.leave()
+        helper.succeed()
+    }
+
     @GameTest
     fun anAnchorOutsideAnEmbassyIsNotGuarded(helper: GameTestHelper) {
         // Deviation 17: the guard is scoped to embassy-flagged regions, so an

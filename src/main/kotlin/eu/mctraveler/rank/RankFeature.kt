@@ -72,7 +72,23 @@ object RankFeature {
 
     fun rankOf(player: ServerPlayer): Rank = rankOf(store(), player.uuid)
 
-    fun setRank(player: ServerPlayer, rank: Rank) = store().setRank(player.uuid, rank.name)
+    /** [uuid]'s rank whether or not they are online — the stored record is what decides it. */
+    fun rankOf(uuid: UUID): Rank = rankOf(store(), uuid)
+
+    fun setRank(player: ServerPlayer, rank: Rank) {
+        store().setRank(player.uuid, rank.name)
+        resyncCommands(player)
+    }
+
+    /**
+     * Re-sends [player]'s command tree. What the client offers on `/` is computed
+     * from who the player is when the tree is synced, so a rank change has to
+     * push a fresh one (vanilla does the same for `/op` and `/deop`).
+     */
+    fun resyncCommands(player: ServerPlayer) {
+        if (player.connection == null) return
+        player.level().server.commands.sendCommands(player)
+    }
 
     /**
      * The color a player's name is painted in chat and the tab list. Every
@@ -116,6 +132,7 @@ object RankFeature {
         if (rankOf(store, player.uuid) != Rank.NEWBIE) return
         if (playTimeTicks(player) < PROMOTION_TICKS) return
         store.setRank(player.uuid, Rank.TRAVELER.name)
+        resyncCommands(player)
         player.sendSystemMessage(promotionMessage())
     }
 

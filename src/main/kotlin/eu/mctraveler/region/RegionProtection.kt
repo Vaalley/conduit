@@ -35,6 +35,7 @@ import net.minecraft.world.entity.animal.equine.AbstractHorse
 import net.minecraft.world.entity.animal.nautilus.AbstractNautilus
 import net.minecraft.world.entity.animal.pig.Pig
 import net.minecraft.world.entity.monster.Enemy
+import net.minecraft.world.entity.monster.cubemob.SulfurCube
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.entity.decoration.BlockAttachedEntity
 import net.minecraft.world.entity.npc.villager.AbstractVillager
@@ -524,7 +525,7 @@ object RegionProtection {
             RegionInteractables.BlockUse.CONTAINER_VIEW,
             -> true
 
-            RegionInteractables.BlockUse.REQUIRES_MEMBERSHIP -> refuse(player, region)
+            RegionInteractables.BlockUse.REQUIRES_MEMBERSHIP -> refuse(player, region).also { resyncFood(player, state) }
 
             RegionInteractables.BlockUse.CAMPFIRE ->
                 if (RegionInteractables.changesCampfire(held)) refuse(player, region) else true
@@ -665,7 +666,14 @@ object RegionProtection {
     private fun isAlwaysProtected(entity: Entity): Boolean =
         entity is AbstractVillager || entity is AbstractChestBoat
 
-    /** An unnamed hostile: killable by anyone, even inside a region. */
+    /**
+     * An unnamed hostile: killable by anyone, even inside a region.
+     *
+     * A sulfur cube lives in the `monster` package but, like the animals it
+     * is grouped with here, does not implement [Enemy] — so it already falls
+     * through to [entityProtectedBy]'s ordinary `ANIMAL_PROTECTION` gate
+     * below rather than being culled on sight the way a real hostile is.
+     */
     private fun isCullableHostile(entity: Entity?): Boolean =
         entity is Enemy && entity !is ArmorStand && !entity.hasCustomName()
 
@@ -797,6 +805,13 @@ object RegionProtection {
         if (entity is AbstractChestBoat) {
             return region == null || canModifyRegion(p, region) || refuse(p, region)
         }
+        // A sulfur cube is bucketable and shearable, either of which lets a
+        // visitor carry one off — a resident (or an admin, or a PUBLIC
+        // region) may still do that, exactly as vanilla intends, but a
+        // stranger may not: a sulfur cube stays put for anyone else.
+        if (entity is SulfurCube) {
+            return region == null || canModifyRegion(p, region) || refuse(p, region)
+        }
         if (isOwnedBy(entity, p)) return true
 
         val protecting = entityProtectedBy(p, region) ?: return true
@@ -857,6 +872,23 @@ object RegionProtection {
      */
     private fun resyncInventory(player: ServerPlayer) {
         player.containerMenu.sendAllDataToRemote()
+    }
+
+    /**
+     * A refused right-click on a cake or candle cake leaves the client showing the slice it
+     * predicted it ate — a ghost hunger bar the server never agreed to. Fabric resyncs the block
+     * but not the food level, so it is resent here.
+     */
+    private fun resyncFood(player: ServerPlayer, state: BlockState) {
+        if (state.block !is net.minecraft.world.level.block.CakeBlock &&
+            state.block !is net.minecraft.world.level.block.CandleCakeBlock
+        ) {
+            return
+        }
+        val food = player.foodData
+        player.connection.send(
+            net.minecraft.network.protocol.game.ClientboundSetHealthPacket(player.health, food.foodLevel, food.saturationLevel),
+        )
     }
 
     /** Sends the Portal's refusal message when its cooldown permits, and always answers "not allowed". */

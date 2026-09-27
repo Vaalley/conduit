@@ -1,5 +1,6 @@
 package eu.mctraveler.embassy
 
+import eu.mctraveler.command.Audience
 import com.mojang.brigadier.Command
 import com.mojang.brigadier.CommandDispatcher
 import com.mojang.brigadier.arguments.StringArgumentType
@@ -20,9 +21,9 @@ import net.minecraft.server.level.ServerPlayer
  * `/embassy` — the plot lifecycle (spec stories 8, 9, 11, 16, 17, 18), ported
  * from Nucleus's `EmbassyCommand`.
  *
- * Both subcommands are admin-only, gated in the body rather than by a Brigadier
- * requirement so the tree stays visible and a malformed invocation still gets
- * its answer (the house rule). `delete` is deliberately two-step: it asks for
+ * The whole command is admin-only: the root carries the ADMIN audience gate, so it is
+ * hidden from non-admins in the client command tree and reads as unknown to them; the
+ * in-body gate stays as a second line. `delete` is deliberately two-step: it asks for
  * the embassy's exact title back, and offers a clickable line that types it.
  */
 object EmbassyCommands {
@@ -30,6 +31,7 @@ object EmbassyCommands {
     fun register(dispatcher: CommandDispatcher<CommandSourceStack>) {
         dispatcher.register(
             Commands.literal("embassy")
+                .requires(Audience.ADMIN.gate)
                 .executes { ctx ->
                     // Nucleus sent two plain lines, with no prefix at all, to
                     // any sender — the console included.

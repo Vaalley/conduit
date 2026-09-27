@@ -34,8 +34,8 @@ data class OtherBase(
 }
 
 /**
- * The merge's record of where every player's other base went, read back for the
- * `/switch` signpost.
+ * The merge's record of where every player's other base went. Nothing reads it at runtime any
+ * more (the `/switch` signpost that did is gone); the merge still writes it.
  *
  * The merge writes `mctraveler/banked-positions.json` once, offline, and only
  * when at least one player actually had a banked position. So the file's absence

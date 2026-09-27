@@ -1,5 +1,6 @@
 package eu.mctraveler.vanish
 
+import eu.mctraveler.command.Audience
 import com.mojang.brigadier.Command
 import eu.mctraveler.chat.ChatFeature
 import eu.mctraveler.lodeway.LodewayFeature
@@ -63,7 +64,7 @@ object VanishFeature {
                     // Hidden from the command tree for non-admins — a stranger never
                     // sees it in tab-completion or the command list, not just a
                     // refusal on running it. Non-player sources (console) keep it.
-                    .requires { source -> source.player?.let(RegionsFeature::isAdmin) ?: true }
+                    .requires(Audience.ADMIN.gate)
                     .executes { ctx ->
                         toggle(ctx.source.playerOrException)
                         Command.SINGLE_SUCCESS
@@ -107,7 +108,7 @@ object VanishFeature {
             if (viewer === player) continue
             viewer.sendSystemMessage(
                 if (RegionsFeature.isAdmin(viewer)) adminLine(name, "went into vanish mode")
-                else ChatFeature.leaveLine(name),
+                else ChatFeature.leaveLineFor(player),
                 false,
             )
         }

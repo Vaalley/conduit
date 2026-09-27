@@ -254,3 +254,8 @@ Everything else in this document is decided. Devin's proposals (marked
 - 2026-09-16 — Valley set every amount and answered the open questions; the
   stipend, buy-back store and the remaining sink ideas are rejected. Anniversary
   formula fixed to `$200 × √years`. Four proposals left for veto (above).
+
+- 2026-09-28 — **Name cosmetics removed** after a community vote: `/name`
+  (tag, colour, gradient) is gone and chat/tablist show the rank-coloured name
+  again. Everyone who paid a `fee:cosmetic-*` fee is refunded once, through the
+  ledger as `refund:name-cosmetics`. Section 3 above is historical.

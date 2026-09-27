@@ -5,14 +5,10 @@ import eu.mctraveler.importer.RespawnCheckReport
 import eu.mctraveler.importer.WorldLayout
 import eu.mctraveler.region.RegionWorlds
 import eu.mctraveler.region.RegionsFeature
-import eu.mctraveler.text.Paint
-import eu.mctraveler.worlds.BankedPositions
 import eu.mctraveler.worlds.DimensionRole
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
-import java.util.Collections
 import kotlin.math.abs
-import kotlin.math.floor
 import net.fabricmc.fabric.api.gametest.v1.GameTest
 import net.minecraft.gametest.framework.GameTestHelper
 import net.minecraft.core.BlockPos
@@ -47,7 +43,7 @@ import net.minecraft.world.level.storage.LevelResource
  * what came out: open a chest that travelled, be turned away from someone's
  * Region at its new coordinates, die and wake on a bed that moved by a different
  * pass than the respawn point naming it, step into a portal and come out at its
- * own twin, and ask `/switch` where their other base went.
+ * own twin.
  *
  * [MergedSave] is the fixture, and the reason it is built the way it is matters
  * more here than anywhere else in the repo: it is the merge's own output, laid
@@ -377,26 +373,20 @@ class WorldMergeGameTest {
     }
 
     /**
-     * `/switch` names the player's other base at the coordinates the merge moved
-     * it to (merge spec, User Stories 34–35).
+     * The merge banks a player's other base at the coordinates it moved it to
+     * (merge spec, User Stories 34–35).
      *
-     * `SwitchSignpostGameTest` pins the wording, against an artifact written by
-     * hand. What it cannot say is that the merge writes that shape, or that the
-     * numbers in it are merged ones: its fixture is a file a test authored, so it
-     * would go on passing if the sweep banked a player's *unmoved* Secondary
-     * coordinates — which is a signpost sending thirteen thousand people to where
-     * their base used to be. So the artifact here is the one the merge wrote, and
-     * the line is restated in full because the claim is about the wording and the
-     * coordinates together.
+     * The banked position is always the World the player was *not* in, and the
+     * numbers in it have to be the merged ones: a record of a player's *unmoved*
+     * Secondary coordinates would point thirteen thousand blocks from where their
+     * base now stands. So this reads the artifact the merge itself wrote.
      *
      * The player is last in Primary, so it is their Secondary bucket that gets
-     * banked: the banked position is always the World the player was *not* in,
-     * and Primary is the one the merge does not move.
+     * banked, and Primary is the one the merge does not move.
      */
     @GameTest(maxTicks = 600)
-    fun switchNamesTheOtherBaseWhereTheMergeMovedIt(helper: GameTestHelper) {
-        val server = helper.level.server
-        val merged = MergedSave.of(server)
+    fun theMergeBanksTheOtherBaseWhereItMovedIt(helper: GameTestHelper) {
+        val merged = MergedSave.of(helper.level.server)
         val at = MergedSave.merged(MergedSave.BANKED, DimensionRole.OVERWORLD)
 
         val banked = merged.report.players.banked.single()
@@ -411,36 +401,6 @@ class WorldMergeGameTest {
             listOf(at.x, at.y, at.z),
             "the coordinates the merge banked the other base at",
         )
-
-        // The merge's own artifact where the running server reads it. Taken away
-        // again afterwards, because every server that has not been merged has no
-        // such file and `SwitchSignpostGameTest` is about a server in that state.
-        val artifact = server.serverDirectory.resolve("mctraveler").resolve(BankedPositions.FILE_NAME)
-        Files.createDirectories(artifact.parent)
-        Files.copy(merged.bankedPositions(), artifact, StandardCopyOption.REPLACE_EXISTING)
-
-        val player = TestPlayers.login(server, MergedSave.SIGNPOST_NAME, MergedSave.SIGNPOST)
-        try {
-            server.commands.performPrefixedCommand(player.createCommandSourceStack(), "switch")
-
-            val said = player.messages.last().textRuns()
-            val otherBase = Paint.gray(
-                "Your other base — where you last stood in ",
-                Paint.green("Secondary"),
-                " — is now at ",
-                Paint.white("${floor(at.x).toInt()}/${floor(at.y).toInt()}/${floor(at.z).toInt()}"),
-                " in ",
-                Paint.green("the Overworld"),
-                ".",
-            ).textRuns()
-            helper.assertTrue(
-                Collections.indexOfSubList(said, otherBase) >= 0,
-                "the signpost did not name the other base where the merge put it; it said $said",
-            )
-        } finally {
-            Files.deleteIfExists(artifact)
-            TestPlayers.logout(player)
-        }
         helper.succeed()
     }
 

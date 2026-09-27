@@ -29,6 +29,7 @@ import net.minecraft.world.inventory.StonecutterMenu
 import net.minecraft.world.item.alchemy.PotionContents
 import net.minecraft.world.item.alchemy.Potions
 import net.minecraft.world.item.component.BlockTransformers
+import net.minecraft.world.level.block.AbstractCandleBlock
 import net.minecraft.world.level.block.AbstractCauldronBlock
 import net.minecraft.world.level.block.AbstractFurnaceBlock
 import net.minecraft.world.level.block.AnvilBlock
@@ -36,6 +37,7 @@ import net.minecraft.world.level.block.BeaconBlock
 import net.minecraft.world.level.block.BeehiveBlock
 import net.minecraft.world.level.block.BellBlock
 import net.minecraft.world.level.block.BrewingStandBlock
+import net.minecraft.world.level.block.CakeBlock
 import net.minecraft.world.level.block.CampfireBlock
 import net.minecraft.world.level.block.CartographyTableBlock
 import net.minecraft.world.level.block.ChiseledBookShelfBlock
@@ -121,6 +123,9 @@ object RegionInteractables {
         is DecoratedPotBlock, is JukeboxBlock, is DaylightDetectorBlock,
         is NoteBlock, is AnvilBlock, is FlowerPotBlock, is BeehiveBlock,
         is ShelfBlock, is DragonEggBlock, is RespawnAnchorBlock, is SignBlock,
+        // A cake is eaten slice by slice, and a candle (or a candle cake) is snuffed by an
+        // empty hand and lit or added to by an item: all of it changes the region's build.
+        is CakeBlock, is AbstractCandleBlock,
         // TnT: its own useItemOn returns SUCCESS for flint&steel / fire charge
         // and primes the charge, so Fabric's ItemEvents.USE_ON never fires for
         // it — refusing the block's own right-click is what keeps a non-member

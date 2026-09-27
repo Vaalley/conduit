@@ -1,5 +1,6 @@
 package eu.mctraveler.moderation
 
+import eu.mctraveler.command.Audience
 import com.mojang.brigadier.arguments.IntegerArgumentType
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.suggestion.SuggestionProvider
@@ -110,9 +111,7 @@ object ModerationFeature {
     }
 
     private fun registerCommands(dispatcher: com.mojang.brigadier.CommandDispatcher<CommandSourceStack>) {
-        val gate: (CommandSourceStack) -> Boolean = { source ->
-            source.player?.let(RegionsFeature::isAdmin) ?: true
-        }
+        val gate = Audience.ADMIN.gate
         dispatcher.register(
             Commands.literal("ban").requires(gate)
                 .then(target("player").then(tail("tail").executes { context -> ban(context.source, target(context), tail(context)) }))

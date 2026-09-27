@@ -111,6 +111,9 @@ interface MixinHooks {
     fun allowsFireDamage(level: Level, pos: BlockPos): Boolean
     fun allowsFluidSpread(level: Level, from: BlockPos, to: BlockPos): Boolean
     fun allowsDecorationMove(level: Level, pos: BlockPos): Boolean
+
+    /** Issue #88: a respawn anchor placed inside an embassy comes back fully charged. */
+    fun respawnAnchorPlaced(level: Level, pos: BlockPos, state: BlockState)
     fun allowsExplosionEntityEffect(level: Level, source: Entity?, target: Entity): Boolean
     fun allowsPotionEffect(level: Level, thrower: Entity?, target: LivingEntity): Boolean
     fun allowsPistonMove(
@@ -267,6 +270,10 @@ object Hooks {
 
     @JvmStatic fun allowsDecorationMove(level: Level, pos: BlockPos): Boolean =
         impl?.allowsDecorationMove(level, pos) ?: true
+
+    @JvmStatic fun respawnAnchorPlaced(level: Level, pos: BlockPos, state: BlockState) {
+        impl?.respawnAnchorPlaced(level, pos, state)
+    }
 
     @JvmStatic fun allowsPistonMove(
         level: Level,

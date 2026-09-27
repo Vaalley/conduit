@@ -1,6 +1,9 @@
 package eu.mctraveler.gametest
 
+import eu.mctraveler.rank.Rank
+import eu.mctraveler.rank.RankFeature
 import eu.mctraveler.region.Region
+import eu.mctraveler.region.RegionCommands
 import eu.mctraveler.region.RegionFlagsMenu
 import eu.mctraveler.region.RegionsFeature
 import eu.mctraveler.text.Paint
@@ -28,8 +31,8 @@ class RegionAdminCommandGameTest {
         val player = MessageCapturingPlayer.join(helper, "T12Gate")
         player.standAt(helper, 0.0, 1.0, 0.0)
         // /rg flags is no longer admin-gated at all (main-page flags are
-        // self-service now); only bounds and locate stay admin-only.
-        for (command in listOf("rg bounds", "rg bounds 0 100", "rg locate x")) {
+        // self-service now); locate stays admin-only, and bounds is for Donators too.
+        for (command in listOf("rg locate x")) {
             player.runCommand(command)
             helper.assertValueEqual(player.messages.last(), notAdmin, "the non-admin reply to /$command")
         }
@@ -89,6 +92,71 @@ class RegionAdminCommandGameTest {
     }
 
     // ---- /rg bounds ----
+
+    @GameTest
+    fun boundsIsRefusedToAnyoneWhoIsNeitherADonatorNorAnAdmin(helper: GameTestHelper) {
+        val player = MessageCapturingPlayer.join(helper, "T12BndTrav")
+        RankFeature.setRank(player, Rank.TRAVELER)
+        player.standAt(helper, 0.0, 1.0, 0.0)
+        for (command in listOf("rg bounds", "rg bounds 0 100")) {
+            player.runCommand(command)
+            helper.assertValueEqual(
+                player.messages.last(),
+                Paint.error("You must be a Donator or an admin to use this command"),
+                "the Traveler's reply to /$command",
+            )
+        }
+        player.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aDonatorSetsAndReadsTheBoundsOfTheirOwnRegion(helper: GameTestHelper) {
+        val donator = MessageCapturingPlayer.join(helper, "T12BndDon")
+        RankFeature.setRank(donator, Rank.DONATOR)
+        val region = createRegion(helper, donator, 0.0 to 0.0, 4.0 to 4.0)
+        donator.standAt(helper, 2.0, 100.0, 2.0)
+
+        donator.runCommand("rg bounds 255 15")
+        helper.assertValueEqual(
+            donator.messages.last(),
+            Paint.success(
+                "Set Y bounds for ", Paint.green(region.title),
+                " to ", Paint.white(15), " - ", Paint.white(255),
+            ),
+            "the Donator's bounds-set reply",
+        )
+        donator.runCommand("rg bounds")
+        helper.assertValueEqual(
+            donator.messages.last(),
+            Paint(Paint.green(region.title), " bounds: Y ", Paint.white(15), " to ", Paint.white(255)),
+            "the Donator's bounds-show reply",
+        )
+        donator.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aDonatorCannotTouchTheBoundsOfARegionThatIsNotTheirs(helper: GameTestHelper) {
+        val owner = MessageCapturingPlayer.join(helper, "T12BndOwner")
+        val donator = MessageCapturingPlayer.join(helper, "T12BndStranger")
+        RankFeature.setRank(donator, Rank.DONATOR)
+        val region = createRegion(helper, owner, 0.0 to 0.0, 4.0 to 4.0)
+        donator.standAt(helper, 2.0, 100.0, 2.0)
+
+        for (command in listOf("rg bounds 255 15", "rg bounds")) {
+            donator.runCommand(command)
+            helper.assertValueEqual(
+                donator.messages.last(),
+                Paint.error("You are not a member of this region"),
+                "the stranger's reply to /$command",
+            )
+        }
+        helper.assertValueEqual(region.startY, Region.DEFAULT_START_Y, "the region's top after the refused change")
+        owner.leave()
+        donator.leave()
+        helper.succeed()
+    }
 
     @GameTest
     fun boundsRejectsOutOfRangeAndThinSpans(helper: GameTestHelper) {
@@ -161,7 +229,7 @@ class RegionAdminCommandGameTest {
         helper.assertValueEqual(
             admin.messages.last(),
             Paint(
-                Paint.yellow("Qx7Lonely Keep"),
+                prefills(Paint.yellow("Qx7Lonely Keep"), 60009, 109),
                 " - ", clickableCoordinates(60009, 109),
                 "/", Paint.green("overworld"),
             ),
@@ -172,7 +240,7 @@ class RegionAdminCommandGameTest {
     }
 
     @GameTest
-    fun locateCoordinatesRunAnAdminTeleport(helper: GameTestHelper) {
+    fun locateResultsPrefillAnAdminTeleport(helper: GameTestHelper) {
         insertRegion("Qx7Jump Point", 62000, 100, members = emptyList())
         val admin = MessageCapturingPlayer.join(helper, "T12LocJump")
         admin.makeAdmin()
@@ -180,11 +248,14 @@ class RegionAdminCommandGameTest {
 
         val click = admin.messages.last().siblings[2].style.clickEvent
         helper.assertTrue(
-            click == ClickEvent.RunCommand("/execute in minecraft:overworld run tp @s 62009 ~ 109"),
+            click == ClickEvent.SuggestCommand("/execute in minecraft:overworld run tp @s 62009 ~ 109"),
             "the single-result coordinate teleport command was $click",
         )
         PacketCapture.drain(admin)
-        admin.runsClickCommand((click as ClickEvent.RunCommand).command().removePrefix("/"))
+        // The region name prefills the very same command (a suggestion: nothing runs on the click).
+        helper.assertTrue(admin.messages.last().siblings[0].style.clickEvent == click, "the region name does not prefill the same command")
+        // Pressing Enter on the prefilled line is what runs it.
+        admin.runsClickCommand((click as ClickEvent.SuggestCommand).command().removePrefix("/"))
         helper.runAfterDelay(2) {
             try {
                 val teleport = admin.receivesTeleport()
@@ -211,7 +282,7 @@ class RegionAdminCommandGameTest {
         admin.makeAdmin()
 
         val expected = Paint(
-            Paint.yellow("Plain Fields"),
+            prefills(Paint.yellow("Plain Fields"), 61009, 209),
             " - ", clickableCoordinates(61009, 209),
             "/", Paint.green("overworld"),
         )
@@ -243,7 +314,7 @@ class RegionAdminCommandGameTest {
         for (i in 1..10) {
             expected.add(
                 Paint(
-                    " - ", Paint.yellow("Zq7Keep%02d".format(i)), " ",
+                    " - ", prefills(Paint.yellow("Zq7Keep%02d".format(i)), 70000 + 200 * (i - 1) + 9, 9), " ",
                     clickableCoordinates(70000 + 200 * (i - 1) + 9, 9, includeY = false),
                     "/", Paint.gray("overworld"),
                 ),
@@ -344,5 +415,15 @@ private fun MessageCapturingPlayer.runsClickCommand(command: String) {
 
 private fun clickableCoordinates(x: Int, z: Int, includeY: Boolean = true): Component {
     val label = if (includeY) "$x/~/$z" else "$x/$z"
-    return Paint.white.runs("/execute in minecraft:overworld run tp @s $x ~ $z")(label)
+    return prefills(Paint.white(label), x, z)
 }
+
+/** [label] as a locate result draws it: clicking (and hovering) prefills the teleport to ([x], [z]). */
+private fun prefills(label: net.minecraft.network.chat.MutableComponent, x: Int, z: Int): Component =
+    label.withStyle(
+        net.minecraft.network.chat.Style.EMPTY
+            .withClickEvent(ClickEvent.SuggestCommand("/execute in minecraft:overworld run tp @s $x ~ $z"))
+            .withHoverEvent(
+                net.minecraft.network.chat.HoverEvent.ShowText(Component.literal(RegionCommands.LOCATE_HINT)),
+            ),
+    )
