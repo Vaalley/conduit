@@ -27,8 +27,15 @@ class ModerationGameTest {
             )
             helper.assertTrue(denied != null && denied.string.contains("banned"), "ban denial was $denied")
             helper.assertTrue(denied?.string?.contains("griefing") == true, "ban reason was $denied")
-            admin.runCommand("banlist")
-            helper.assertTrue(admin.systemMessages().any { it.string.contains("#${punishment.id} ModOfflineTarget — griefing") }, "banlist was ${admin.systemMessages()}")
+            // /history, not /banlist: banlist is paginated and shared across every
+            // concurrently-running moderation test in this batch, so a ban made early
+            // in the run gets crowded off page 1 by later ones. /history is scoped to
+            // this one player and stays reliable under that load.
+            admin.runCommand("history ModOfflineTarget")
+            helper.assertTrue(
+                admin.systemMessages().any { it.string.contains("#${punishment.id}") && it.string.contains("griefing") },
+                "history was ${admin.systemMessages()}",
+            )
             admin.runCommand("unban ModOfflineTarget")
             helper.assertTrue(
                 ModerationFeature.loginDenial(NameAndId(target.player.uuid, target.name)) == null,
