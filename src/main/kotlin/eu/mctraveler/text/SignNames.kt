@@ -1,5 +1,6 @@
 package eu.mctraveler.text
 
+import eu.mctraveler.MCTraveler
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.function.BiFunction
@@ -232,8 +233,25 @@ object SignNames {
             BiFunction { blockEntity, registryAccess: RegistryAccess ->
                 val tag = blockEntity.getUpdateTag(registryAccess)
                 val ops = registryAccess.createSerializationContext(NbtOps.INSTANCE)
-                front?.let { tag.put("front_text", SignText.CODEC.encodeStart(ops, it).orThrow) }
-                back?.let { tag.put("back_text", SignText.CODEC.encodeStart(ops, it).orThrow) }
+                // A viewer's own name is trusted (it is their own game profile), but
+                // an encode failure here — whatever its cause — must never take the
+                // whole connection down with it: this packet runs for every viewer
+                // near every `<name>` sign, on the same thread that is sending them
+                // every other packet. Worst case on a failed encode, that one side of
+                // the sign keeps showing the literal `<name>` token to this viewer,
+                // exactly as an un-rewritten client already would.
+                front?.let { encoded ->
+                    SignText.CODEC.encodeStart(ops, encoded).result().ifPresentOrElse(
+                        { tag.put("front_text", it) },
+                        { MCTraveler.LOGGER.warn("Could not encode a <name> sign's front text for {}", viewerName) },
+                    )
+                }
+                back?.let { encoded ->
+                    SignText.CODEC.encodeStart(ops, encoded).result().ifPresentOrElse(
+                        { tag.put("back_text", it) },
+                        { MCTraveler.LOGGER.warn("Could not encode a <name> sign's back text for {}", viewerName) },
+                    )
+                }
                 tag
             },
         )

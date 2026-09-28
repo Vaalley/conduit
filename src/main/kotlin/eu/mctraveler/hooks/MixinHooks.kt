@@ -164,8 +164,26 @@ object Hooks {
 
     @JvmStatic fun tabDisplayName(player: ServerPlayer): Component? = impl?.tabDisplayName(player)
 
-    @JvmStatic fun packetForViewer(viewer: ServerPlayer, packet: Packet<*>): Packet<*> =
+    /**
+     * The one seam every clientbound play packet passes through, so a bug in
+     * any single rewrite (a sign's `<name>`, the crystal's damage bar, spectator
+     * masking, ...) must never be able to take the whole connection down with
+     * it — this is the outbound half of a real player's socket, not a test
+     * fixture. A rewrite that throws logs it and falls back to the original,
+     * unmodified packet; the viewer sees vanilla behavior for that one packet
+     * instead of an unexplained disconnect.
+     */
+    @JvmStatic fun packetForViewer(viewer: ServerPlayer, packet: Packet<*>): Packet<*> = try {
         impl?.packetForViewer(viewer, packet) ?: packet
+    } catch (failure: Exception) {
+        eu.mctraveler.MCTraveler.LOGGER.error(
+            "Packet rewrite failed for {}, sending it unmodified: {}",
+            viewer.gameProfile.name,
+            packet.javaClass.simpleName,
+            failure,
+        )
+        packet
+    }
 
     @JvmStatic fun isVanishedFromViewer(target: ServerPlayer, viewer: ServerPlayer): Boolean =
         impl?.isVanishedFromViewer(target, viewer) ?: false
