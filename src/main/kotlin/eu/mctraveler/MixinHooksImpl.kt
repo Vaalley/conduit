@@ -84,8 +84,10 @@ object MixinHooksImpl : MixinHooks {
         is ClientboundSetCursorItemPacket, is ClientboundSetPlayerInventoryPacket,
         -> CrystalDamageDisplay.forViewer(viewer, packet)
         is ClientboundGameEventPacket -> NoRain.forViewer(viewer, packet)
-        is ClientboundBlockEntityDataPacket, is ClientboundLevelChunkWithLightPacket ->
-            eu.mctraveler.text.SignNames.personalizeSignsForViewer(viewer, packet)
+        // SignNames.personalizeSignsForViewer is disabled while we isolate an
+        // intermittent "Timed out" disconnect issue — see the
+        // diag/disable-sign-names PR. A <name> sign just shows the literal
+        // token to everyone until this is restored.
         else -> packet
     }
 
@@ -101,14 +103,17 @@ object MixinHooksImpl : MixinHooks {
             null
         }
 
+    // Both onSignLoadedOrChanged and onSignRemoved are disabled while we
+    // isolate an intermittent "Timed out" disconnect issue — see the
+    // diag/disable-sign-names PR. SignNames's tokenChunks registry is simply
+    // never populated or swept while this is in effect.
     override fun onSignLoadedOrChanged(
         level: Level,
         pos: BlockPos,
         sign: net.minecraft.world.level.block.entity.SignBlockEntity,
-    ) = eu.mctraveler.text.SignNames.onSignLoadedOrChanged(level, pos, sign)
+    ) = Unit
 
-    override fun onSignRemoved(level: Level, pos: BlockPos) =
-        eu.mctraveler.text.SignNames.onSignRemoved(level, pos)
+    override fun onSignRemoved(level: Level, pos: BlockPos) = Unit
 
     override fun beforeTeleport(player: ServerPlayer, destination: ResourceKey<Level>) =
         EmbassyOrigins.beforeTeleport(player, destination)

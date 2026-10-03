@@ -29,7 +29,11 @@ class SignNameTokenGameTest {
         val SIGN_AT = BlockPos(2, 2, 2)
     }
 
-    @GameTest(maxTicks = 40)
+    // Not required while SignNames's rewrite is disabled in MixinHooksImpl/MCTraveler
+    // (diag/disable-sign-names) to isolate an intermittent "Timed out" disconnect
+    // issue — personalization genuinely doesn't happen right now, so this is expected
+    // to fail rather than pass vacuously. Restore `required` once SignNames is back.
+    @GameTest(maxTicks = 40, required = false)
     fun eachViewerSeesTheirOwnNameWhereADonatorTypedTheToken(helper: GameTestHelper) {
         val donator = MessageCapturingPlayer.join(helper, "SignNameDon")
         RankFeature.setRank(donator, Rank.DONATOR)
@@ -51,7 +55,8 @@ class SignNameTokenGameTest {
         helper.succeed()
     }
 
-    @GameTest(maxTicks = 40)
+    // Not required for the same reason as above — see diag/disable-sign-names.
+    @GameTest(maxTicks = 40, required = false)
     fun aReaderWhoEntersTheChunkLaterGetsTheirNameAfterTheChunk(helper: GameTestHelper) {
         val donator = MessageCapturingPlayer.join(helper, "SignChunkDon")
         RankFeature.setRank(donator, Rank.DONATOR)

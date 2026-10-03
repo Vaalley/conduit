@@ -55,7 +55,8 @@ object MCTraveler : ModInitializer {
         AwayFeature.register()
         eu.mctraveler.rank.RankFeature.register()
         NoRain.register()
-        eu.mctraveler.text.SignNames.register()
+        // SignNames.register() is disabled while we isolate an intermittent
+        // "Timed out" disconnect issue — see the diag/disable-sign-names PR.
 
 
         initialized = true
