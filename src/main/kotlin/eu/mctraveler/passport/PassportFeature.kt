@@ -1,6 +1,7 @@
 package eu.mctraveler.passport
 
 import eu.mctraveler.MCTraveler
+import eu.mctraveler.persistence.PersistenceService
 import eu.mctraveler.economy.Reasons
 import eu.mctraveler.economy.Economy
 import eu.mctraveler.region.RegionTracker
@@ -114,84 +115,95 @@ object PassportFeature {
         val persistence = MCTraveler.persistence ?: return
         val tick = server.tickCount.toLong()
         for (player in server.playerList.players) {
-            val state = states[player.uuid] ?: run {
-                onJoin(player)
-                states[player.uuid] ?: continue
-            }
-            val passport = persistence.passports.getOrCreate(player.uuid) {
-                persistence.players.firstJoin(player.uuid) ?: System.currentTimeMillis()
-            }
-            if (player.gameMode.gameModeForPlayer == GameType.SPECTATOR) {
-                state.lastX = player.x
-                state.lastY = player.y
-                state.lastZ = player.z
-                state.lastDimension = dimensionOf(player)
-                continue
-            }
-
-            val dimension = dimensionOf(player)
-            val dx = player.x - state.lastX
-            val dy = player.y - state.lastY
-            val dz = player.z - state.lastZ
-            val delta = if (dimension == state.lastDimension) {
-                Math.sqrt(dx * dx + dy * dy + dz * dz)
-            } else {
-                Double.NaN
-            }
-            if (delta > 0.0 && delta <= MAX_TICK_DISTANCE) {
-                passport.distance.add(
-                    Distance.bucketFor(
-                        player.isFallFlying || player.abilities.flying,
-                        player.vehicle != null,
-                        player.isSwimming || player.isInWater,
-                    ),
-                    delta,
-                )
-                persistence.passports.markDirty(player.uuid)
-            }
-            state.lastX = player.x
-            state.lastY = player.y
-            state.lastZ = player.z
-            state.lastDimension = dimension
-
-            val fall = player.fallDistance
-            if (fall >= state.fallPeak) {
-                state.fallPeak = fall
-            } else {
-                // A fall only counts when it actually ended on the ground (or in
-                // water) — not when a teleport reset fallDistance mid-air.
-                val landed = !delta.isNaN() && delta <= MAX_TICK_DISTANCE &&
-                    player.isAlive && (player.onGround() || player.isInWater)
-                if (state.fallPeak >= FALL_STAMP_BLOCKS && landed) {
-                    grantStamp(player, passport, "terminal_velocity")
-                }
-                state.fallPeak = fall
-            }
-
-            if (tick % SAMPLE_INTERVAL_TICKS == 0L) {
-                var changed = passport.dimensions.putIfAbsent(dimension, System.currentTimeMillis()) == null
-                val biome = biomeOf(player)
-                if (biome != null && passport.biomes.putIfAbsent(biome, System.currentTimeMillis()) == null) {
-                    changed = true
-                }
-                if (stampRegions(
-                        passport,
-                        RegionTracker.regionOf(player),
-                        RegionsFeature.requireService(),
-                        System.currentTimeMillis(),
-                    )
-                ) {
-                    changed = true
-                }
-                val level = player.level()
-                if (level.isThundering && level.isRainingAt(player.blockPosition())) {
-                    grantStamp(player, passport, "storm_chaser")
-                }
-                unlockStamps(player, passport)
-                if (changed) persistence.passports.markDirty(player.uuid)
+            // One player's unreadable record must not take the whole server down
+            // with it: this runs inside the tick loop, where an uncaught
+            // exception is a server crash.
+            try {
+                tickPlayer(persistence, player, tick)
+            } catch (e: Exception) {
+                MCTraveler.LOGGER.error("Passport tick failed for {}", player.gameProfile.name, e)
             }
         }
         if (tick % FLUSH_INTERVAL_TICKS == 0L) persistence.passports.flushDirty()
+    }
+
+    private fun tickPlayer(persistence: PersistenceService, player: ServerPlayer, tick: Long) {
+        val state = states[player.uuid] ?: run {
+            onJoin(player)
+            states[player.uuid] ?: return
+        }
+        val passport = persistence.passports.getOrCreate(player.uuid) {
+            persistence.players.firstJoin(player.uuid) ?: System.currentTimeMillis()
+        }
+        if (player.gameMode.gameModeForPlayer == GameType.SPECTATOR) {
+            state.lastX = player.x
+            state.lastY = player.y
+            state.lastZ = player.z
+            state.lastDimension = dimensionOf(player)
+            return
+        }
+
+        val dimension = dimensionOf(player)
+        val dx = player.x - state.lastX
+        val dy = player.y - state.lastY
+        val dz = player.z - state.lastZ
+        val delta = if (dimension == state.lastDimension) {
+            Math.sqrt(dx * dx + dy * dy + dz * dz)
+        } else {
+            Double.NaN
+        }
+        if (delta > 0.0 && delta <= MAX_TICK_DISTANCE) {
+            passport.distance.add(
+                Distance.bucketFor(
+                    player.isFallFlying || player.abilities.flying,
+                    player.vehicle != null,
+                    player.isSwimming || player.isInWater,
+                ),
+                delta,
+            )
+            persistence.passports.markDirty(player.uuid)
+        }
+        state.lastX = player.x
+        state.lastY = player.y
+        state.lastZ = player.z
+        state.lastDimension = dimension
+
+        val fall = player.fallDistance
+        if (fall >= state.fallPeak) {
+            state.fallPeak = fall
+        } else {
+            // A fall only counts when it actually ended on the ground (or in
+            // water) — not when a teleport reset fallDistance mid-air.
+            val landed = !delta.isNaN() && delta <= MAX_TICK_DISTANCE &&
+                player.isAlive && (player.onGround() || player.isInWater)
+            if (state.fallPeak >= FALL_STAMP_BLOCKS && landed) {
+                grantStamp(player, passport, "terminal_velocity")
+            }
+            state.fallPeak = fall
+        }
+
+        if (tick % SAMPLE_INTERVAL_TICKS == 0L) {
+            var changed = passport.dimensions.putIfAbsent(dimension, System.currentTimeMillis()) == null
+            val biome = biomeOf(player)
+            if (biome != null && passport.biomes.putIfAbsent(biome, System.currentTimeMillis()) == null) {
+                changed = true
+            }
+            if (stampRegions(
+                    passport,
+                    RegionTracker.regionOf(player),
+                    RegionsFeature.requireService(),
+                    System.currentTimeMillis(),
+                )
+            ) {
+                changed = true
+            }
+            val level = player.level()
+            if (level.isThundering && level.isRainingAt(player.blockPosition())) {
+                grantStamp(player, passport, "storm_chaser")
+            }
+            unlockStamps(player, passport)
+            if (changed) persistence.passports.markDirty(player.uuid)
+        }
     }
 
     internal fun dimensionOf(player: ServerPlayer): String =
