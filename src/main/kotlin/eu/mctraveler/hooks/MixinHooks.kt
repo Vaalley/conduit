@@ -21,6 +21,7 @@ import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.inventory.CraftingContainer
 import net.minecraft.world.inventory.ResultContainer
 import net.minecraft.world.level.Level
+import net.minecraft.world.level.LevelReader
 import net.minecraft.world.level.block.entity.SignBlockEntity
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.portal.TeleportTransition
@@ -106,6 +107,7 @@ interface MixinHooks {
 
     // Region environment
     fun allowsCreatureBlockChange(level: Level, pos: BlockPos, creature: Entity?): Boolean
+    fun trapdoorKeepsSupporting(level: LevelReader, pos: BlockPos): Boolean
     fun allowsExplosionDamage(level: Level, pos: BlockPos): Boolean
     fun removeExplosionBlockedBlocks(level: Level, exploded: MutableList<BlockPos>)
     fun allowsFireDamage(level: Level, pos: BlockPos): Boolean
@@ -272,6 +274,9 @@ object Hooks {
 
     @JvmStatic fun allowsCreatureBlockChange(level: Level, pos: BlockPos, creature: Entity?): Boolean =
         impl?.allowsCreatureBlockChange(level, pos, creature) ?: true
+
+    @JvmStatic fun trapdoorKeepsSupporting(level: LevelReader, pos: BlockPos): Boolean =
+        impl?.trapdoorKeepsSupporting(level, pos) ?: false
 
     @JvmStatic fun allowsExplosionDamage(level: Level, pos: BlockPos): Boolean =
         impl?.allowsExplosionDamage(level, pos) ?: true

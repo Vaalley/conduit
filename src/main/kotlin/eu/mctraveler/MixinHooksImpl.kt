@@ -47,6 +47,7 @@ import net.minecraft.world.inventory.AbstractContainerMenu
 import net.minecraft.world.inventory.CraftingContainer
 import net.minecraft.world.inventory.ResultContainer
 import net.minecraft.world.level.Level
+import net.minecraft.world.level.LevelReader
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.portal.TeleportTransition
 
@@ -179,6 +180,9 @@ object MixinHooksImpl : MixinHooks {
 
     override fun allowsCreatureBlockChange(level: Level, pos: BlockPos, creature: Entity?): Boolean =
         RegionEnvironment.allowsCreatureBlockChange(level, pos, creature)
+
+    override fun trapdoorKeepsSupporting(level: LevelReader, pos: BlockPos): Boolean =
+        RegionEnvironment.trapdoorKeepsSupporting(level, pos)
 
     override fun allowsExplosionDamage(level: Level, pos: BlockPos): Boolean =
         RegionEnvironment.allowsExplosionDamage(level, pos)

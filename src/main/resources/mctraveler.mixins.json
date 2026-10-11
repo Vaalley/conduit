@@ -43,6 +43,7 @@
     "RegionPressurePlateMixin",
     "SleepRequirementMixin",
     "RegionFarmlandMixin",
+    "TrapdoorSupportMixin",
     "RegionBucketMixin",
     "RespawnAnchorPlacementMixin",
     "StrawBedSleepTrackingMixin",

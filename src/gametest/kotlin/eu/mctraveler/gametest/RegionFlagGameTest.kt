@@ -368,6 +368,61 @@ class RegionFlagGameTest {
     }
 
     @GameTest
+    fun aStrangerOpeningTheTrapdoorCannotTakeTheLanternOnIt(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T99LanternA")
+        val bob = MessageCapturingPlayer.join(helper, "T99LanternB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(TRIGGER_AT, Blocks.OAK_TRAPDOOR)
+        helper.setBlock(TRIGGER_AT.above(), Blocks.LANTERN)
+        bob.standAt(helper, 2.0, 2.0, 1.0)
+
+        bob.rightClicks(helper, TRIGGER_AT)
+
+        helper.runAfterDelay(2) {
+            helper.assertBlockProperty(TRIGGER_AT, BlockStateProperties.OPEN, true)
+            helper.assertBlockPresent(Blocks.LANTERN, TRIGGER_AT.above())
+            alice.leave()
+            bob.leave()
+            helper.succeed()
+        }
+    }
+
+    @GameTest
+    fun theOwnersOpenTrapdoorLeavesTheLanternInPlaceToo(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T99LanternOwner")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(TRIGGER_AT, Blocks.OAK_TRAPDOOR)
+        helper.setBlock(TRIGGER_AT.above(), Blocks.LANTERN)
+        alice.standAt(helper, 2.0, 2.0, 1.0)
+
+        alice.rightClicks(helper, TRIGGER_AT)
+
+        helper.runAfterDelay(2) {
+            helper.assertBlockProperty(TRIGGER_AT, BlockStateProperties.OPEN, true)
+            helper.assertBlockPresent(Blocks.LANTERN, TRIGGER_AT.above())
+            alice.leave()
+            helper.succeed()
+        }
+    }
+
+    @GameTest
+    fun outsideEveryRegionAnOpenedTrapdoorStillDropsTheLantern(helper: GameTestHelper) {
+        val bob = MessageCapturingPlayer.join(helper, "T99LanternFree")
+        helper.setBlock(TRIGGER_AT, Blocks.OAK_TRAPDOOR)
+        helper.setBlock(TRIGGER_AT.above(), Blocks.LANTERN)
+        bob.standAt(helper, 2.0, 2.0, 1.0)
+
+        bob.rightClicks(helper, TRIGGER_AT)
+
+        helper.runAfterDelay(2) {
+            helper.assertBlockProperty(TRIGGER_AT, BlockStateProperties.OPEN, true)
+            helper.assertBlockNotPresent(Blocks.LANTERN, TRIGGER_AT.above())
+            bob.leave()
+            helper.succeed()
+        }
+    }
+
+    @GameTest
     fun disablingDoorsLeavesTheLeverAlone(helper: GameTestHelper) {
         // Each of GATES/DOORS/TRAPDOORS/PUBLIC_REDSTONE is a separate switch,
         // and each closes only its own door.

@@ -14,6 +14,7 @@ import net.minecraft.world.entity.projectile.Projectile
 import net.minecraft.world.entity.vehicle.VehicleEntity
 import net.minecraft.world.level.block.CropBlock
 import net.minecraft.world.level.Level
+import net.minecraft.world.level.LevelReader
 
 /**
  * What a region stops the *world* doing (spec User Story 35, deviation 7): an
@@ -303,5 +304,21 @@ object RegionEnvironment {
         if (responsible == null || responsible is Player) return true
         if (RegionsFeature.regionAt(level, pos) == null) return true
         return responsible is Villager && level.getBlockState(pos).block is CropBlock
+    }
+
+    /**
+     * Whether the trapdoor at [pos] keeps holding up what stands on it (or hangs
+     * from it) even while open (issue #99).
+     *
+     * Vanilla drops a lantern the moment the trapdoor under it opens, because an
+     * open trapdoor no longer supports a block's centre. With the `TRAPDOORS`
+     * flag on, any stranger can open one — and so could take the lantern. Inside
+     * a region the trapdoor therefore always counts as support, whoever opens it
+     * and however it opens (hand, redstone, wind charge).
+     */
+    @JvmStatic
+    fun trapdoorKeepsSupporting(level: LevelReader, pos: BlockPos): Boolean {
+        val world = level as? Level ?: return false
+        return RegionsFeature.regionAt(world, pos) != null
     }
 }
