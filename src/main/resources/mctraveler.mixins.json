@@ -7,7 +7,6 @@
     "ExperienceOrbMixin",
     "ItemMergeMixin",
     "ArmorStandCollisionMixin",
-    "HopperCooldownMixin",
     "MinecraftServerMixin",
     "ServerPlayerMixin",
     "ServerLoginPacketListenerImplMixin",
