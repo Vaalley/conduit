@@ -723,7 +723,9 @@ class CrystalMenuGameTest {
         }
     }
 
-    @GameTest(maxTicks = 200)
+    // Its own batch: the player picker shows at most 54 heads in player-list order,
+    // so on a busy CI run a late joiner fell off the end. See own_batch_crystal_solo.
+    @GameTest(maxTicks = 200, environment = "mctraveler-test:own_batch_crystal_heads")
     fun playerOpensAHeadForEveryoneElseOnline(helper: GameTestHelper) {
         val chooser = MessageCapturingPlayer.join(helper, "TCChooser")
         val other = MessageCapturingPlayer.join(helper, "TCChosen")
@@ -766,7 +768,9 @@ class CrystalMenuGameTest {
 
     // ---- the request round trip ----
 
-    @GameTest(maxTicks = 200)
+    // Its own batch: the player picker shows at most 54 heads in player-list order,
+    // so on a busy CI run a late joiner fell off the end. See own_batch_crystal_solo.
+    @GameTest(maxTicks = 200, environment = "mctraveler-test:own_batch_crystal_heads")
     fun clickingAHeadSpendsEnergyAndInvitesTheTarget(helper: GameTestHelper) {
         val requester = MessageCapturingPlayer.join(helper, "TCAsker")
         val target = MessageCapturingPlayer.join(helper, "TCAsked")
@@ -1051,7 +1055,9 @@ class CrystalMenuGameTest {
         }
     }
 
-    @GameTest(maxTicks = 200)
+    // Its own batch: the player picker shows at most 54 heads in player-list order,
+    // so on a busy CI run a late joiner fell off the end. See own_batch_crystal_solo.
+    @GameTest(maxTicks = 200, environment = "mctraveler-test:own_batch_crystal_heads")
     fun aHeadWhoseOwnerHasLeftCostsNothing(helper: GameTestHelper) {
         val requester = MessageCapturingPlayer.join(helper, "TCGoneA")
         val leaver = MessageCapturingPlayer.join(helper, "TCGoneB")
