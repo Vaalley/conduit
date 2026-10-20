@@ -30,7 +30,7 @@ class HelpGameTest {
     /** Roots that are wholly admin-only. */
     private val adminRoots = listOf(
         "ban", "unban", "pardon", "banlist", "mute", "unmute", "kick", "warn", "warnings", "unwarn",
-        "history", "note", "whois", "seen", "invsee", "inspect", "lookup",
+        "history", "note", "whois", "invsee", "inspect", "lookup",
         "rank", "vanish", "embassy", "economy", "set-teleportation-crystal-energy",
     )
 

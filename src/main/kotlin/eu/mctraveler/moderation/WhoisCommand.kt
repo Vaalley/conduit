@@ -27,12 +27,6 @@ object WhoisCommand {
                     show(context.source, StringArgumentType.getString(context, "player"))
                 }),
         )
-        dispatcher.register(
-            Commands.literal("seen").requires(gate)
-                .then(Commands.argument("player", StringArgumentType.word()).suggests(ModerationFeature.playerSuggestions).executes { context ->
-                    seen(context.source, StringArgumentType.getString(context, "player"))
-                }),
-        )
     }
 
     private fun show(source: CommandSourceStack, name: String): Int {
@@ -66,29 +60,6 @@ object WhoisCommand {
         }
         val history = MCTraveler.persistence?.punishments?.history(uuid).orEmpty()
         line(source, "Active punishments", "${history.count { it.type == PunishmentType.BAN && it.active }} bans, ${history.count { it.type == PunishmentType.MUTE && it.active }} mutes, ${history.count { it.type == PunishmentType.WARN && it.active }} warns, ${history.count { it.type == PunishmentType.NOTE && it.active }} notes")
-        return 1
-    }
-
-    private fun seen(source: CommandSourceStack, name: String): Int {
-        if (!ModerationFeature.authorized(source)) return 0
-        val resolved = resolve(source, name) ?: return 0
-        val (uuid, displayName) = resolved
-        val online = source.server.playerList.getPlayer(uuid)
-        if (online != null) {
-            source.sendSystemMessage(
-                Paint("$displayName is online for ${relative(MCTraveler.persistence?.players?.lastLoginAt(uuid))} in ${RegionWorlds.legacyName(online.level().dimension())} at ${blockPosition(online.blockPosition())}"),
-            )
-            return 1
-        }
-        val players = MCTraveler.persistence?.players ?: return 0
-        val logout = players.lastLogoutAt(uuid)
-        if (logout == null) {
-            source.sendFailure(Paint.error("Player ", Paint.red(displayName), " has never joined"))
-            return 0
-        }
-        source.sendSystemMessage(
-            Paint("$displayName was last seen ${relative(logout)} (${dateTime(logout)}) in ${players.lastLocationWorld(uuid) ?: "unknown"} at ${position(players.lastX(uuid), players.lastY(uuid), players.lastZ(uuid))}"),
-        )
         return 1
     }
 
@@ -126,7 +97,6 @@ object WhoisCommand {
         "${position.x} ${position.y} ${position.z}"
 
     private fun date(value: Long): String = dateFormat.format(Instant.ofEpochMilli(value))
-    private fun dateTime(value: Long): String = Instant.ofEpochMilli(value).toString()
 
     private fun relative(value: Long?): String {
         val millis = (System.currentTimeMillis() - (value ?: System.currentTimeMillis())).coerceAtLeast(0)

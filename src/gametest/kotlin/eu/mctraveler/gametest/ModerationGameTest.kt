@@ -158,24 +158,6 @@ class ModerationGameTest {
         }
     }
 
-    @GameTest(maxTicks = 120)
-    fun seenReportsOfflineBlockPositionAndUnknownPlayers(helper: GameTestHelper) {
-        val server = helper.level.server
-        val admin = TestPlayer.join(server, "ModSeenAdmin").also { op(server, it) }
-        val target = TestPlayer.join(server, "ModSeenTarget")
-        target.player.setPos(4.8, 12.0, 6.2)
-        target.disconnect()
-
-        helper.runAfterDelay(2) {
-            admin.runCommand("seen ModSeenTarget")
-            helper.assertTrue(admin.systemMessages().any { it.string.contains("ModSeenTarget") && it.string.contains("world") && it.string.contains("4 12 6") }, "seen output was ${admin.systemMessages()}")
-            admin.runCommand("seen NeverJoinedModerationPlayer")
-            helper.assertTrue(admin.systemMessages().any { it.string.contains("Unknown player") }, "unknown seen output was ${admin.systemMessages()}")
-            cleanup(admin)
-            helper.succeed()
-        }
-    }
-
     @GameTest(maxTicks = 100)
     fun whoisReportsUuidRankAndOnlineStatus(helper: GameTestHelper) {
         val server = helper.level.server
@@ -239,7 +221,7 @@ class ModerationGameTest {
         val before = MCTraveler.persistence?.punishments?.history(player.player.uuid).orEmpty().size
         val commands = listOf(
             "ban", "unban", "banlist", "mute", "unmute", "kick", "warn", "warnings",
-            "unwarn", "history", "note", "whois", "seen", "inspect", "lookup", "invsee", "pardon",
+            "unwarn", "history", "note", "whois", "inspect", "lookup", "invsee", "pardon",
         )
 
         helper.runAfterDelay(2) {

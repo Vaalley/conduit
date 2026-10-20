@@ -191,7 +191,7 @@ class HelpCatalog(
                 "history" to CommandHelp("Shows a player's moderation history: bans, mutes, kicks and warnings."),
                 "note" to CommandHelp("Adds a private staff note to a player's record."),
                 "whois" to CommandHelp("Shows what the server knows about a player."),
-                "seen" to CommandHelp("Shows whether a player is online, or when they were last on."),
+                "seen" to CommandHelp("Shows when a player was last on, when they first joined, the country they last joined from and their balance."),
                 "invsee" to CommandHelp("Opens the inventory of a player who is online, live."),
                 "inspect" to CommandHelp(
                     "Turns inspect mode on or off. While it is on, clicking a block shows who placed, broke or " +

@@ -55,6 +55,7 @@ object MCTraveler : ModInitializer {
         AwayFeature.register()
         eu.mctraveler.rank.RankFeature.register()
         NoRain.register()
+        eu.mctraveler.seen.SeenCommand.register()
         eu.mctraveler.text.SignNames.register()
 
 
