@@ -1405,6 +1405,45 @@ class RegionProtectionGameTest {
     }
 
     @GameTest
+    fun aStrangerCanSitOnACushionInsideARegion(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T98CushionA")
+        val bob = MessageCapturingPlayer.join(helper, "T98CushionB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(BlockPos(2, 1, 2), net.minecraft.world.level.block.Blocks.STONE)
+        val cushion = net.minecraft.world.entity.decoration.Cushion(net.minecraft.world.entity.EntityTypes.CUSHION, helper.level)
+        cushion.setPos(net.minecraft.world.phys.Vec3.atBottomCenterOf(helper.absolutePos(BlockPos(2, 2, 2))))
+        helper.level.addFreshEntity(cushion)
+        bob.standAt(helper, 2.5, 2.0, 1.0)
+        bob.messages.clear()
+
+        bob.interactsWith(cushion, secondaryAction = false)
+
+        helper.assertTrue(bob.vehicle === cushion, "a stranger could not sit on a cushion in a region")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
+    fun aStrangerStillCannotBreakACushionInsideARegion(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T98CushionC")
+        val bob = MessageCapturingPlayer.join(helper, "T98CushionD")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(BlockPos(2, 1, 2), net.minecraft.world.level.block.Blocks.STONE)
+        val cushion = net.minecraft.world.entity.decoration.Cushion(net.minecraft.world.entity.EntityTypes.CUSHION, helper.level)
+        cushion.setPos(net.minecraft.world.phys.Vec3.atBottomCenterOf(helper.absolutePos(BlockPos(2, 2, 2))))
+        helper.level.addFreshEntity(cushion)
+        bob.standAt(helper, 2.5, 2.0, 1.0)
+
+        cushion.hurtServer(helper.level, helper.level.damageSources().playerAttack(bob), 4.0f)
+
+        helper.assertTrue(cushion.isAlive, "a stranger broke a cushion in a region")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
+
+    @GameTest
     fun anEmptyHandedStrangerCannotRotateAnItemFrame(helper: GameTestHelper) {
         val alice = MessageCapturingPlayer.join(helper, "T14FrameA")
         val bob = MessageCapturingPlayer.join(helper, "T14FrameB")
