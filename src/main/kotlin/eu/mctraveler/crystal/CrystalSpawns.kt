@@ -33,7 +33,7 @@ object CrystalSpawns {
 
     val DEFAULTS = listOf(
         Definition("spawn 1", 16.5, 71.0, -15.5, 180.0f),
-        Definition("spawn 2", 0.5, 67.5, 802816.5, 0.0f),
+        Definition("spawn 2", 0.5, 69.5, 802816.5, 0.0f),
     )
 
     @Volatile
