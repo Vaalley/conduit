@@ -31,7 +31,7 @@ class CrystalSpawnsTest {
             {
               "spawns": [
                 {"name": "spawn 1", "x": 16.5, "y": 71.0, "z": -15.5, "yaw": 180},
-                {"name": "spawn 2", "x": 0.5, "y": 67.5, "z": 802816.5, "yaw": 0},
+                {"name": "spawn 2", "x": 0.5, "y": 69.5, "z": 802816.5, "yaw": 0},
                 {"name": "spawn 3", "x": 4.5, "y": 70.0, "z": 9.5, "yaw": 90}
               ]
             }
