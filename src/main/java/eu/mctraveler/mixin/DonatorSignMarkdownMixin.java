@@ -65,5 +65,7 @@ public abstract class DonatorSignMarkdownMixin {
                 Hooks.onSignLoadedOrChanged(self.getLevel(), self.getBlockPos(), self);
             }
         }
+        // After the markdown is in: staff writing "<wilderness>" turn the sign into a wilderness sign.
+        Hooks.onSignEdited(editor, (SignBlockEntity) (Object) this);
     }
 }

@@ -51,7 +51,7 @@ class DragonFightGameTest {
                     player.runCommand("dragonfight")
                     helper.assertValueEqual(
                         player.dragonFightReplies(),
-                        listOf("ERROR You have already freed the End. Try /rtp end"),
+                        listOf("ERROR You have already freed the End. Try /wilderness end"),
                         "completion permanently gates the command",
                     )
 
