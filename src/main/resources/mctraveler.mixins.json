@@ -43,6 +43,8 @@
     "SleepRequirementMixin",
     "RegionFarmlandMixin",
     "TrapdoorSupportMixin",
+    "StaffPermissionsMixin",
+    "StaffCommandNodeMixin",
     "RegionBucketMixin",
     "RespawnAnchorPlacementMixin",
     "StrawBedSleepTrackingMixin",

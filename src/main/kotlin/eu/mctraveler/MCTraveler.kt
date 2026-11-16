@@ -54,6 +54,7 @@ object MCTraveler : ModInitializer {
         ChatBridge.register()
         AwayFeature.register()
         eu.mctraveler.rank.RankFeature.register()
+        eu.mctraveler.admin.AdminFeature.register()
         NoRain.register()
         eu.mctraveler.text.SignNames.register()
 

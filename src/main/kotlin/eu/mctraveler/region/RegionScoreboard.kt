@@ -152,8 +152,8 @@ object RegionScoreboard {
             val ink = if (uuid == player.uuid) Paint.white else Paint.gray
             // A Donator keeps their gold name here online or off — the rank is read from the
             // stored record, not from a live player.
-            val donator = runCatching { RankFeature.rankOf(uuid) == Rank.DONATOR }.getOrDefault(false)
-            val text = if (donator) Rank.DONATOR.chatColor(name.take(MAX_WIDTH)) else ink(name.take(MAX_WIDTH))
+            val donator = runCatching { RankFeature.isDonator(uuid) }.getOrDefault(false)
+            val text = if (donator) RankFeature.DONATOR_COLOR(name.take(MAX_WIDTH)) else ink(name.take(MAX_WIDTH))
             rows += Row(uuid.toString(), text, place)
             place++
         }
