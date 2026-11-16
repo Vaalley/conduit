@@ -30,7 +30,7 @@ enum class Audience {
     /** Anyone who is not a Newbie; staff in admin mode always pass. */
     TRAVELER,
 
-    /** Donators and above; staff in admin mode always pass. */
+    /** Donators (a Donator is a player of any rank who holds the extra); staff in admin mode always pass. */
     DONATOR,
 
     /** Moderators and admins with admin mode on. */
@@ -43,12 +43,12 @@ enum class Audience {
     /**
      * The pure decision: whether a player belongs to this audience, given whether they
      * are a full [admin] (an operator in admin mode), whether they are [staff] in admin
-     * mode (admins count), and their effective [rank].
+     * mode (admins count), their effective [rank] and whether they are a [donator].
      */
-    fun permits(admin: Boolean, rank: Rank, staff: Boolean = admin): Boolean = when (this) {
+    fun permits(admin: Boolean, rank: Rank, staff: Boolean = admin, donator: Boolean = false): Boolean = when (this) {
         ALL -> true
         TRAVELER -> staff || admin || rank != Rank.NEWBIE
-        DONATOR -> staff || admin || rank.hasDonatorPerks
+        DONATOR -> staff || admin || donator
         STAFF -> staff || admin
         ADMIN -> admin
     }
@@ -75,7 +75,13 @@ enum class Audience {
             warn(player, failure)
             Rank.TRAVELER
         }
-        return permits(admin = false, rank = rank, staff = false)
+        val donator = try {
+            RankFeature.hasDonatorPerks(player)
+        } catch (failure: Exception) {
+            warn(player, failure)
+            false
+        }
+        return permits(admin = false, rank = rank, staff = false, donator = donator)
     }
 
     /**

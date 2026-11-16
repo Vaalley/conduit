@@ -314,7 +314,7 @@ class ChatGameTest {
     fun aDonatorsGoldNameShowsInPrivateMessagesAndSelectedChat(helper: GameTestHelper) {
         val server = helper.level.server
         val donor = TestPlayer.join(server, "DonorMsgA")
-        eu.mctraveler.rank.RankFeature.setRank(donor.player, eu.mctraveler.rank.Rank.DONATOR)
+        eu.mctraveler.rank.RankFeature.setDonator(donor.player, true)
         val plain = TestPlayer.join(server, "DonorMsgB")
         val marker = donor.player.uuid
         helper.runAfterDelay(2) {
@@ -344,7 +344,7 @@ class ChatGameTest {
         val server = helper.level.server
         val observer = TestPlayer.join(server, "DonorAnnObserver")
         val donor = TestPlayer.join(server, "DonorAnnounced")
-        eu.mctraveler.rank.RankFeature.setRank(donor.player, eu.mctraveler.rank.Rank.DONATOR)
+        eu.mctraveler.rank.RankFeature.setDonator(donor.player, true)
         helper.runAfterDelay(4) {
             donor.runCommand("away")
             donor.disconnect()
