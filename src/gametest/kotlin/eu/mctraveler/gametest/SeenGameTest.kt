@@ -79,18 +79,21 @@ class SeenGameTest {
 
         helper.runAfterDelay(3) {
             MCTraveler.persistence!!.players.setLogoutMetadata(
-                vanished.player.uuid, System.currentTimeMillis() - 2 * hour, "overworld", 0.0, 0.0, 0.0,
+                vanished.player.uuid, System.currentTimeMillis() - (2 * hour - 30_000), "overworld", 0.0, 0.0, 0.0,
             )
-            stranger.runCommand("seen SeenVanishedD")
-            adminViewer.runCommand("seen SeenVanishedD")
+            try {
+                stranger.runCommand("seen SeenVanishedD")
+                adminViewer.runCommand("seen SeenVanishedD")
 
-            val strangerSees = stranger.systemMessages().map { it.string }
-            val adminSees = adminViewer.systemMessages().map { it.string }
-            helper.assertTrue("SeenVanishedD was last seen 2 hours ago." in strangerSees, "stranger saw $strangerSees")
-            helper.assertTrue("SeenVanishedD is online right now." in adminSees, "admin saw $adminSees")
-            stranger.disconnect()
-            adminViewer.disconnect()
-            vanished.disconnect()
+                val strangerSees = stranger.systemMessages().map { it.string }
+                val adminSees = adminViewer.systemMessages().map { it.string }
+                helper.assertTrue("SeenVanishedD was last seen 2 hours ago." in strangerSees, "stranger saw $strangerSees")
+                helper.assertTrue("SeenVanishedD is online right now." in adminSees, "admin saw $adminSees")
+            } finally {
+                stranger.disconnect()
+                adminViewer.disconnect()
+                vanished.disconnect()
+            }
             helper.succeed()
         }
     }
