@@ -118,6 +118,7 @@ object AwayFeature {
             state.away = false
             state.cooldownStartTick = tick
             broadcastTransition(player, " is no longer away")
+            refreshSleepCount(player)
         }
     }
 
@@ -142,6 +143,7 @@ object AwayFeature {
             if (!state.away && tick - state.lastInteractionTick > AWAY_TIMEOUT_TICKS) {
                 state.away = true
                 broadcastTransition(player, " is now away")
+                refreshSleepCount(player)
             }
         }
     }
@@ -170,6 +172,7 @@ object AwayFeature {
         if (!state.away) {
             state.away = true
             broadcastTransition(player, " is now away")
+            refreshSleepCount(player)
         }
         return Command.SINGLE_SUCCESS
     }
@@ -187,6 +190,20 @@ object AwayFeature {
     private fun broadcastTransition(player: ServerPlayer, suffix: String) {
         val message = Paint.gray(eu.mctraveler.chat.ChatFeature.nameOf(player), suffix)
         player.level().server.playerList.broadcastSystemMessage(message, false)
+    }
+
+    /**
+     * Vanilla only recounts who is asleep when someone gets into or out of a bed, so a
+     * player going away (or coming back) while somebody already sleeps would leave the
+     * old head-count in force and the night would never be skipped. Recount now;
+     * `SleepRequirementMixin` leaves away players out of it.
+     */
+    private fun refreshSleepCount(player: ServerPlayer) {
+        try {
+            player.level().updateSleepingPlayerList()
+        } catch (failure: Exception) {
+            eu.mctraveler.MCTraveler.LOGGER.warn("Could not refresh the sleeping count for ${player.gameProfile.name}", failure)
+        }
     }
 
     private fun currentTick(player: ServerPlayer): Long = player.level().server.tickCount.toLong()

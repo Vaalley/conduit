@@ -43,4 +43,35 @@ class SleepRequirementGameTest {
             helper.succeed()
         }
     }
+
+    /**
+     * A player already in bed when somebody else goes away: vanilla only recounts when a
+     * bed is entered or left, so the stale count kept the night from being skipped. Going
+     * away (and returning) now recounts at once.
+     */
+    @GameTest(maxTicks = 100)
+    fun goingAwayRecountsThePlayersAlreadyInBed(helper: GameTestHelper) {
+        val sleeper = AwayTestPlayer.join(helper, "SleepRecountA")
+        val afk = AwayTestPlayer.join(helper, "SleepRecountB")
+        val level = afk.level()
+
+        helper.runAfterDelay(2) {
+            // Counted in the same tick as the change: other tests' players come and go.
+            level.updateSleepingPlayerList()
+            val before = activePlayers(level)
+            afk.runCommand("away")
+            helper.assertValueEqual(activePlayers(level), before - 1, "going away leaves the sleep count")
+            afk.runCommand("away")
+            sleeper.runCommand("away")
+            sleeper.leave()
+            afk.leave()
+            helper.succeed()
+        }
+    }
+
+    private fun activePlayers(level: net.minecraft.server.level.ServerLevel): Int {
+        val statusField = net.minecraft.server.level.ServerLevel::class.java.getDeclaredField("sleepStatus").apply { isAccessible = true }
+        val status = statusField.get(level)
+        return status.javaClass.getDeclaredField("activePlayers").apply { isAccessible = true }.getInt(status)
+    }
 }
