@@ -1,9 +1,9 @@
 package eu.mctraveler.command
 
 import eu.mctraveler.MCTraveler
+import eu.mctraveler.admin.StaffAccess
 import eu.mctraveler.rank.Rank
 import eu.mctraveler.rank.RankFeature
-import eu.mctraveler.region.RegionsFeature
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.server.level.ServerPlayer
 
@@ -19,48 +19,69 @@ import net.minecraft.server.level.ServerPlayer
  *
  * Sources that are not a player (the console, command blocks) pass every gate,
  * the way [eu.mctraveler.moderation.ModerationFeature]'s gate always did.
+ *
+ * Staff only count once they have switched on `/admin`: an operator who has not
+ * is treated as a Donator.
  */
 enum class Audience {
     /** Everybody. */
     ALL,
 
-    /** Anyone who is not a Newbie; admins always pass. */
+    /** Anyone who is not a Newbie; staff in admin mode always pass. */
     TRAVELER,
 
-    /** Donators; admins always pass. */
+    /** Donators (a Donator is a player of any rank who holds the extra); staff in admin mode always pass. */
     DONATOR,
 
-    /** Admins (vanilla operators). */
+    /** Moderators and admins with admin mode on. */
+    STAFF,
+
+    /** Admins (operators) with admin mode on — not moderators. */
     ADMIN,
     ;
 
-    /** The pure decision: whether an [admin] with the given [rank] belongs to this audience. */
-    fun permits(admin: Boolean, rank: Rank): Boolean = when (this) {
+    /**
+     * The pure decision: whether a player belongs to this audience, given whether they
+     * are a full [admin] (an operator in admin mode), whether they are [staff] in admin
+     * mode (admins count), their effective [rank] and whether they are a [donator].
+     */
+    fun permits(admin: Boolean, rank: Rank, staff: Boolean = admin, donator: Boolean = false): Boolean = when (this) {
         ALL -> true
-        TRAVELER -> admin || rank != Rank.NEWBIE
-        DONATOR -> admin || rank == Rank.DONATOR
+        TRAVELER -> staff || admin || rank != Rank.NEWBIE
+        DONATOR -> staff || admin || donator
+        STAFF -> staff || admin
         ADMIN -> admin
     }
 
     /** Whether [player] belongs to this audience; never throws. */
     fun permits(player: ServerPlayer): Boolean {
         if (this == ALL) return true
-        val admin = try {
-            RegionsFeature.isAdmin(player)
+        val admin: Boolean
+        val staff: Boolean
+        try {
+            admin = StaffAccess.isFullAdmin(player)
+            staff = StaffAccess.isActive(player)
         } catch (failure: Exception) {
             warn(player, failure)
-            false
+            return false
         }
         if (this == ADMIN) return admin
-        if (admin) return true
+        if (this == STAFF) return staff
+        if (staff) return true
         // An unreadable player record reads as Traveler, the way RankFeature.nameColor does.
         val rank = try {
-            RankFeature.rankOf(player)
+            RankFeature.effectiveRank(player)
         } catch (failure: Exception) {
             warn(player, failure)
             Rank.TRAVELER
         }
-        return permits(admin = false, rank = rank)
+        val donator = try {
+            RankFeature.hasDonatorPerks(player)
+        } catch (failure: Exception) {
+            warn(player, failure)
+            false
+        }
+        return permits(admin = false, rank = rank, staff = false, donator = donator)
     }
 
     /**

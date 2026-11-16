@@ -38,6 +38,17 @@ interface MixinHooks {
     /** Issue #52: whether [player] is away and so excluded from the sleep-percentage maths. */
     fun isAway(player: ServerPlayer): Boolean
 
+    // Staff / admin mode
+    fun profilePermissions(
+        server: MinecraftServer,
+        id: net.minecraft.server.players.NameAndId,
+        vanilla: net.minecraft.server.permissions.LevelBasedPermissionSet,
+    ): net.minecraft.server.permissions.LevelBasedPermissionSet
+
+    fun hidesCommand(node: com.mojang.brigadier.tree.CommandNode<*>, source: Any): Boolean
+    fun beforeCommand(player: ServerPlayer, command: String)
+    fun afterCommand(player: ServerPlayer)
+
     // MOTD
     fun decorateStatus(status: ServerStatus, server: MinecraftServer): ServerStatus
 
@@ -66,6 +77,9 @@ interface MixinHooks {
      * carries no markdown perk — meaning leave the vanilla-built line alone.
      */
     fun markdownLineFor(editor: ServerPlayer, raw: String): Component?
+
+    /** [editor] has just finished editing [sign]. */
+    fun onSignEdited(editor: ServerPlayer, sign: SignBlockEntity)
 
     /** Registers whether the chunk at [pos] holds a `<name>` sign (called once the sign is in-world). */
     fun onSignLoadedOrChanged(level: Level, pos: BlockPos, sign: SignBlockEntity)
@@ -108,6 +122,7 @@ interface MixinHooks {
     // Region environment
     fun allowsCreatureBlockChange(level: Level, pos: BlockPos, creature: Entity?): Boolean
     fun trapdoorKeepsSupporting(level: LevelReader, pos: BlockPos): Boolean
+    fun allowsBoatPush(boat: net.minecraft.world.entity.vehicle.boat.AbstractBoat, pusher: Entity): Boolean
     fun allowsExplosionDamage(level: Level, pos: BlockPos): Boolean
     fun removeExplosionBlockedBlocks(level: Level, exploded: MutableList<BlockPos>)
     fun allowsFireDamage(level: Level, pos: BlockPos): Boolean
@@ -143,6 +158,23 @@ object Hooks {
     }
 
     @JvmStatic fun isAway(player: ServerPlayer): Boolean = impl?.isAway(player) ?: false
+
+    @JvmStatic fun profilePermissions(
+        server: MinecraftServer,
+        id: net.minecraft.server.players.NameAndId,
+        vanilla: net.minecraft.server.permissions.LevelBasedPermissionSet,
+    ): net.minecraft.server.permissions.LevelBasedPermissionSet = impl?.profilePermissions(server, id, vanilla) ?: vanilla
+
+    @JvmStatic fun hidesCommand(node: com.mojang.brigadier.tree.CommandNode<*>, source: Any): Boolean =
+        impl?.hidesCommand(node, source) ?: false
+
+    @JvmStatic fun beforeCommand(player: ServerPlayer, command: String) {
+        impl?.beforeCommand(player, command)
+    }
+
+    @JvmStatic fun afterCommand(player: ServerPlayer) {
+        impl?.afterCommand(player)
+    }
 
     @JvmStatic fun decorateStatus(status: ServerStatus, server: MinecraftServer): ServerStatus =
         impl?.decorateStatus(status, server) ?: status
@@ -189,6 +221,10 @@ object Hooks {
 
     @JvmStatic fun isVanishedFromViewer(target: ServerPlayer, viewer: ServerPlayer): Boolean =
         impl?.isVanishedFromViewer(target, viewer) ?: false
+
+    @JvmStatic fun onSignEdited(editor: ServerPlayer, sign: SignBlockEntity) {
+        impl?.onSignEdited(editor, sign)
+    }
 
     @JvmStatic fun markdownLineFor(editor: ServerPlayer, raw: String): Component? =
         impl?.markdownLineFor(editor, raw)
@@ -277,6 +313,9 @@ object Hooks {
 
     @JvmStatic fun trapdoorKeepsSupporting(level: LevelReader, pos: BlockPos): Boolean =
         impl?.trapdoorKeepsSupporting(level, pos) ?: false
+
+    @JvmStatic fun allowsBoatPush(boat: net.minecraft.world.entity.vehicle.boat.AbstractBoat, pusher: Entity): Boolean =
+        impl?.allowsBoatPush(boat, pusher) ?: true
 
     @JvmStatic fun allowsExplosionDamage(level: Level, pos: BlockPos): Boolean =
         impl?.allowsExplosionDamage(level, pos) ?: true

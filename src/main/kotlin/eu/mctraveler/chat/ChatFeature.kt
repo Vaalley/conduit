@@ -284,7 +284,7 @@ object ChatFeature {
      * unreadable rank shows the plain name.
      */
     internal fun nameOr(player: ServerPlayer, plain: () -> Component): Component = runCatching {
-        if (eu.mctraveler.rank.RankFeature.rankOf(player) == eu.mctraveler.rank.Rank.DONATOR) {
+        if (eu.mctraveler.rank.RankFeature.hasDonatorPerks(player)) {
             eu.mctraveler.rank.RankFeature.nameColor(player)(player.gameProfile.name)
         } else {
             plain()
@@ -329,7 +329,7 @@ object ChatFeature {
         return joinLine(nameOf(player), country)
     }
 
-    private fun isPrivateAddress(address: InetAddress): Boolean =
+    internal fun isPrivateAddress(address: InetAddress): Boolean =
         address.isLoopbackAddress ||
             address.isSiteLocalAddress ||
             address.isLinkLocalAddress ||

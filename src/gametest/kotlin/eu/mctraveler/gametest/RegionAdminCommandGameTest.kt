@@ -31,7 +31,7 @@ class RegionAdminCommandGameTest {
         val player = MessageCapturingPlayer.join(helper, "T12Gate")
         player.standAt(helper, 0.0, 1.0, 0.0)
         // /rg flags is no longer admin-gated at all (main-page flags are
-        // self-service now); locate stays admin-only, and bounds is for Donators too.
+        // self-service now); locate stays admin-only, and bounds is for Travelers too.
         for (command in listOf("rg locate x")) {
             player.runCommand(command)
             helper.assertValueEqual(player.messages.last(), notAdmin, "the non-admin reply to /$command")
@@ -94,16 +94,16 @@ class RegionAdminCommandGameTest {
     // ---- /rg bounds ----
 
     @GameTest
-    fun boundsIsRefusedToAnyoneWhoIsNeitherADonatorNorAnAdmin(helper: GameTestHelper) {
+    fun boundsIsRefusedToANewbie(helper: GameTestHelper) {
         val player = MessageCapturingPlayer.join(helper, "T12BndTrav")
-        RankFeature.setRank(player, Rank.TRAVELER)
+        RankFeature.setRank(player, Rank.NEWBIE)
         player.standAt(helper, 0.0, 1.0, 0.0)
         for (command in listOf("rg bounds", "rg bounds 0 100")) {
             player.runCommand(command)
             helper.assertValueEqual(
                 player.messages.last(),
-                Paint.error("You must be a Donator or an admin to use this command"),
-                "the Traveler's reply to /$command",
+                Paint.error("You must be a Traveler or an admin to use this command"),
+                "the Newbie's reply to /$command",
             )
         }
         player.leave()
@@ -111,9 +111,35 @@ class RegionAdminCommandGameTest {
     }
 
     @GameTest
+    fun aTravelerSetsAndReadsTheBoundsOfTheirOwnRegion(helper: GameTestHelper) {
+        val traveler = MessageCapturingPlayer.join(helper, "T12BndTrav2")
+        RankFeature.setRank(traveler, Rank.TRAVELER)
+        val region = createRegion(helper, traveler, 0.0 to 0.0, 4.0 to 4.0)
+        traveler.standAt(helper, 2.0, 100.0, 2.0)
+
+        traveler.runCommand("rg bounds 255 15")
+        helper.assertValueEqual(
+            traveler.messages.last(),
+            Paint.success(
+                "Set Y bounds for ", Paint.green(region.title),
+                " to ", Paint.white(15), " - ", Paint.white(255),
+            ),
+            "the Traveler's bounds-set reply",
+        )
+        traveler.runCommand("rg bounds")
+        helper.assertValueEqual(
+            traveler.messages.last(),
+            Paint(Paint.green(region.title), " bounds: Y ", Paint.white(15), " to ", Paint.white(255)),
+            "the Traveler's bounds-show reply",
+        )
+        traveler.leave()
+        helper.succeed()
+    }
+
+    @GameTest
     fun aDonatorSetsAndReadsTheBoundsOfTheirOwnRegion(helper: GameTestHelper) {
         val donator = MessageCapturingPlayer.join(helper, "T12BndDon")
-        RankFeature.setRank(donator, Rank.DONATOR)
+        RankFeature.setDonator(donator, true)
         val region = createRegion(helper, donator, 0.0 to 0.0, 4.0 to 4.0)
         donator.standAt(helper, 2.0, 100.0, 2.0)
 
@@ -140,7 +166,7 @@ class RegionAdminCommandGameTest {
     fun aDonatorCannotTouchTheBoundsOfARegionThatIsNotTheirs(helper: GameTestHelper) {
         val owner = MessageCapturingPlayer.join(helper, "T12BndOwner")
         val donator = MessageCapturingPlayer.join(helper, "T12BndStranger")
-        RankFeature.setRank(donator, Rank.DONATOR)
+        RankFeature.setDonator(donator, true)
         val region = createRegion(helper, owner, 0.0 to 0.0, 4.0 to 4.0)
         donator.standAt(helper, 2.0, 100.0, 2.0)
 

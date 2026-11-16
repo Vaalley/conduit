@@ -237,7 +237,7 @@ object RegionCommands {
         if (area <= 9) {
             return Paint.error("Region too small")
         }
-        val areaCap = eu.mctraveler.rank.RankFeature.rankOf(player).regionAreaCap
+        val areaCap = eu.mctraveler.rank.RankFeature.regionCap(player)
         if (area > areaCap && !RegionsFeature.isAdmin(player)) {
             return Paint.error(
                 "Region too large (${floor(area).toInt()} blocks). " +
@@ -307,7 +307,7 @@ object RegionCommands {
      * Grows the region the player stands in outward by [distance] blocks along
      * the edge they are facing (their cardinal facing — N/S/E/W). Residents and
      * admins may; the new footprint must stay within the player's rank's area
-     * cap ([eu.mctraveler.rank.Rank.regionAreaCap], admins excepted), inside
+     * cap ([eu.mctraveler.rank.RankFeature.regionCap], admins excepted), inside
      * the parent region if this is a sub-region, and clear of every other
      * region.
      */
@@ -338,7 +338,7 @@ object RegionCommands {
         }
 
         val area = (maxX - minX + 1).toLong() * (maxZ - minZ + 1).toLong()
-        val areaCap = eu.mctraveler.rank.RankFeature.rankOf(player).regionAreaCap
+        val areaCap = eu.mctraveler.rank.RankFeature.regionCap(player)
         if (area > areaCap && !RegionsFeature.isAdmin(player)) {
             return Paint.error(
                 "Region too large ($area blocks). Limit is $areaCap blocks. Ask an admin to extend it further.",
@@ -382,7 +382,7 @@ object RegionCommands {
         return if (RegionsFeature.isAdmin(player)) {
             Paint("${region.title} is ${width}x${depth} = ${area} blocks (no limit for admins)")
         } else {
-            val cap = RankFeature.rankOf(player).regionAreaCap
+            val cap = RankFeature.regionCap(player)
             Paint("${region.title} is ${width}x${depth} = ${area} blocks (limit ${cap} blocks)")
         }
     }
@@ -536,19 +536,19 @@ object RegionCommands {
         return null
     }
 
-    // ---- admin commands (and /rg bounds, which Donators share) ----
+    // ---- admin commands (and /rg bounds, which Travelers share) ----
 
     /**
-     * `/rg bounds` is for admins and Donators, checked in the body so a malformed line still
-     * gets its usage. What a Donator may point it at is [boundsRefusal].
+     * `/rg bounds` is for admins and anyone who is not a Newbie, checked in the body so a
+     * malformed line still gets its usage. What a Traveler may point it at is [boundsRefusal].
      */
     private fun boundsGate(player: ServerPlayer): Component? {
         if (RegionsFeature.isAdmin(player)) return null
-        val donator = runCatching { RankFeature.rankOf(player) == eu.mctraveler.rank.Rank.DONATOR }.getOrDefault(false)
-        return if (donator) null else Paint.error("You must be a Donator or an admin to use this command")
+        val traveler = runCatching { RankFeature.rankOf(player) != eu.mctraveler.rank.Rank.NEWBIE }.getOrDefault(false)
+        return if (traveler) null else Paint.error("You must be a Traveler or an admin to use this command")
     }
 
-    /** An admin may read and set any region's Y bounds; a Donator only those of a region they belong to. */
+    /** An admin may read and set any region's Y bounds; anyone else only those of a region they belong to. */
     private fun boundsRefusal(player: ServerPlayer, region: Region): Component? =
         if (RegionsFeature.isAdmin(player) || region.isResident(player.uuid)) {
             null

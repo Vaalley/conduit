@@ -30,7 +30,7 @@ class HelpGameTest {
     /** Roots that are wholly admin-only. */
     private val adminRoots = listOf(
         "ban", "unban", "pardon", "banlist", "mute", "unmute", "kick", "warn", "warnings", "unwarn",
-        "history", "note", "whois", "seen", "invsee", "inspect", "lookup",
+        "history", "note", "whois", "invsee", "inspect", "lookup",
         "rank", "vanish", "embassy", "economy", "set-teleportation-crystal-energy",
     )
 
@@ -148,7 +148,7 @@ class HelpGameTest {
                 helper.assertTrue(name !in member, "a non-admin's /help lists /$name")
                 helper.assertTrue(name in boss, "an admin's /help does not list /$name")
             }
-            for (name in listOf("help", "region", "msg", "balance", "rtp")) {
+            for (name in listOf("help", "region", "msg", "balance", "wilderness")) {
                 helper.assertTrue(name in member, "a non-admin's /help does not list /$name")
             }
             // Aliases are folded into their primary entry, not listed alongside it.
@@ -245,8 +245,8 @@ class HelpGameTest {
             helper.assertValueEqual(lines[1], "/region, /rg", "the names line")
             helper.assertValueEqual(
                 lines[2],
-                "Available options are: rename, add, remove, delete, start, end, extend, size, shrink, flags",
-                "a non-admin's options (no bounds/locate)",
+                "Available options are: rename, add, remove, delete, start, end, extend, size, shrink, flags, bounds",
+                "a non-admin's options (bounds, but no locate)",
             )
             helper.assertValueEqual(lines[3], "", "the blank line between the options and the explanation")
             helper.assertTrue(lines[4].startsWith("A region protects a piece of land"), "the explanation: '${lines[4]}'")
@@ -293,7 +293,7 @@ class HelpGameTest {
         try {
             val mod = adminRoots + listOf(
                 "away", "chat", "shrug", "tableflip", "msg", "reply", "balance", "pay", "store",
-                "map", "notepad", "passport", "postcard", "rtp", "dragonfight", "norain", "region",
+                "map", "notepad", "passport", "postcard", "wilderness", "dragonfight", "norain", "region",
                 "spawn1", "spawn2",
             )
             for (name in mod) {
@@ -353,7 +353,7 @@ class HelpGameTest {
                 helper.assertTrue(name !in memberTree, "a non-admin's client tree offers /$name")
                 helper.assertTrue(name in adminTree, "an admin's client tree lacks /$name")
             }
-            for (name in listOf("help", "region", "rg", "msg", "balance", "rtp", "away")) {
+            for (name in listOf("help", "region", "rg", "msg", "balance", "wilderness", "away")) {
                 helper.assertTrue(name in memberTree, "a non-admin's client tree lacks /$name")
             }
             // Vanilla's /help was replaced, not duplicated.
@@ -372,7 +372,7 @@ class HelpGameTest {
         val target = MessageCapturingPlayer.join(helper, "HelpRankTarget")
         try {
             PacketCapture.drain(target)
-            RankFeature.setRank(target, Rank.DONATOR)
+            RankFeature.setDonator(target, true)
             helper.assertTrue(
                 PacketCapture.drainOf<ClientboundCommandsPacket>(target).isNotEmpty(),
                 "setRank did not re-send the command tree",
