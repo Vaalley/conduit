@@ -9,24 +9,24 @@ import java.nio.file.Path
 import net.fabricmc.loader.api.FabricLoader
 
 /**
- * The knobs of `/rtp`, read from `<server>/mctraveler/rtp.json` and written
+ * The knobs of `/wilderness`, read from `<server>/mctraveler/wilderness.json` and written
  * there with [DEFAULTS] when the file is absent, the way the crystal spawns are.
  */
 object RtpConfig {
 
-    const val CONFIG_FILE = "rtp.json"
+    const val CONFIG_FILE = "wilderness.json"
 
     data class Settings(
-        /** Farthest a destination may be from the overworld spawn, in blocks. */
+        /** Farthest a destination may be from the centre (the second spawn), in blocks. */
         val radius: Int,
-        /** Nearest a destination may be to the overworld spawn, in blocks. */
+        /** Nearest a destination may be to the centre, in blocks. */
         val minDistance: Int,
         /** How long a player waits between random teleports. */
         val cooldownSeconds: Int,
         /** Farthest a destination may be from the centre of the End. */
-        val endRadius: Int = 2_000_000,
+        val endRadius: Int = 300_000,
         /** Nearest a destination may be from the centre of the End. */
-        val endMinDistance: Int = 200_000,
+        val endMinDistance: Int = 10_000,
         /** How long a player waits between End teleports. */
         val endCooldownSeconds: Int = 1_800,
     ) {
@@ -76,7 +76,7 @@ object RtpConfig {
                 )
             }
         } catch (error: Exception) {
-            MCTraveler.LOGGER.error("Failed to load rtp config {}: {}", file, error.message, error)
+            MCTraveler.LOGGER.error("Failed to load wilderness config {}: {}", file, error.message, error)
             DEFAULTS
         }
     }

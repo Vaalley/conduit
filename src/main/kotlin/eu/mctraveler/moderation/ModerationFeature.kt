@@ -111,7 +111,9 @@ object ModerationFeature {
     }
 
     private fun registerCommands(dispatcher: com.mojang.brigadier.CommandDispatcher<CommandSourceStack>) {
-        val gate = Audience.ADMIN.gate
+        val gate = Audience.STAFF.gate
+        // Moderators are not given /mute (it is not on their list), only the admins.
+        val adminGate = Audience.ADMIN.gate
         dispatcher.register(
             Commands.literal("ban").requires(gate)
                 .then(target("player").then(tail("tail").executes { context -> ban(context.source, target(context), tail(context)) }))
@@ -134,12 +136,12 @@ object ModerationFeature {
                 ),
         )
         dispatcher.register(
-            Commands.literal("mute").requires(gate)
+            Commands.literal("mute").requires(adminGate)
                 .then(target("player").then(tail("tail").executes { context -> mute(context.source, target(context), tail(context)) }))
                 .then(target("player").executes { context -> mute(context.source, target(context), null) }),
         )
         dispatcher.register(
-            Commands.literal("unmute").requires(gate)
+            Commands.literal("unmute").requires(adminGate)
                 .then(target("player").executes { context -> lift(context.source, target(context), PunishmentType.MUTE) }),
         )
         dispatcher.register(

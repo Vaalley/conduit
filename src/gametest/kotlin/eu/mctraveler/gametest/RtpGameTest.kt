@@ -24,7 +24,7 @@ import net.minecraft.world.phys.BlockHitResult
 import net.minecraft.world.phys.Vec3
 
 /**
- * `/rtp`, `/rtp sign`, and the countdown every teleport now goes through, at
+ * `/rtp`, ``<wilderness>` signs, and the countdown every teleport now goes through, at
  * the running-server seam: the real dispatcher, the real tick loop, the real
  * chunk generation out in the ring.
  *
@@ -44,7 +44,7 @@ class RtpGameTest {
         val start = player.position()
         player.messages.clear()
 
-        player.runCommand("rtp")
+        player.runCommand("wilderness")
         helper.assertValueEqual(
             player.actionBarMessages.map { it.string },
             listOf("Teleporting in 3..."),
@@ -59,7 +59,7 @@ class RtpGameTest {
                     listOf("Teleporting in 3...", "Teleporting in 2...", "Teleporting in 1...", ""),
                     "the count spoken to the player",
                 )
-                val spawn = helper.level.server.overworld().respawnData.pos()
+                val spawn = eu.mctraveler.crystal.CrystalSpawns.definitions()[1]
                 val distance = hypot(player.x - spawn.x, player.z - spawn.z)
                 val settings = RtpConfig.settings()
                 helper.assertTrue(
@@ -77,10 +77,10 @@ class RtpGameTest {
                 )
 
                 player.chatMessages.clear()
-                player.runCommand("rtp")
+                player.runCommand("wilderness")
                 helper.assertValueEqual(
                     player.replies(),
-                    listOf("ERROR You can use /rtp again in 5m"),
+                    listOf("ERROR You can use /wilderness again in 5m"),
                     "the reply during the cooldown",
                 )
                 helper.succeed()
@@ -98,7 +98,7 @@ class RtpGameTest {
         player.standAt(helper, 1.0, 1.0, 1.0)
         player.messages.clear()
 
-        player.runCommand("rtp")
+        player.runCommand("wilderness")
         helper.runAfterDelay(5) { player.standAt(helper, 3.0, 1.0, 1.0) }
         helper.runAfterDelay(afterCountdown) {
             try {
@@ -124,7 +124,7 @@ class RtpGameTest {
         try {
             check(player.teleportTo(embassies, 0.5, 1.0, 0.5, emptySet(), 0.0f, 0.0f, false))
             player.messages.clear()
-            player.runCommand("rtp")
+            player.runCommand("wilderness")
             helper.assertValueEqual(
                 player.replies(),
                 listOf("ERROR Random teleport only works in the overworld"),
@@ -143,7 +143,7 @@ class RtpGameTest {
         try {
             player.messages.clear()
             player.chatMessages.clear()
-            player.runCommand("rtp end")
+            player.runCommand("wilderness end")
             helper.assertValueEqual(
                 player.replies(),
                 listOf("ERROR Free the End first (/dragonfight)"),
@@ -163,7 +163,7 @@ class RtpGameTest {
             DragonFightFeature.state!!.markCompleted(player.uuid)
             player.messages.clear()
             player.chatMessages.clear()
-            player.runCommand("rtp end")
+            player.runCommand("wilderness end")
             helper.assertValueEqual(
                 player.actionBarMessages.map { it.string },
                 listOf("Teleporting in 3..."),
@@ -185,7 +185,7 @@ class RtpGameTest {
             admin.makeAdmin()
             RtpCooldown.start(admin.uuid, helper.level.server.tickCount, 6000)
             admin.messages.clear()
-            admin.runCommand("rtp")
+            admin.runCommand("wilderness")
             helper.assertValueEqual(
                 admin.actionBarMessages.map { it.string },
                 listOf("Teleporting in 3..."),
@@ -204,9 +204,9 @@ class RtpGameTest {
         val player = MessageCapturingPlayer.join(helper, "RtpEager")
         try {
             RtpCooldown.forget(player.uuid)
-            player.runCommand("rtp")
+            player.runCommand("wilderness")
             player.messages.clear()
-            player.runCommand("rtp")
+            player.runCommand("wilderness")
             helper.assertValueEqual(
                 player.replies(),
                 listOf("ERROR You are already teleporting"),
@@ -219,100 +219,73 @@ class RtpGameTest {
         }
     }
 
-    // ---- /rtp sign ----
+    // ---- <wilderness> signs ----
 
     @GameTest
-    fun aNonAdminMayNotMakeSigns(helper: GameTestHelper) {
-        val visitor = MessageCapturingPlayer.join(helper, "RtpSignless")
+    fun aSignSayingWildernessBecomesAWildernessSign(helper: GameTestHelper) {
+        val sign = helper.placeSign()
+        sign.updateText({ it.asMutable().setLine(0, net.minecraft.network.chat.Component.literal("<wilderness>")).asImmutable() }, SignTextSlot.FRONT)
+        RtpSigns.convertToken(helper.level, sign)
+
+        helper.assertTrue(RtpSigns.isMarked(sign), "the sign is not marked")
+        helper.assertTrue(sign.isWaxed, "the sign is not waxed")
+        helper.assertValueEqual(
+            (0 until 4).map { sign.getText(SignTextSlot.FRONT).getMessages(false)[it].string },
+            listOf("[Wilderness]", "Press right-click", "to teleport!", ""),
+            "the words on the sign",
+        )
+        val title = sign.getText(SignTextSlot.FRONT).getMessages(false)[0]
+        helper.assertTrue(title.siblings.any { it.style.isBold }, "the title is not bold")
+        helper.succeed()
+    }
+
+    @GameTest
+    fun onlyStaffEditsTurnAWildernessSignOn(helper: GameTestHelper) {
+        val visitor = MessageCapturingPlayer.join(helper, "RtpSignVisitor")
+        val staff = MessageCapturingPlayer.join(helper, "RtpSignStaff")
         try {
-            val sign = helper.placeSign()
-            visitor.looksAt(helper, SIGN_AT)
-            visitor.messages.clear()
-            visitor.runCommand("rtp sign")
-            helper.assertValueEqual(
-                visitor.replies(),
-                listOf("ERROR You must be an admin to use this command"),
-                "the reply to a non-admin",
-            )
-            helper.assertTrue(!RtpSigns.isMarked(sign), "the sign was marked anyway")
+            staff.makeAdmin()
+            val lines = listOf("<wilderness>", "", "", "").map { net.minecraft.server.network.FilteredText.passThrough(it) }
+
+            val plain = helper.placeSign()
+            plain.setAllowedPlayerEditor(visitor.uuid)
+            plain.updateSignText(visitor, SignTextSlot.FRONT, lines)
+            helper.assertTrue(!RtpSigns.isMarked(plain), "an ordinary player made a wilderness sign")
+
+            helper.setBlock(BlockPos(2, 2, 3), Blocks.OAK_SIGN)
+            val staffSign = helper.level.getBlockEntity(helper.absolutePos(BlockPos(2, 2, 3))) as SignBlockEntity
+            staffSign.setAllowedPlayerEditor(staff.uuid)
+            staffSign.updateSignText(staff, SignTextSlot.FRONT, lines)
+            helper.assertTrue(RtpSigns.isMarked(staffSign), "staff in admin mode could not make a wilderness sign")
             helper.succeed()
         } finally {
             visitor.leave()
+            staff.leave()
         }
     }
 
     @GameTest
-    fun anAdminLookingAtNothingIsToldToLookAtASign(helper: GameTestHelper) {
-        val admin = MessageCapturingPlayer.join(helper, "RtpSignBlind")
-        try {
-            admin.makeAdmin()
-            admin.standAt(helper, 1.0, 1.0, 1.0)
-            admin.lookAt(EntityAnchorArgument.Anchor.EYES, helper.absoluteVec(Vec3(1.0, 30.0, 1.0)))
-            admin.messages.clear()
-            admin.runCommand("rtp sign")
-            helper.assertValueEqual(
-                admin.replies(),
-                listOf("ERROR Look at a sign to make it a random teleport sign"),
-                "the reply when no sign is in view",
-            )
-            helper.succeed()
-        } finally {
-            admin.leave()
-        }
+    fun aSignInTheEndSaysTheEnd(helper: GameTestHelper) {
+        helper.assertValueEqual(RtpSigns.wildernessLines(inEnd = true)[0].string, "[The End]", "the End sign title")
+        helper.assertValueEqual(RtpSigns.wildernessLines(inEnd = false)[0].string, "[Wilderness]", "the overworld sign title")
+        helper.succeed()
     }
 
     @GameTest
-    fun anAdminMarksTheSignTheyLookAtAndMarksItBackAgain(helper: GameTestHelper) {
-        val admin = MessageCapturingPlayer.join(helper, "RtpSignSmith")
-        try {
-            admin.makeAdmin()
-            val sign = helper.placeSign()
-            admin.looksAt(helper, SIGN_AT)
-            admin.messages.clear()
-
-            admin.runCommand("rtp sign")
-            helper.assertValueEqual(
-                admin.replies(),
-                listOf("SUCCESS This sign now teleports players randomly"),
-                "the reply to marking",
-            )
-            helper.assertTrue(RtpSigns.isMarked(sign), "the sign is not marked")
-            helper.assertTrue(sign.isWaxed, "the sign is not waxed")
-            helper.assertValueEqual(
-                (0 until 4).map { sign.getText(SignTextSlot.FRONT).getMessages(false)[it].string },
-                listOf("[ Random ]", "[ Teleport ]", "", "right-click me"),
-                "the words on a blank sign once marked",
-            )
-
-            admin.chatMessages.clear()
-            admin.runCommand("rtp sign")
-            helper.assertValueEqual(
-                admin.replies(),
-                listOf("SUCCESS This sign is a plain sign again"),
-                "the reply to unmarking",
-            )
-            helper.assertTrue(!RtpSigns.isMarked(sign), "the sign is still marked")
-            helper.succeed()
-        } finally {
-            admin.leave()
-        }
+    fun anOrdinarySignIsLeftAlone(helper: GameTestHelper) {
+        val sign = helper.placeSign()
+        sign.updateText({ it.asMutable().setLine(0, net.minecraft.network.chat.Component.literal("Hello")).asImmutable() }, SignTextSlot.FRONT)
+        helper.assertTrue(!RtpSigns.convertToken(helper.level, sign), "a plain sign was converted")
+        helper.assertTrue(!RtpSigns.isMarked(sign), "a plain sign was marked")
+        helper.succeed()
     }
 
     @GameTest
-    fun aSignThatAlreadySaysSomethingKeepsItsWords(helper: GameTestHelper) {
-        val admin = MessageCapturingPlayer.join(helper, "RtpSignScribe")
-        try {
-            admin.makeAdmin()
-            val sign = helper.placeSign()
-            sign.updateText({ it.asMutable().setLine(0, net.minecraft.network.chat.Component.literal("Go explore!")).asImmutable() }, SignTextSlot.FRONT)
-            admin.looksAt(helper, SIGN_AT)
-            admin.runCommand("rtp sign")
-            helper.assertTrue(RtpSigns.isMarked(sign), "the sign is not marked")
-            helper.assertValueEqual(sign.getText(SignTextSlot.FRONT).getMessages(false)[0].string, "Go explore!", "the first line")
-            helper.succeed()
-        } finally {
-            admin.leave()
-        }
+    fun theSignCommandIsGone(helper: GameTestHelper) {
+        val node = helper.level.server.commands.dispatcher.root.getChild("wilderness")
+        helper.assertTrue(node != null && node.getChild("sign") == null, "/wilderness sign still exists")
+        helper.assertTrue(helper.level.server.commands.dispatcher.root.getChild("rtp") == null, "/rtp still exists")
+        helper.succeed()
     }
 
     @GameTest(maxTicks = 200)
@@ -333,7 +306,7 @@ class RtpGameTest {
         )
         helper.runAfterDelay(afterCountdown) {
             try {
-                val spawn = helper.level.server.overworld().respawnData.pos()
+                val spawn = eu.mctraveler.crystal.CrystalSpawns.definitions()[1]
                 val distance = hypot(player.x - spawn.x, player.z - spawn.z)
                 helper.assertTrue(
                     distance >= RtpConfig.settings().minDistance - 1,

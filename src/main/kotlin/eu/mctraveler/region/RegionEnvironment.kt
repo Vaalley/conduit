@@ -207,6 +207,8 @@ object RegionEnvironment {
      */
     @JvmStatic
     fun allowsFluidSpread(level: Level, from: BlockPos, to: BlockPos): Boolean {
+        // A wilderness portal is water that stays in its box.
+        if (eu.mctraveler.rtp.WildernessPortals.blocksSpread(level, from, to)) return false
         val target = RegionsFeature.regionAt(level, to) ?: return true
         return RegionsFeature.regionAt(level, from) === target
     }

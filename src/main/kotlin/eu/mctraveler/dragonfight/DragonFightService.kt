@@ -78,7 +78,7 @@ class DragonFightService(
             return enter(player, own)
         }
         if (state.isCompleted(player.uuid)) {
-            return Paint.error("You have already freed the End. Try /rtp end")
+            return Paint.error("You have already freed the End. Try /wilderness end")
         }
         requirementsGate(player)?.let { return it }
         pendingConfirm[player.uuid] = server.tickCount
@@ -92,7 +92,7 @@ class DragonFightService(
                 "\n",
                 Paint.gray("Leaving through the exit portal ends the fight forever and deletes the world."),
                 "\n",
-                Paint.gray("The dragon egg is yours, and /rtp end is yours afterward."),
+                Paint.gray("The dragon egg is yours, and /wilderness end is yours afterward."),
                 "\n",
                 Paint.gold.runs("/dragonfight confirm")("[Confirm]"),
             ),
@@ -109,7 +109,7 @@ class DragonFightService(
             return Paint.error("Leave this dragon fight first")
         }
         if (state.isCompleted(player.uuid)) {
-            return Paint.error("You have already freed the End. Try /rtp end")
+            return Paint.error("You have already freed the End. Try /wilderness end")
         }
         val existing = arenas[player.uuid]
         if (existing != null) {
@@ -199,7 +199,7 @@ class DragonFightService(
         state.markCompleted(owner)
         takeDragonEgg(level, entity)
         pendingDeletion += owner
-        entity.sendSystemMessage(Paint.success("You have freed the End. /rtp end is yours now"))
+        entity.sendSystemMessage(Paint.success("You have freed the End. /wilderness end is yours now"))
         return transition
     }
 

@@ -1,13 +1,15 @@
 package eu.mctraveler.rtp
 
+import eu.mctraveler.text.Markdown
 import eu.mctraveler.text.Paint
 import net.minecraft.network.chat.Component
+import net.minecraft.world.level.Level
 import net.minecraft.world.level.block.entity.SignBlockEntity
 import net.minecraft.world.level.block.entity.SignText
 import net.minecraft.world.level.block.entity.SignTextSlot
 
 /**
- * Signs that `/rtp` a player who right-clicks them — the way a new arrival at
+ * Signs that send a player who right-clicks them to the wilderness (`/wilderness`) — the way a new arrival at
  * spawn gets sent out without knowing a command exists.
  *
  * The mark is carried by the sign itself, in the `insertion` of its first front
@@ -21,6 +23,31 @@ import net.minecraft.world.level.block.entity.SignTextSlot
 object RtpSigns {
 
     const val SENTINEL = "mctraveler:rtp-sign"
+
+    /** What typing this on the first line of a sign turns it into a wilderness sign. */
+    const val TOKEN = "<wilderness>"
+
+    /** The lines a `<wilderness>` sign is given: bright green bold title, then the dark aqua instructions. */
+    fun wildernessLines(inEnd: Boolean): List<Component> = listOf(
+        Markdown.parse(if (inEnd) "%a%l[The End]" else "%a%l[Wilderness]"),
+        Markdown.parse("%3Press right-click"),
+        Markdown.parse("%3to teleport!"),
+        Component.empty(),
+    )
+
+    /**
+     * Turns a sign whose first line says [TOKEN] into a wilderness sign (the End kind when it
+     * stands in the End), waxed so the lines cannot be edited. Returns whether it did.
+     */
+    fun convertToken(level: Level, sign: SignBlockEntity): Boolean {
+        val front = sign.getText(SignTextSlot.FRONT)
+        if (isMarked(front)) return false
+        if (!front.getMessages(false)[0].string.trim().equals(TOKEN, ignoreCase = true)) return false
+        val lines = wildernessLines(level.dimension() == Level.END)
+        sign.updateText({ text -> mark(lines.foldIndexed(text) { i, acc, line -> acc.withLine(i, line) }) }, SignTextSlot.FRONT)
+        sign.setWaxed(true)
+        return true
+    }
 
     /** What a blank sign is made to say when it is marked. */
     val DEFAULT_LINES: List<Component> = listOf(

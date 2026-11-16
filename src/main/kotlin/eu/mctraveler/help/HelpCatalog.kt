@@ -59,8 +59,8 @@ class HelpCatalog(
         }
 
         private fun defaultEntries(): Map<String, CommandHelp> {
-            val travelerCap = Rank.TRAVELER.regionAreaCap
-            val donatorCap = Rank.DONATOR.regionAreaCap
+            val travelerCap = Rank.REGION_CAP
+            val donatorCap = Rank.DONATOR_REGION_CAP
             return mapOf(
                 "help" to CommandHelp(
                     "Lists the commands you can use, 10 at a time. Click a command to read about it, or a page " +
@@ -126,11 +126,12 @@ class HelpCatalog(
                         "caption, for example /postcard What a view!\n" +
                         "You can send one postcard every 5 minutes.",
                 ),
-                "rtp" to CommandHelp(
-                    "Teleports you to a random safe spot in the overworld, outside of any region, after a short " +
-                        "countdown. It only works in the overworld and has a cooldown between uses.\n" +
-                        "Once you have freed the End (see /dragonfight), /rtp end does the same in the End.",
-                    adminOnlyOptions = setOf("sign"),
+                "wilderness" to CommandHelp(
+                    "Teleports you to a random safe spot in the wilderness, outside of any region, after a short " +
+                        "countdown. It only works in the overworld and has a cooldown between uses. Right-clicking a " +
+                        "wilderness sign or walking into a wilderness portal does the same.\n" +
+                        "Once you have freed the End (see /dragonfight), /wilderness end does the same in the End.",
+                    adminOnlyOptions = setOf("portal"),
                 ),
                 "dragonfight" to CommandHelp(
                     "Fight the Ender Dragon in a private End of your own. You must prove yourself first by " +
@@ -138,7 +139,7 @@ class HelpCatalog(
                         "/dragonfight starts your fight (or takes you back into it) and /dragonfight confirm " +
                         "confirms the start. /dragonfight leave takes you out, /dragonfight invite <player> lets a " +
                         "friend in, and /dragonfight join <player> joins a fight you were invited to.\n" +
-                        "Leaving through the exit portal after winning ends the fight for good and unlocks /rtp end.",
+                        "Leaving through the exit portal after winning ends the fight for good and unlocks /wilderness end.",
                     adminOnlyOptions = setOf("reset"),
                 ),
                 "norain" to CommandHelp(
@@ -158,7 +159,9 @@ class HelpCatalog(
                 ),
                 // Admin-only commands: hidden from everyone else, so only admins ever read these.
                 "rank" to CommandHelp(
-                    "Sets a player's rank: newbie, traveler or donator. Works on players who are offline too.",
+                    "Sets a player's rank: newbie, traveler or, for admins, moderator. Moderators can only set the ranks " +
+                        "below their own. donator and no-donator give or take the Donator extra, which a player of any " +
+                        "rank can hold. Works on players who are offline too.",
                 ),
                 "economy" to CommandHelp("Shows the total money supply and how much moved in the last 7 days."),
                 "embassy" to CommandHelp(
@@ -169,8 +172,20 @@ class HelpCatalog(
                     "Sets how much energy (0 to 5) a player's Teleportation Crystals have. Sets your own when " +
                         "no player is given.",
                 ),
+                "setspawn" to CommandHelp(
+                    "Moves /spawn1 or /spawn2 to where you stand: the middle of your block, facing the nearest of " +
+                        "north, east, south or west. Spawn 1 is also where new players first arrive.",
+                ),
+                "admin" to CommandHelp(
+                    "Turns your staff powers on or off; they are off by default and after every rejoin. Admins are put " +
+                        "in creative with an empty inventory until they turn it off again, when everything is given back. " +
+                        "Moderators keep survival and their items.",
+                ),
+                "back" to CommandHelp(
+                    "Returns you to where you stood before your last /teleport. Crystal teleports do not count.",
+                ),
                 "vanish" to CommandHelp(
-                    "Hides you from everyone who is not an admin, and puts you in spectator mode. Run it again to " +
+                    "Hides you from everyone who is not staff, and puts you in spectator mode. Run it again to " +
                         "come back.",
                 ),
                 "ban" to CommandHelp(
@@ -191,7 +206,7 @@ class HelpCatalog(
                 "history" to CommandHelp("Shows a player's moderation history: bans, mutes, kicks and warnings."),
                 "note" to CommandHelp("Adds a private staff note to a player's record."),
                 "whois" to CommandHelp("Shows what the server knows about a player."),
-                "seen" to CommandHelp("Shows whether a player is online, or when they were last on."),
+                "seen" to CommandHelp("Shows when a player was last on, when they first joined, the country they last joined from and their balance."),
                 "invsee" to CommandHelp("Opens the inventory of a player who is online, live."),
                 "inspect" to CommandHelp(
                     "Turns inspect mode on or off. While it is on, clicking a block shows who placed, broke or " +

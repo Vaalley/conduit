@@ -35,6 +35,7 @@ class StoreGameTest {
         frame.setItem(ItemStack(Items.DIAMOND))
         helper.level.addFreshEntity(frame)
         helper.runAfterDelay(5) {
+            eu.mctraveler.economy.EconomyFeature.drainJoins(helper.level.server)
             try {
                 val economy = checkNotNull(MCTraveler.persistence).economy
                 economy.set(player.uuid, 0, "test")
@@ -63,6 +64,7 @@ class StoreGameTest {
         frame.setItem(ItemStack(Items.DIAMOND))
         helper.level.addFreshEntity(frame)
         helper.runAfterDelay(5) {
+            eu.mctraveler.economy.EconomyFeature.drainJoins(helper.level.server)
             try {
                 val persistence = checkNotNull(MCTraveler.persistence)
                 persistence.economy.set(player.uuid, Economy.dollars(25), "test")
@@ -94,6 +96,7 @@ class StoreGameTest {
         val frame = ItemFrame(helper.level, helper.absolutePos(BlockPos(2, 2, 2)), Direction.SOUTH)
         helper.level.addFreshEntity(frame)
         helper.runAfterDelay(5) {
+            eu.mctraveler.economy.EconomyFeature.drainJoins(helper.level.server)
             try {
                 val persistence = checkNotNull(MCTraveler.persistence)
                 persistence.economy.set(player.uuid, Economy.dollars(20), "test")
@@ -130,6 +133,7 @@ class StoreGameTest {
         // runs (observed on CI: an extra, unexplained $100 on top of the
         // expected balance) — five ticks is comfortably past it either way.
         helper.runAfterDelay(5) {
+            eu.mctraveler.economy.EconomyFeature.drainJoins(helper.level.server)
             try {
                 val persistence = checkNotNull(MCTraveler.persistence)
                 persistence.economy.set(owner.uuid, Economy.dollars(100), "test")
@@ -188,6 +192,7 @@ class StoreGameTest {
         frame.setItem(ItemStack(Items.DIAMOND))
         helper.level.addFreshEntity(frame)
         helper.runAfterDelay(5) {
+            eu.mctraveler.economy.EconomyFeature.drainJoins(helper.level.server)
             try {
                 checkNotNull(MCTraveler.persistence).economy.set(player.uuid, Economy.dollars(25), "test")
                 skipFirstStorePrompt(player.uuid)
@@ -218,6 +223,7 @@ class StoreGameTest {
         frame.setItem(ItemStack(Items.DIAMOND))
         helper.level.addFreshEntity(frame)
         helper.runAfterDelay(5) {
+            eu.mctraveler.economy.EconomyFeature.drainJoins(helper.level.server)
             try {
                 checkNotNull(MCTraveler.persistence).economy.set(player.uuid, Economy.dollars(25), "test")
                 skipFirstStorePrompt(player.uuid)
@@ -275,6 +281,7 @@ class StoreGameTest {
         frame.setItem(ItemStack(Items.DIAMOND))
         helper.level.addFreshEntity(frame)
         helper.runAfterDelay(5) {
+            eu.mctraveler.economy.EconomyFeature.drainJoins(helper.level.server)
             try {
                 val persistence = checkNotNull(MCTraveler.persistence)
                 persistence.economy.set(player.uuid, Economy.dollars(25), "test")
@@ -313,6 +320,7 @@ class StoreGameTest {
         frame.setItem(ItemStack(Items.DIAMOND))
         helper.level.addFreshEntity(frame)
         helper.runAfterDelay(5) {
+            eu.mctraveler.economy.EconomyFeature.drainJoins(helper.level.server)
             try {
                 val persistence = checkNotNull(MCTraveler.persistence)
                 persistence.economy.set(player.uuid, Economy.dollars(25), "test")
@@ -358,6 +366,7 @@ class StoreGameTest {
             // this runs (observed on CI: an extra, unexplained $100 on the
             // buyer's balance) — five ticks is comfortably past it either way.
             helper.runAfterDelay(5) {
+                eu.mctraveler.economy.EconomyFeature.drainJoins(helper.level.server)
                 try {
                     val persistence = checkNotNull(MCTraveler.persistence)
                     persistence.economy.set(buyer.uuid, Economy.dollars(100), "test")

@@ -64,7 +64,7 @@ object VanishFeature {
                     // Hidden from the command tree for non-admins — a stranger never
                     // sees it in tab-completion or the command list, not just a
                     // refusal on running it. Non-player sources (console) keep it.
-                    .requires(Audience.ADMIN.gate)
+                    .requires(Audience.STAFF.gate)
                     .executes { ctx ->
                         toggle(ctx.source.playerOrException)
                         Command.SINGLE_SUCCESS
