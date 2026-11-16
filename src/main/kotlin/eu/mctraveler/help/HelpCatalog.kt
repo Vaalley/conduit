@@ -154,7 +154,7 @@ class HelpCatalog(
                         "A region can cover up to $travelerCap blocks ($donatorCap for Donators). " +
                         "Do you need a region that exceeds $travelerCap blocks? Call for an admin to expand it for you.",
                     aliases = listOf("rg"),
-                    adminOnlyOptions = setOf("bounds", "locate"),
+                    adminOnlyOptions = setOf("locate"),
                 ),
                 // Admin-only commands: hidden from everyone else, so only admins ever read these.
                 "rank" to CommandHelp(

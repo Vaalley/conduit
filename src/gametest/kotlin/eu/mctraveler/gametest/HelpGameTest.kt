@@ -245,8 +245,8 @@ class HelpGameTest {
             helper.assertValueEqual(lines[1], "/region, /rg", "the names line")
             helper.assertValueEqual(
                 lines[2],
-                "Available options are: rename, add, remove, delete, start, end, extend, size, shrink, flags",
-                "a non-admin's options (no bounds/locate)",
+                "Available options are: rename, add, remove, delete, start, end, extend, size, shrink, flags, bounds",
+                "a non-admin's options (bounds, but no locate)",
             )
             helper.assertValueEqual(lines[3], "", "the blank line between the options and the explanation")
             helper.assertTrue(lines[4].startsWith("A region protects a piece of land"), "the explanation: '${lines[4]}'")

@@ -536,19 +536,19 @@ object RegionCommands {
         return null
     }
 
-    // ---- admin commands (and /rg bounds, which Donators share) ----
+    // ---- admin commands (and /rg bounds, which Travelers share) ----
 
     /**
-     * `/rg bounds` is for admins and Donators, checked in the body so a malformed line still
-     * gets its usage. What a Donator may point it at is [boundsRefusal].
+     * `/rg bounds` is for admins and anyone who is not a Newbie, checked in the body so a
+     * malformed line still gets its usage. What a Traveler may point it at is [boundsRefusal].
      */
     private fun boundsGate(player: ServerPlayer): Component? {
         if (RegionsFeature.isAdmin(player)) return null
-        val donator = runCatching { RankFeature.rankOf(player) == eu.mctraveler.rank.Rank.DONATOR }.getOrDefault(false)
-        return if (donator) null else Paint.error("You must be a Donator or an admin to use this command")
+        val traveler = runCatching { RankFeature.rankOf(player) != eu.mctraveler.rank.Rank.NEWBIE }.getOrDefault(false)
+        return if (traveler) null else Paint.error("You must be a Traveler or an admin to use this command")
     }
 
-    /** An admin may read and set any region's Y bounds; a Donator only those of a region they belong to. */
+    /** An admin may read and set any region's Y bounds; anyone else only those of a region they belong to. */
     private fun boundsRefusal(player: ServerPlayer, region: Region): Component? =
         if (RegionsFeature.isAdmin(player) || region.isResident(player.uuid)) {
             null
