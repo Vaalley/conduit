@@ -12,6 +12,7 @@ import net.fabricmc.fabric.api.event.player.UseItemCallback
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents
 import net.minecraft.commands.Commands
 import net.minecraft.server.MinecraftServer
+import net.minecraft.util.Mth
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.InteractionResult
 import java.util.UUID
@@ -40,13 +41,11 @@ object AwayFeature {
 
     private class State(player: ServerPlayer, tick: Long) {
         var lastInteractionTick = tick
-        // Position components rather than a Vec3 — position() allocates, and
+        // Block coordinates rather than a Vec3 — position() allocates, and
         // the idle check reads them every tick of every player.
-        var lastX = player.x
-        var lastY = player.y
-        var lastZ = player.z
-        var lastYRot = player.yRot
-        var lastXRot = player.xRot
+        var lastBlockX = Mth.floor(player.x)
+        var lastBlockY = Mth.floor(player.y)
+        var lastBlockZ = Mth.floor(player.z)
         var away = false
 
         /** Set when the player returns from away; `/away` is refused while it is fresh. */
@@ -109,11 +108,9 @@ object AwayFeature {
         val tick = currentTick(player)
         val state = states.getOrPut(player.uuid) { State(player, tick) }
         state.lastInteractionTick = tick
-        state.lastX = player.x
-        state.lastY = player.y
-        state.lastZ = player.z
-        state.lastYRot = player.yRot
-        state.lastXRot = player.xRot
+        state.lastBlockX = Mth.floor(player.x)
+        state.lastBlockY = Mth.floor(player.y)
+        state.lastBlockZ = Mth.floor(player.z)
         if (state.away) {
             state.away = false
             state.cooldownStartTick = tick
@@ -127,11 +124,10 @@ object AwayFeature {
         // detect it as a position/look change since the last tick.
         for (player in server.playerList.players) {
             val state = states[player.uuid] ?: continue
-            if (player.x != state.lastX ||
-                player.y != state.lastY ||
-                player.z != state.lastZ ||
-                player.yRot != state.lastYRot ||
-                player.xRot != state.lastXRot
+            // Turning the head is not activity; stepping onto another block is.
+            if (Mth.floor(player.x) != state.lastBlockX ||
+                Mth.floor(player.y) != state.lastBlockY ||
+                Mth.floor(player.z) != state.lastBlockZ
             ) {
                 onInteraction(player)
             }
