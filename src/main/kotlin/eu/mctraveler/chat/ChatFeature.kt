@@ -329,7 +329,7 @@ object ChatFeature {
         return joinLine(nameOf(player), country)
     }
 
-    private fun isPrivateAddress(address: InetAddress): Boolean =
+    internal fun isPrivateAddress(address: InetAddress): Boolean =
         address.isLoopbackAddress ||
             address.isSiteLocalAddress ||
             address.isLinkLocalAddress ||

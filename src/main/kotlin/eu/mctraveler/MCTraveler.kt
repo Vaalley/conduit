@@ -57,6 +57,7 @@ object MCTraveler : ModInitializer {
         eu.mctraveler.admin.AdminFeature.register()
         eu.mctraveler.crystal.SetSpawnCommand.register()
         NoRain.register()
+        eu.mctraveler.seen.SeenCommand.register()
         eu.mctraveler.text.SignNames.register()
 
 
