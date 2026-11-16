@@ -148,7 +148,7 @@ class HelpGameTest {
                 helper.assertTrue(name !in member, "a non-admin's /help lists /$name")
                 helper.assertTrue(name in boss, "an admin's /help does not list /$name")
             }
-            for (name in listOf("help", "region", "msg", "balance", "rtp")) {
+            for (name in listOf("help", "region", "msg", "balance", "wilderness")) {
                 helper.assertTrue(name in member, "a non-admin's /help does not list /$name")
             }
             // Aliases are folded into their primary entry, not listed alongside it.
@@ -293,7 +293,7 @@ class HelpGameTest {
         try {
             val mod = adminRoots + listOf(
                 "away", "chat", "shrug", "tableflip", "msg", "reply", "balance", "pay", "store",
-                "map", "notepad", "passport", "postcard", "rtp", "dragonfight", "norain", "region",
+                "map", "notepad", "passport", "postcard", "wilderness", "dragonfight", "norain", "region",
                 "spawn1", "spawn2",
             )
             for (name in mod) {
@@ -353,7 +353,7 @@ class HelpGameTest {
                 helper.assertTrue(name !in memberTree, "a non-admin's client tree offers /$name")
                 helper.assertTrue(name in adminTree, "an admin's client tree lacks /$name")
             }
-            for (name in listOf("help", "region", "rg", "msg", "balance", "rtp", "away")) {
+            for (name in listOf("help", "region", "rg", "msg", "balance", "wilderness", "away")) {
                 helper.assertTrue(name in memberTree, "a non-admin's client tree lacks /$name")
             }
             // Vanilla's /help was replaced, not duplicated.

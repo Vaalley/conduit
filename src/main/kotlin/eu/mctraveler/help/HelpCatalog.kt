@@ -126,11 +126,12 @@ class HelpCatalog(
                         "caption, for example /postcard What a view!\n" +
                         "You can send one postcard every 5 minutes.",
                 ),
-                "rtp" to CommandHelp(
-                    "Teleports you to a random safe spot in the overworld, outside of any region, after a short " +
-                        "countdown. It only works in the overworld and has a cooldown between uses.\n" +
-                        "Once you have freed the End (see /dragonfight), /rtp end does the same in the End.",
-                    adminOnlyOptions = setOf("sign"),
+                "wilderness" to CommandHelp(
+                    "Teleports you to a random safe spot in the wilderness, outside of any region, after a short " +
+                        "countdown. It only works in the overworld and has a cooldown between uses. Right-clicking a " +
+                        "wilderness sign or walking into a wilderness portal does the same.\n" +
+                        "Once you have freed the End (see /dragonfight), /wilderness end does the same in the End.",
+                    adminOnlyOptions = setOf("portal"),
                 ),
                 "dragonfight" to CommandHelp(
                     "Fight the Ender Dragon in a private End of your own. You must prove yourself first by " +
@@ -138,7 +139,7 @@ class HelpCatalog(
                         "/dragonfight starts your fight (or takes you back into it) and /dragonfight confirm " +
                         "confirms the start. /dragonfight leave takes you out, /dragonfight invite <player> lets a " +
                         "friend in, and /dragonfight join <player> joins a fight you were invited to.\n" +
-                        "Leaving through the exit portal after winning ends the fight for good and unlocks /rtp end.",
+                        "Leaving through the exit portal after winning ends the fight for good and unlocks /wilderness end.",
                     adminOnlyOptions = setOf("reset"),
                 ),
                 "norain" to CommandHelp(

@@ -121,7 +121,15 @@ object MixinHooksImpl : MixinHooks {
         level: Level,
         pos: BlockPos,
         sign: net.minecraft.world.level.block.entity.SignBlockEntity,
-    ) = eu.mctraveler.text.SignNames.onSignLoadedOrChanged(level, pos, sign)
+    ) {
+        // A "<wilderness>" sign becomes a wilderness sign the moment it is written.
+        try {
+            eu.mctraveler.rtp.RtpSigns.convertToken(level, sign)
+        } catch (failure: Exception) {
+            MCTraveler.LOGGER.warn("Could not turn the sign at {} into a wilderness sign", pos, failure)
+        }
+        eu.mctraveler.text.SignNames.onSignLoadedOrChanged(level, pos, sign)
+    }
 
     override fun onSignRemoved(level: Level, pos: BlockPos) =
         eu.mctraveler.text.SignNames.onSignRemoved(level, pos)

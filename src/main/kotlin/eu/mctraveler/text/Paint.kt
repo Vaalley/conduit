@@ -40,6 +40,7 @@ class Paint private constructor(private val style: Style) {
     // the Teleportation Crystal's charge-capacity lore line (spec deviation 10).
     val aqua: Paint get() = Paint(style.withColor(ChatFormatting.AQUA))
     val gold: Paint get() = Paint(style.withColor(ChatFormatting.GOLD))
+    val lightPurple: Paint get() = Paint(style.withColor(ChatFormatting.LIGHT_PURPLE))
 
     /** The Newbie rank's color (ranks feature). */
     val darkAqua: Paint get() = Paint(style.withColor(ChatFormatting.DARK_AQUA))
@@ -99,6 +100,7 @@ class Paint private constructor(private val style: Style) {
         val darkGray: Paint get() = plain.darkGray
         val aqua: Paint get() = plain.aqua
         val gold: Paint get() = plain.gold
+        val lightPurple: Paint get() = plain.lightPurple
         val darkAqua: Paint get() = plain.darkAqua
         val reset: Paint get() = plain.reset
         val bold: Paint get() = plain.bold

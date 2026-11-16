@@ -37,6 +37,7 @@
       "eu.mctraveler.gametest.CrystalBundleGameTest",
       "eu.mctraveler.gametest.StrawBedProtectionGameTest",
       "eu.mctraveler.gametest.AdminModeGameTest",
+      "eu.mctraveler.gametest.WildernessPortalGameTest",
       "eu.mctraveler.gametest.CrystalEnergyGameTest",
       "eu.mctraveler.gametest.CrystalCommandGameTest",
       "eu.mctraveler.gametest.EmbassyPlotGameTest",
