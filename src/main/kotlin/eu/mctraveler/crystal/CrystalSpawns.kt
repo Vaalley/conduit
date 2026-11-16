@@ -57,6 +57,20 @@ object CrystalSpawns {
     private fun configFile(): Path =
         FabricLoader.getInstance().getGameDir().resolve("mctraveler").resolve(CONFIG_FILE)
 
+    /**
+     * Replaces the spawn at [index] and writes the file, so `/spawnN` and the crystal menu
+     * use it immediately and a restart keeps it.
+     */
+    fun define(index: Int, definition: Definition) {
+        val updated = definitions().toMutableList().also { it[index] = definition }.toList()
+        val file = configFile()
+        Files.createDirectories(file.parent)
+        val staging = file.resolveSibling("${file.fileName}.tmp")
+        Files.writeString(staging, encode(updated))
+        Files.move(staging, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        cached = updated
+    }
+
     /** The public command name assigned to the zero-based [index]. */
     fun commandName(index: Int): String = "spawn${index + 1}"
 
