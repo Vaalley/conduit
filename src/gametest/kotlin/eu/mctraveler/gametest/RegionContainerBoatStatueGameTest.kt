@@ -110,4 +110,33 @@ class RegionContainerBoatStatueGameTest {
         bob.leave()
         helper.succeed()
     }
+
+    @GameTest
+    fun aStrangerPlacesABoatWhenBoatsIsOn(helper: GameTestHelper) {
+        val alice = MessageCapturingPlayer.join(helper, "T20PlaceA")
+        val bob = MessageCapturingPlayer.join(helper, "T20PlaceB")
+        createRegion(helper, alice, 0.0 to 0.0, 4.0 to 4.0)
+        helper.setBlock(BlockPos(2, 1, 2), Blocks.STONE)
+        helper.setBlock(BlockPos(2, 2, 2), Blocks.WATER)
+        bob.standAt(helper, 2.5, 2.0, 0.5)
+        bob.setGameMode(net.minecraft.world.level.GameType.ADVENTURE)
+        bob.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES, helper.absoluteVec(Vec3(2.5, 2.5, 2.5)))
+        val area = net.minecraft.world.phys.AABB(helper.absolutePos(BlockPos(2, 2, 2))).inflate(3.0)
+        bob.messages.clear()
+
+        bob.setItemInHand(InteractionHand.MAIN_HAND, ItemStack(Items.OAK_BOAT))
+        // The client sends the click on the block under the water first, then the plain use.
+        val floor = helper.absolutePos(BlockPos(2, 1, 2))
+        val onFloor = bob.gameMode.useItemOn(
+            bob, bob.level(), bob.mainHandItem, InteractionHand.MAIN_HAND,
+            BlockHitResult(Vec3.atCenterOf(floor), Direction.UP, floor, false),
+        )
+        helper.assertTrue(onFloor != InteractionResult.FAIL, "the click on the floor was refused: $onFloor")
+        val result = bob.gameMode.useItem(bob, bob.level(), bob.mainHandItem, InteractionHand.MAIN_HAND)
+        val placed = helper.level.getEntitiesOfClass(net.minecraft.world.entity.vehicle.boat.AbstractBoat::class.java, area)
+        helper.assertTrue(placed.isNotEmpty(), "no boat was placed, result $result, messages ${bob.messages.map { it.string }}")
+        alice.leave()
+        bob.leave()
+        helper.succeed()
+    }
 }
