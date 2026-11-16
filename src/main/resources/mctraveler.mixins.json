@@ -43,6 +43,7 @@
     "SleepRequirementMixin",
     "RegionFarmlandMixin",
     "TrapdoorSupportMixin",
+    "RegionBoatPushMixin",
     "StaffPermissionsMixin",
     "StaffCommandNodeMixin",
     "RegionBucketMixin",
