@@ -171,6 +171,10 @@ class HelpCatalog(
                     "Sets how much energy (0 to 5) a player's Teleportation Crystals have. Sets your own when " +
                         "no player is given.",
                 ),
+                "setspawn" to CommandHelp(
+                    "Moves /spawn1 or /spawn2 to where you stand: the middle of your block, facing the nearest of " +
+                        "north, east, south or west. Spawn 1 is also where new players first arrive.",
+                ),
                 "admin" to CommandHelp(
                     "Turns your staff powers on or off; they are off by default and after every rejoin. Admins are put " +
                         "in creative with an empty inventory until they turn it off again, when everything is given back. " +
