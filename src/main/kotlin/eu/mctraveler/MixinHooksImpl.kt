@@ -100,6 +100,11 @@ object MixinHooksImpl : MixinHooks {
         is ClientboundSetCursorItemPacket, is ClientboundSetPlayerInventoryPacket,
         -> CrystalDamageDisplay.forViewer(viewer, packet)
         is ClientboundGameEventPacket -> NoRain.forViewer(viewer, packet)
+        is net.minecraft.network.protocol.game.ClientboundOpenSignEditorPacket -> {
+            // The editor opens on a sign that shows the colour codes the player typed.
+            eu.mctraveler.text.SignEditCodes.beforeEditorOpens(viewer, packet, markdownLineFor(viewer, "") != null)
+            packet
+        }
         is ClientboundBlockEntityDataPacket, is ClientboundLevelChunkWithLightPacket ->
             eu.mctraveler.text.SignNames.personalizeSignsForViewer(viewer, packet)
         else -> packet

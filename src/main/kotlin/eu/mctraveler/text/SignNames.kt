@@ -168,6 +168,8 @@ object SignNames {
     fun personalizeSignsForViewer(viewer: ServerPlayer, packet: Packet<*>): Packet<*> {
         when (packet) {
             is ClientboundBlockEntityDataPacket -> {
+                // The colour-codes version of a sign for the editor is left exactly as built.
+                if (SignEditCodes.isSendingCodes()) return packet
                 if (tokenChunks.isEmpty()) return packet
                 if (!isSignType(packet.type)) return packet
                 val sign = viewer.level().getBlockEntity(packet.pos) as? SignBlockEntity ?: return packet
