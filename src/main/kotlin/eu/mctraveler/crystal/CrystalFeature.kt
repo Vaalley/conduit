@@ -51,6 +51,8 @@ object CrystalFeature {
         // state, so closing it is all there is to do; only the requests are
         // book-keeping of our own.
         ServerLifecycleEvents.SERVER_STOPPING.register(CrystalMenu::closeAll)
+        // The recipes are always in the recipe book, whether or not anything else unlocked them.
+        ServerPlayConnectionEvents.JOIN.register { handler, _, _ -> CrystalRecipes.award(handler.player) }
         ServerPlayConnectionEvents.DISCONNECT.register { handler, _ ->
             CrystalRequests.forget(handler.player.uuid)
         }
