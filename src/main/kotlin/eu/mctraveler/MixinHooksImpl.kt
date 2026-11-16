@@ -61,6 +61,21 @@ object MixinHooksImpl : MixinHooks {
 
     override fun isAway(player: ServerPlayer): Boolean = AwayFeature.isAway(player)
 
+    override fun profilePermissions(
+        server: MinecraftServer,
+        id: NameAndId,
+        vanilla: net.minecraft.server.permissions.LevelBasedPermissionSet,
+    ) = eu.mctraveler.admin.StaffAccess.profilePermissions(server, id, vanilla)
+
+    override fun hidesCommand(node: com.mojang.brigadier.tree.CommandNode<*>, source: Any): Boolean =
+        source is net.minecraft.commands.CommandSourceStack &&
+            eu.mctraveler.admin.StaffAccess.hidesCommand(node, source)
+
+    override fun beforeCommand(player: ServerPlayer, command: String) =
+        eu.mctraveler.admin.AdminFeature.beforeCommand(player, command)
+
+    override fun afterCommand(player: ServerPlayer) = eu.mctraveler.admin.AdminFeature.afterCommand(player)
+
     override fun decorateStatus(status: ServerStatus, server: MinecraftServer): ServerStatus =
         Motd.decorate(status, server)
 
@@ -94,7 +109,7 @@ object MixinHooksImpl : MixinHooks {
         eu.mctraveler.vanish.VanishFeature.isHiddenFrom(target, viewer)
 
     override fun markdownLineFor(editor: ServerPlayer, raw: String): Component? =
-        if (eu.mctraveler.rank.RankFeature.rankOf(editor) == eu.mctraveler.rank.Rank.DONATOR ||
+        if (eu.mctraveler.rank.RankFeature.hasDonatorPerks(editor) ||
             eu.mctraveler.region.RegionsFeature.isAdmin(editor)
         ) {
             eu.mctraveler.text.Markdown.parse(raw)
@@ -107,6 +122,19 @@ object MixinHooksImpl : MixinHooks {
         pos: BlockPos,
         sign: net.minecraft.world.level.block.entity.SignBlockEntity,
     ) = eu.mctraveler.text.SignNames.onSignLoadedOrChanged(level, pos, sign)
+
+    override fun onSignEdited(editor: ServerPlayer, sign: net.minecraft.world.level.block.entity.SignBlockEntity) {
+        // A "<wilderness>" sign becomes a wilderness sign when staff in admin mode write it.
+        val level = sign.level ?: return
+        if (!eu.mctraveler.region.RegionsFeature.isAdmin(editor)) return
+        try {
+            if (eu.mctraveler.rtp.RtpSigns.convertToken(level, sign)) {
+                eu.mctraveler.text.SignNames.onSignLoadedOrChanged(level, sign.blockPos, sign)
+            }
+        } catch (failure: Exception) {
+            MCTraveler.LOGGER.warn("Could not turn the sign at {} into a wilderness sign", sign.blockPos, failure)
+        }
+    }
 
     override fun onSignRemoved(level: Level, pos: BlockPos) =
         eu.mctraveler.text.SignNames.onSignRemoved(level, pos)

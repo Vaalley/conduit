@@ -26,6 +26,17 @@ public abstract class CommandsMixin {
         ServerPlayer player = parseResults.getContext().getSource().getPlayer();
         if (player != null) {
             Hooks.onPlayerCommand(player);
+            Hooks.beforeCommand(player, command);
+        }
+    }
+
+    /** Lets /back see whether a /teleport actually moved the player. */
+    @Inject(method = "performCommand", at = @At("TAIL"))
+    private void mctraveler$afterCommand(
+            ParseResults<CommandSourceStack> parseResults, String command, CallbackInfo ci) {
+        ServerPlayer player = parseResults.getContext().getSource().getPlayer();
+        if (player != null) {
+            Hooks.afterCommand(player);
         }
     }
 }

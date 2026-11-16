@@ -237,7 +237,7 @@ object RegionCommands {
         if (area <= 9) {
             return Paint.error("Region too small")
         }
-        val areaCap = eu.mctraveler.rank.RankFeature.rankOf(player).regionAreaCap
+        val areaCap = eu.mctraveler.rank.RankFeature.regionCap(player)
         if (area > areaCap && !RegionsFeature.isAdmin(player)) {
             return Paint.error(
                 "Region too large (${floor(area).toInt()} blocks). " +
@@ -307,7 +307,7 @@ object RegionCommands {
      * Grows the region the player stands in outward by [distance] blocks along
      * the edge they are facing (their cardinal facing — N/S/E/W). Residents and
      * admins may; the new footprint must stay within the player's rank's area
-     * cap ([eu.mctraveler.rank.Rank.regionAreaCap], admins excepted), inside
+     * cap ([eu.mctraveler.rank.RankFeature.regionCap], admins excepted), inside
      * the parent region if this is a sub-region, and clear of every other
      * region.
      */
@@ -338,7 +338,7 @@ object RegionCommands {
         }
 
         val area = (maxX - minX + 1).toLong() * (maxZ - minZ + 1).toLong()
-        val areaCap = eu.mctraveler.rank.RankFeature.rankOf(player).regionAreaCap
+        val areaCap = eu.mctraveler.rank.RankFeature.regionCap(player)
         if (area > areaCap && !RegionsFeature.isAdmin(player)) {
             return Paint.error(
                 "Region too large ($area blocks). Limit is $areaCap blocks. Ask an admin to extend it further.",
@@ -382,7 +382,7 @@ object RegionCommands {
         return if (RegionsFeature.isAdmin(player)) {
             Paint("${region.title} is ${width}x${depth} = ${area} blocks (no limit for admins)")
         } else {
-            val cap = RankFeature.rankOf(player).regionAreaCap
+            val cap = RankFeature.regionCap(player)
             Paint("${region.title} is ${width}x${depth} = ${area} blocks (limit ${cap} blocks)")
         }
     }

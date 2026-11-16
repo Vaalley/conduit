@@ -109,6 +109,7 @@ class VanishGameTest {
 
     private fun TestPlayer.op() {
         player.level().server.playerList.op(player.nameAndId())
+        eu.mctraveler.admin.StaffAccess.setOnForTests(player.uuid, true)
     }
 
     /** `[-] <name> left.` — the shared leave line. */

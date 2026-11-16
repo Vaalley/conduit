@@ -342,7 +342,7 @@ object CrystalMenu {
     }
 
     /**
-     * `/rtp` by another door: the same gates, countdown, pick, cooldown and
+     * `/wilderness` by another door: the same gates, countdown, pick, cooldown and
      * replies as the command (spec story 32 retired). [RtpFeature] runs the
      * whole trip itself, so as far as the menu is concerned the click is over.
      */

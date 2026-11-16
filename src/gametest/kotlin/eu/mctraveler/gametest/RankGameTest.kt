@@ -99,7 +99,7 @@ class RankGameTest {
         )
 
         val donator = MessageCapturingPlayer.join(helper, "RankDonCap")
-        RankFeature.setRank(donator, Rank.DONATOR)
+        RankFeature.setDonator(donator, true)
         donator.standAt(helper, 40200.0, 1.0, 0.0)
         donator.runCommand("rg start")
         donator.standAt(helper, 40280.0, 1.0, 80.0) // same 6561: fits the Donator cap
@@ -156,7 +156,7 @@ class RankGameTest {
         val target = MessageCapturingPlayer.join(helper, "RankSetTarget")
         stranger.runCommand("rank set RankSetTarget donator")
         helper.assertUnknownCommand(stranger, "a non-admin /rank set")
-        helper.assertTrue(RankFeature.rankOf(target) != Rank.DONATOR, "a non-admin changed someone's rank")
+        helper.assertTrue(!RankFeature.isDonator(target.uuid), "a non-admin changed someone's rank")
         stranger.leave()
         target.leave()
         helper.succeed()
@@ -168,7 +168,7 @@ class RankGameTest {
         admin.makeAdmin()
         val target = MessageCapturingPlayer.join(helper, "RankSetOnline")
         admin.runCommand("rank set RankSetOnline donator")
-        helper.assertTrue(RankFeature.rankOf(target) == Rank.DONATOR, "the online target's rank did not change")
+        helper.assertTrue(RankFeature.isDonator(target.uuid), "the online target's rank did not change")
         admin.leave()
         target.leave()
         helper.succeed()
@@ -184,8 +184,8 @@ class RankGameTest {
 
         admin.runCommand("rank set RankSetOffline donator")
 
-        val stored = checkNotNull(MCTraveler.persistence).players.rank(targetUuid)
-        helper.assertValueEqual(checkNotNull(stored), Rank.DONATOR.name, "the offline target's stored rank")
+        val players = checkNotNull(MCTraveler.persistence).players
+        helper.assertTrue(players.donator(targetUuid) == true, "the offline target is not stored as a Donator")
         admin.leave()
         helper.succeed()
     }
@@ -195,7 +195,7 @@ class RankGameTest {
     @GameTest(maxTicks = 40)
     fun aDonatorsSignMarkdownIsColored(helper: GameTestHelper) {
         val donator = MessageCapturingPlayer.join(helper, "RankSignDon")
-        RankFeature.setRank(donator, Rank.DONATOR)
+        RankFeature.setDonator(donator, true)
         val sign = helper.placeRankTestSign(donator)
         donator.writesOnRankTestSign(helper, "%aGreen%r plain")
 

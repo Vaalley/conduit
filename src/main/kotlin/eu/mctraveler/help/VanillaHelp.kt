@@ -102,7 +102,6 @@ object VanillaHelp {
         "setidletimeout" to CommandHelp(
             "Sets how many minutes a player can sit idle before being kicked. 0 turns the kick off.",
         ),
-        "setworldspawn" to CommandHelp("Sets the spawn point of the world, and the way new players face."),
         "spawnpoint" to CommandHelp("Sets where a player respawns."),
         "spectate" to CommandHelp(
             "Makes a player in spectator mode watch through an entity's eyes, or stops them.",

@@ -92,6 +92,7 @@ class MessageCapturingPlayer(
     /** Makes this player an Admin: a vanilla operator, via the real ops list. */
     fun makeAdmin() {
         level().server.playerList.op(nameAndId())
+        eu.mctraveler.admin.StaffAccess.setOnForTests(uuid, true)
     }
 
     /** Leaves the server (test cleanup). */

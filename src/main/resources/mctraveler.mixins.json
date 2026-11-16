@@ -44,6 +44,8 @@
     "RegionFarmlandMixin",
     "TrapdoorSupportMixin",
     "RegionBoatPushMixin",
+    "StaffPermissionsMixin",
+    "StaffCommandNodeMixin",
     "RegionBucketMixin",
     "RespawnAnchorPlacementMixin",
     "StrawBedSleepTrackingMixin",
