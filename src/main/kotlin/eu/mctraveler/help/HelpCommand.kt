@@ -60,7 +60,7 @@ object HelpCommand {
         HelpIndex.build(
             source.server.commands.dispatcher,
             source,
-            viewerIsAdmin = source.player?.let(Audience.ADMIN::permits) ?: true,
+            viewerIsAdmin = source.player?.let(Audience.STAFF::permits) ?: true,
             catalog = HelpCatalog.DEFAULT,
         )
 }

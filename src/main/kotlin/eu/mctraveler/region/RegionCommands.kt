@@ -237,7 +237,7 @@ object RegionCommands {
         if (area <= 9) {
             return Paint.error("Region too small")
         }
-        val areaCap = eu.mctraveler.rank.RankFeature.rankOf(player).regionAreaCap
+        val areaCap = eu.mctraveler.rank.RankFeature.effectiveRank(player).regionAreaCap
         if (area > areaCap && !RegionsFeature.isAdmin(player)) {
             return Paint.error(
                 "Region too large (${floor(area).toInt()} blocks). " +
@@ -338,7 +338,7 @@ object RegionCommands {
         }
 
         val area = (maxX - minX + 1).toLong() * (maxZ - minZ + 1).toLong()
-        val areaCap = eu.mctraveler.rank.RankFeature.rankOf(player).regionAreaCap
+        val areaCap = eu.mctraveler.rank.RankFeature.effectiveRank(player).regionAreaCap
         if (area > areaCap && !RegionsFeature.isAdmin(player)) {
             return Paint.error(
                 "Region too large ($area blocks). Limit is $areaCap blocks. Ask an admin to extend it further.",
@@ -382,7 +382,7 @@ object RegionCommands {
         return if (RegionsFeature.isAdmin(player)) {
             Paint("${region.title} is ${width}x${depth} = ${area} blocks (no limit for admins)")
         } else {
-            val cap = RankFeature.rankOf(player).regionAreaCap
+            val cap = RankFeature.effectiveRank(player).regionAreaCap
             Paint("${region.title} is ${width}x${depth} = ${area} blocks (limit ${cap} blocks)")
         }
     }
@@ -544,7 +544,7 @@ object RegionCommands {
      */
     private fun boundsGate(player: ServerPlayer): Component? {
         if (RegionsFeature.isAdmin(player)) return null
-        val donator = runCatching { RankFeature.rankOf(player) == eu.mctraveler.rank.Rank.DONATOR }.getOrDefault(false)
+        val donator = runCatching { RankFeature.hasDonatorPerks(player) }.getOrDefault(false)
         return if (donator) null else Paint.error("You must be a Donator or an admin to use this command")
     }
 

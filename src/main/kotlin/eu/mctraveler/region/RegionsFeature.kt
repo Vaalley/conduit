@@ -32,13 +32,14 @@ object RegionsFeature {
         checkNotNull(service) { "the Region service is not started" }
 
     /**
-     * Admin means vanilla operator status (spec User Story 41): the vanilla
-     * ops list is the single source of truth, managed by vanilla `/op` and
-     * `/deop`. Checked against the list itself rather than a permission
-     * level so the answer can never disagree with `ops.json`.
+     * Staff with admin mode on: an operator (vanilla `ops.json`, managed by `/op` and
+     * `/deop`) or a Moderator who has run `/admin`. Off, they are ordinary players,
+     * so every admin power in the mod — regions, vanish, chat, the store — follows
+     * the switch. For the powers only operators have, see
+     * [eu.mctraveler.admin.StaffAccess.isFullAdmin].
      */
     fun isAdmin(player: ServerPlayer): Boolean =
-        player.level().server.playerList.isOp(player.nameAndId())
+        eu.mctraveler.admin.StaffAccess.isActive(player)
 
     /**
      * The refusal every admin-only command gives a player who is not one, or
@@ -48,6 +49,11 @@ object RegionsFeature {
      */
     fun adminGate(player: ServerPlayer): Component? =
         if (isAdmin(player)) null
+        else Paint.error("You must be an admin to use this command")
+
+    /** [adminGate] for the powers moderators do not get: an operator with admin mode on. */
+    fun fullAdminGate(player: ServerPlayer): Component? =
+        if (eu.mctraveler.admin.StaffAccess.isFullAdmin(player)) null
         else Paint.error("You must be an admin to use this command")
 
     /**

@@ -75,6 +75,18 @@ object RankFeature {
     /** [uuid]'s rank whether or not they are online — the stored record is what decides it. */
     fun rankOf(uuid: UUID): Rank = rankOf(store(), uuid)
 
+    /**
+     * The rank a player's perks follow: an operator counts as at least a Donator even
+     * while admin mode is off (that is what "the same as a Donator" means for them).
+     */
+    fun effectiveRank(player: ServerPlayer): Rank {
+        val rank = rankOf(player)
+        return if (!rank.hasDonatorPerks && eu.mctraveler.admin.StaffAccess.isOperator(player)) Rank.DONATOR else rank
+    }
+
+    /** Donator perks (region cap, markdown, locator colour): Donators, Moderators and operators. */
+    fun hasDonatorPerks(player: ServerPlayer): Boolean = effectiveRank(player).hasDonatorPerks
+
     fun setRank(player: ServerPlayer, rank: Rank) {
         store().setRank(player.uuid, rank.name)
         resyncCommands(player)

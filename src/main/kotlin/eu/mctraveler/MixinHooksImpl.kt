@@ -61,6 +61,21 @@ object MixinHooksImpl : MixinHooks {
 
     override fun isAway(player: ServerPlayer): Boolean = AwayFeature.isAway(player)
 
+    override fun profilePermissions(
+        server: MinecraftServer,
+        id: NameAndId,
+        vanilla: net.minecraft.server.permissions.LevelBasedPermissionSet,
+    ) = eu.mctraveler.admin.StaffAccess.profilePermissions(server, id, vanilla)
+
+    override fun hidesCommand(node: com.mojang.brigadier.tree.CommandNode<*>, source: Any): Boolean =
+        source is net.minecraft.commands.CommandSourceStack &&
+            eu.mctraveler.admin.StaffAccess.hidesCommand(node, source)
+
+    override fun beforeCommand(player: ServerPlayer, command: String) =
+        eu.mctraveler.admin.AdminFeature.beforeCommand(player, command)
+
+    override fun afterCommand(player: ServerPlayer) = eu.mctraveler.admin.AdminFeature.afterCommand(player)
+
     override fun decorateStatus(status: ServerStatus, server: MinecraftServer): ServerStatus =
         Motd.decorate(status, server)
 
@@ -94,7 +109,7 @@ object MixinHooksImpl : MixinHooks {
         eu.mctraveler.vanish.VanishFeature.isHiddenFrom(target, viewer)
 
     override fun markdownLineFor(editor: ServerPlayer, raw: String): Component? =
-        if (eu.mctraveler.rank.RankFeature.rankOf(editor) == eu.mctraveler.rank.Rank.DONATOR ||
+        if (eu.mctraveler.rank.RankFeature.hasDonatorPerks(editor) ||
             eu.mctraveler.region.RegionsFeature.isAdmin(editor)
         ) {
             eu.mctraveler.text.Markdown.parse(raw)

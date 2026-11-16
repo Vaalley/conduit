@@ -158,7 +158,8 @@ class HelpCatalog(
                 ),
                 // Admin-only commands: hidden from everyone else, so only admins ever read these.
                 "rank" to CommandHelp(
-                    "Sets a player's rank: newbie, traveler or donator. Works on players who are offline too.",
+                    "Sets a player's rank: newbie, traveler, donator or, for admins, moderator. Moderators can only set the ranks " +
+                        "below their own. Works on players who are offline too.",
                 ),
                 "economy" to CommandHelp("Shows the total money supply and how much moved in the last 7 days."),
                 "embassy" to CommandHelp(
@@ -169,8 +170,16 @@ class HelpCatalog(
                     "Sets how much energy (0 to 5) a player's Teleportation Crystals have. Sets your own when " +
                         "no player is given.",
                 ),
+                "admin" to CommandHelp(
+                    "Turns your staff powers on or off; they are off by default and after every rejoin. Admins are put " +
+                        "in creative with an empty inventory until they turn it off again, when everything is given back. " +
+                        "Moderators keep survival and their items.",
+                ),
+                "back" to CommandHelp(
+                    "Returns you to where you stood before your last /teleport. Crystal teleports do not count.",
+                ),
                 "vanish" to CommandHelp(
-                    "Hides you from everyone who is not an admin, and puts you in spectator mode. Run it again to " +
+                    "Hides you from everyone who is not staff, and puts you in spectator mode. Run it again to " +
                         "come back.",
                 ),
                 "ban" to CommandHelp(

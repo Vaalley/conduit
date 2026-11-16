@@ -65,7 +65,7 @@ object LocatorColor {
 
     /** Whether [player] may change their locator colour: a Donator, or an admin. */
     fun allowed(player: ServerPlayer): Boolean =
-        runCatching { RankFeature.rankOf(player) == Rank.DONATOR }.getOrDefault(false) ||
+        runCatching { RankFeature.hasDonatorPerks(player) }.getOrDefault(false) ||
             RegionsFeature.isAdmin(player)
 
     private fun set(player: ServerPlayer, input: String): net.minecraft.network.chat.Component {

@@ -5,7 +5,8 @@ import eu.mctraveler.text.Paint
 /**
  * The rank ladder: `Newbie` (fresh account, cannot create regions) →
  * `Traveler` (the mod's long-standing default — every existing player before
- * this feature) → `Donator` (a bigger region cap, sign/death-message markdown).
+ * this feature) → `Donator` (a bigger region cap, sign/death-message markdown) → `Moderator`
+ * (staff: the moderation commands, once they switch on `/admin`).
  *
  * Stored by [name] in [eu.mctraveler.persistence.PlayerStore.rank].
  */
@@ -13,7 +14,14 @@ enum class Rank(val label: String, val chatColor: Paint, val regionAreaCap: Int)
     NEWBIE("Newbie", Paint.darkAqua, RegionCaps.DEFAULT),
     TRAVELER("Traveler", Paint.green, RegionCaps.DEFAULT),
     DONATOR("Donator", Paint.gold, RegionCaps.DONATOR),
+    MODERATOR("Moderator", Paint.red, RegionCaps.DONATOR),
     ;
+
+    /** Donator perks (bigger region cap, markdown, locator colour) come with Donator and everything above it. */
+    val hasDonatorPerks: Boolean get() = this >= DONATOR
+
+    /** Whether this rank sits above [other] on the ladder. */
+    fun outranks(other: Rank): Boolean = this > other
 
     companion object {
         /** Every rank name, lowercase, in ladder order — `/rank set`'s tab completion. */

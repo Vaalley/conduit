@@ -37,7 +37,7 @@ object CrystalCommands {
     fun register(dispatcher: CommandDispatcher<CommandSourceStack>) {
         dispatcher.register(
             Commands.literal(NAME)
-                .requires(Audience.ADMIN.gate)
+                .requires(Audience.STAFF.gate)
                 // Wholly admin-only: the gate above hides the root from everyone else.
                 // The in-body adminGate below stays as a second line.
                 .executes { ctx -> reply(ctx) { Paint.usage("/$NAME <energy> [player]") } }
