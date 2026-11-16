@@ -17,8 +17,8 @@ import net.minecraft.stats.Stats
 
 /**
  * The rank ladder ([Rank]): a Newbie is welcomed on their first ever join and
- * promoted to Traveler after an hour of play time; Donator is admin-granted
- * (`/rank set`, [RankCommands]).
+ * promoted to Traveler after an hour of play time; Moderator and the Donator extra
+ * are granted by staff (`/rank set`, [RankCommands]).
  *
  * A player record that predates this feature (every existing player) has no
  * stored rank at all — [rankOf] reads that as Traveler, never Newbie, so
@@ -65,8 +65,26 @@ object RankFeature {
      * record is grandfathered in as a Traveler.
      */
     fun rankOf(store: PlayerStore, uuid: UUID): Rank =
+        // A stored "DONATOR" is the old ladder: that player is a Traveler who donates.
         store.rank(uuid)?.let(Rank::parse)
             ?: if (store.hasRecord(uuid)) Rank.TRAVELER else Rank.NEWBIE
+
+    /** Whether [uuid] holds the Donator extra (or still has the old stored `DONATOR` rank). */
+    fun isDonator(store: PlayerStore, uuid: UUID): Boolean =
+        store.donator(uuid) ?: store.rank(uuid).equals(LEGACY_DONATOR, ignoreCase = true)
+
+    /** The colour of the Donator extra, which wins over the rank colour. */
+    val DONATOR_COLOR: Paint get() = Paint.gold
+
+    private const val LEGACY_DONATOR = "DONATOR"
+
+    /** Moves an old stored `DONATOR` rank to its new shape: a Traveler with the extra. */
+    private fun migrateLegacy(store: PlayerStore, uuid: UUID) {
+        if (store.rank(uuid).equals(LEGACY_DONATOR, ignoreCase = true)) {
+            store.setDonator(uuid, true)
+            store.setRank(uuid, Rank.TRAVELER.name)
+        }
+    }
 
     // -- player-shaped façade --
 
@@ -76,18 +94,33 @@ object RankFeature {
     fun rankOf(uuid: UUID): Rank = rankOf(store(), uuid)
 
     /**
-     * The rank a player's perks follow: an operator counts as at least a Donator even
-     * while admin mode is off (that is what "the same as a Donator" means for them).
+     * The rank a player's permissions follow: an operator is at least a Traveler even with
+     * admin mode off, so they are never held back as a Newbie.
      */
     fun effectiveRank(player: ServerPlayer): Rank {
         val rank = rankOf(player)
-        return if (!rank.hasDonatorPerks && eu.mctraveler.admin.StaffAccess.isOperator(player)) Rank.DONATOR else rank
+        return if (rank == Rank.NEWBIE && eu.mctraveler.admin.StaffAccess.isOperator(player)) Rank.TRAVELER else rank
     }
 
-    /** Donator perks (region cap, markdown, locator colour): Donators, Moderators and operators. */
-    fun hasDonatorPerks(player: ServerPlayer): Boolean = effectiveRank(player).hasDonatorPerks
+    /** Whether [player] holds the Donator extra: the bigger region cap, markdown and locator colour. */
+    fun hasDonatorPerks(player: ServerPlayer): Boolean = isDonator(store(), player.uuid)
+
+    /** [uuid] whether or not they are online. */
+    fun isDonator(uuid: UUID): Boolean = isDonator(store(), uuid)
+
+    /** The area cap, in blocks, of the regions [player] may make. */
+    fun regionCap(player: ServerPlayer): Int =
+        if (hasDonatorPerks(player)) Rank.DONATOR_REGION_CAP else Rank.REGION_CAP
+
+    /** Gives or takes the Donator extra, leaving the rank alone. */
+    fun setDonator(player: ServerPlayer, donator: Boolean) {
+        migrateLegacy(store(), player.uuid)
+        store().setDonator(player.uuid, donator)
+        resyncCommands(player)
+    }
 
     fun setRank(player: ServerPlayer, rank: Rank) {
+        migrateLegacy(store(), player.uuid)
         store().setRank(player.uuid, rank.name)
         resyncCommands(player)
     }
@@ -110,7 +143,7 @@ object RankFeature {
      * the fallback [MCTraveler.LOGGER] only warns about.
      */
     fun nameColor(player: ServerPlayer): Paint = try {
-        rankOf(player).chatColor
+        if (hasDonatorPerks(player)) DONATOR_COLOR else rankOf(player).chatColor
     } catch (failure: Exception) {
         MCTraveler.LOGGER.warn("Could not read ${player.gameProfile.name}'s rank; showing the default color", failure)
         Rank.TRAVELER.chatColor

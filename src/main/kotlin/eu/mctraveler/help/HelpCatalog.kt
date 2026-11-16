@@ -59,8 +59,8 @@ class HelpCatalog(
         }
 
         private fun defaultEntries(): Map<String, CommandHelp> {
-            val travelerCap = Rank.TRAVELER.regionAreaCap
-            val donatorCap = Rank.DONATOR.regionAreaCap
+            val travelerCap = Rank.REGION_CAP
+            val donatorCap = Rank.DONATOR_REGION_CAP
             return mapOf(
                 "help" to CommandHelp(
                     "Lists the commands you can use, 10 at a time. Click a command to read about it, or a page " +
@@ -158,8 +158,9 @@ class HelpCatalog(
                 ),
                 // Admin-only commands: hidden from everyone else, so only admins ever read these.
                 "rank" to CommandHelp(
-                    "Sets a player's rank: newbie, traveler, donator or, for admins, moderator. Moderators can only set the ranks " +
-                        "below their own. Works on players who are offline too.",
+                    "Sets a player's rank: newbie, traveler or, for admins, moderator. Moderators can only set the ranks " +
+                        "below their own. donator and no-donator give or take the Donator extra, which a player of any " +
+                        "rank can hold. Works on players who are offline too.",
                 ),
                 "economy" to CommandHelp("Shows the total money supply and how much moved in the last 7 days."),
                 "embassy" to CommandHelp(

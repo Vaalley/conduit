@@ -54,7 +54,8 @@ class AdminModeGameTest {
             helper.assertFalse(usable(server, admin, "ban"), "/ban must be gone while admin mode is off")
             helper.assertFalse(usable(server, admin, "vanish"), "/vanish must be gone while admin mode is off")
             helper.assertTrue(usable(server, admin, "admin"), "/admin must be offered to an operator")
-            helper.assertTrue(RankFeature.hasDonatorPerks(admin.player), "an operator keeps Donator perks")
+            helper.assertTrue(RankFeature.effectiveRank(admin.player) == Rank.TRAVELER, "an operator out of admin mode is a Traveler")
+            helper.assertTrue(!RankFeature.hasDonatorPerks(admin.player), "Donator is an extra, not something an operator gets")
             cleanup(server, admin)
             helper.succeed()
         }
@@ -164,9 +165,9 @@ class AdminModeGameTest {
         helper.runAfterDelay(2) {
             moderator.runCommand("admin")
             moderator.runCommand("rank set AdmRankTarget donator")
-            helper.assertTrue(RankFeature.rankOf(target.player) == Rank.DONATOR, "a moderator can grant Donator")
+            helper.assertTrue(RankFeature.isDonator(target.player.uuid), "a moderator can grant the Donator extra")
             moderator.runCommand("rank set AdmRankTarget moderator")
-            helper.assertTrue(RankFeature.rankOf(target.player) == Rank.DONATOR, "a moderator cannot grant Moderator")
+            helper.assertTrue(RankFeature.rankOf(target.player) != Rank.MODERATOR, "a moderator cannot grant Moderator")
             moderator.runCommand("rank set AdmRankOther traveler")
             helper.assertTrue(RankFeature.rankOf(other.player) == Rank.MODERATOR, "a moderator cannot demote a moderator")
             cleanup(server, moderator, target, other)
@@ -210,6 +211,31 @@ class AdminModeGameTest {
             helper.assertTrue(AdminFeature.backSpot(admin.player.uuid) == null, "/back is used up")
             cleanup(server, admin)
             helper.succeed()
+        }
+    }
+
+    @GameTest(maxTicks = 100)
+    fun donatorIsAnExtraOnTopOfAnyRank(helper: GameTestHelper) {
+        val server = helper.level.server
+        val legacy = TestPlayer.join(server, "AdmLegacyDon")
+        val players = checkNotNull(MCTraveler.persistence).players
+        try {
+            // The old ladder stored Donator as a rank of its own.
+            players.setRank(legacy.player.uuid, "DONATOR")
+            helper.assertTrue(RankFeature.rankOf(legacy.player) == Rank.TRAVELER, "an old Donator is a Traveler")
+            helper.assertTrue(RankFeature.isDonator(legacy.player.uuid), "an old Donator still donates")
+
+            RankFeature.setRank(legacy.player, Rank.MODERATOR)
+            helper.assertTrue(RankFeature.rankOf(legacy.player) == Rank.MODERATOR, "the rank changed")
+            helper.assertTrue(RankFeature.isDonator(legacy.player.uuid), "changing the rank kept the extra")
+            helper.assertTrue(RankFeature.nameColor(legacy.player)("x") == RankFeature.DONATOR_COLOR("x"), "a donating moderator wears the Donator colour")
+
+            RankFeature.setDonator(legacy.player, false)
+            helper.assertTrue(!RankFeature.isDonator(legacy.player.uuid), "the extra can be taken away")
+            helper.assertTrue(RankFeature.nameColor(legacy.player)("x") == Rank.TRAVELER.chatColor("x"), "a moderator wears the Traveler colour")
+            helper.succeed()
+        } finally {
+            legacy.disconnect()
         }
     }
 

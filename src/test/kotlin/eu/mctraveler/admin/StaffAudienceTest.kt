@@ -11,22 +11,22 @@ class StaffAudienceTest {
 
     @Test
     fun theLadderRunsFromNewbieToModerator() {
-        assertEquals(
-            listOf(Rank.NEWBIE, Rank.TRAVELER, Rank.DONATOR, Rank.MODERATOR),
-            Rank.entries.toList(),
-        )
-        assertTrue(Rank.MODERATOR.outranks(Rank.DONATOR))
-        assertFalse(Rank.DONATOR.outranks(Rank.DONATOR))
-        assertFalse(Rank.TRAVELER.outranks(Rank.DONATOR))
+        assertEquals(listOf(Rank.NEWBIE, Rank.TRAVELER, Rank.MODERATOR), Rank.entries.toList())
+        assertTrue(Rank.MODERATOR.outranks(Rank.TRAVELER))
+        assertFalse(Rank.TRAVELER.outranks(Rank.TRAVELER))
+        assertFalse(Rank.NEWBIE.outranks(Rank.TRAVELER))
+        assertEquals(listOf("newbie", "traveler", "moderator"), Rank.COMMAND_NAMES)
     }
 
     @Test
-    fun moderatorsKeepTheDonatorPerks() {
-        assertTrue(Rank.MODERATOR.hasDonatorPerks)
-        assertTrue(Rank.DONATOR.hasDonatorPerks)
-        assertFalse(Rank.TRAVELER.hasDonatorPerks)
-        assertEquals(Rank.DONATOR.regionAreaCap, Rank.MODERATOR.regionAreaCap)
-        assertEquals("moderator", Rank.COMMAND_NAMES.last())
+    fun moderatorsWearTheTravelerColour() {
+        assertEquals(Rank.TRAVELER.chatColor("x"), Rank.MODERATOR.chatColor("x"))
+    }
+
+    @Test
+    fun donatorIsNotARank() {
+        assertEquals(null, Rank.parse("donator"))
+        assertTrue(Rank.DONATOR_REGION_CAP > Rank.REGION_CAP)
     }
 
     @Test
@@ -35,7 +35,7 @@ class StaffAudienceTest {
         assertFalse(Audience.STAFF.permits(admin = false, rank = Rank.MODERATOR, staff = false))
         assertTrue(Audience.STAFF.permits(admin = false, rank = Rank.MODERATOR, staff = true))
         assertTrue(Audience.STAFF.permits(admin = true, rank = Rank.TRAVELER))
-        assertFalse(Audience.STAFF.permits(admin = false, rank = Rank.DONATOR, staff = false))
+        assertFalse(Audience.STAFF.permits(admin = false, rank = Rank.TRAVELER, staff = false, donator = true))
     }
 
     @Test
@@ -45,10 +45,11 @@ class StaffAudienceTest {
     }
 
     @Test
-    fun moderatorsStillPassTheLowerAudiencesOutsideAdminMode() {
-        assertTrue(Audience.DONATOR.permits(admin = false, rank = Rank.MODERATOR, staff = false))
+    fun donatorPerksComeFromTheExtraNotTheRank() {
+        assertFalse(Audience.DONATOR.permits(admin = false, rank = Rank.MODERATOR, staff = false))
+        assertTrue(Audience.DONATOR.permits(admin = false, rank = Rank.MODERATOR, staff = false, donator = true))
+        assertTrue(Audience.DONATOR.permits(admin = false, rank = Rank.NEWBIE, staff = false, donator = true))
         assertTrue(Audience.TRAVELER.permits(admin = false, rank = Rank.MODERATOR, staff = false))
-        assertFalse(Audience.DONATOR.permits(admin = false, rank = Rank.TRAVELER, staff = false))
     }
 
     @Test
