@@ -1,6 +1,7 @@
 package eu.mctraveler.passport
 
 import com.google.gson.Gson
+import eu.mctraveler.MinecraftTestBootstrap
 import eu.mctraveler.region.Region
 import eu.mctraveler.region.RegionService
 import java.nio.file.Files
@@ -10,10 +11,19 @@ import net.minecraft.stats.Stats
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 
 class PassportTest {
+    companion object {
+        // The stamps touch Stats, which needs the registries. Without this the test only
+        // passed when another test class happened to bootstrap Minecraft first.
+        @JvmStatic
+        @BeforeAll
+        fun bootstrapMinecraft() = MinecraftTestBootstrap.ensure()
+    }
+
     @TempDir
     lateinit var dir: Path
 

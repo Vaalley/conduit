@@ -123,6 +123,19 @@ object MixinHooksImpl : MixinHooks {
         sign: net.minecraft.world.level.block.entity.SignBlockEntity,
     ) = eu.mctraveler.text.SignNames.onSignLoadedOrChanged(level, pos, sign)
 
+    override fun onSignEdited(editor: ServerPlayer, sign: net.minecraft.world.level.block.entity.SignBlockEntity) {
+        // A "<wilderness>" sign becomes a wilderness sign when staff in admin mode write it.
+        val level = sign.level ?: return
+        if (!eu.mctraveler.region.RegionsFeature.isAdmin(editor)) return
+        try {
+            if (eu.mctraveler.rtp.RtpSigns.convertToken(level, sign)) {
+                eu.mctraveler.text.SignNames.onSignLoadedOrChanged(level, sign.blockPos, sign)
+            }
+        } catch (failure: Exception) {
+            MCTraveler.LOGGER.warn("Could not turn the sign at {} into a wilderness sign", sign.blockPos, failure)
+        }
+    }
+
     override fun onSignRemoved(level: Level, pos: BlockPos) =
         eu.mctraveler.text.SignNames.onSignRemoved(level, pos)
 

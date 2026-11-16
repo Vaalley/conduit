@@ -78,6 +78,9 @@ interface MixinHooks {
      */
     fun markdownLineFor(editor: ServerPlayer, raw: String): Component?
 
+    /** [editor] has just finished editing [sign]. */
+    fun onSignEdited(editor: ServerPlayer, sign: SignBlockEntity)
+
     /** Registers whether the chunk at [pos] holds a `<name>` sign (called once the sign is in-world). */
     fun onSignLoadedOrChanged(level: Level, pos: BlockPos, sign: SignBlockEntity)
 
@@ -217,6 +220,10 @@ object Hooks {
 
     @JvmStatic fun isVanishedFromViewer(target: ServerPlayer, viewer: ServerPlayer): Boolean =
         impl?.isVanishedFromViewer(target, viewer) ?: false
+
+    @JvmStatic fun onSignEdited(editor: ServerPlayer, sign: SignBlockEntity) {
+        impl?.onSignEdited(editor, sign)
+    }
 
     @JvmStatic fun markdownLineFor(editor: ServerPlayer, raw: String): Component? =
         impl?.markdownLineFor(editor, raw)
