@@ -176,7 +176,8 @@ object EconomyFeature {
             ),
     )
 
-    private fun drainJoins(server: MinecraftServer) {
+    /** Public for tests: pays out any join bonus still queued, so a test can set balances afterwards. */
+    fun drainJoins(server: MinecraftServer) {
         while (true) {
             val pending = pendingJoins.removeFirstOrNull() ?: break
             val uuid = pending.uuid
