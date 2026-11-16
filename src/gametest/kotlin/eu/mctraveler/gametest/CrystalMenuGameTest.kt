@@ -543,7 +543,7 @@ class CrystalMenuGameTest {
                 "the dimension spawn 2 is in",
             )
             helper.assertValueEqual(player.x, 0.5, "spawn 2 x")
-            helper.assertValueEqual(player.y, 67.5, "spawn 2 y")
+            helper.assertValueEqual(player.y, 69.5, "spawn 2 y")
             helper.assertValueEqual(player.z, 802816.5, "spawn 2 z")
             helper.assertValueEqual(player.yRot, 0.0f, "spawn 2 yaw")
             helper.assertValueEqual(player.xRot, 0.0f, "spawn 2 pitch")

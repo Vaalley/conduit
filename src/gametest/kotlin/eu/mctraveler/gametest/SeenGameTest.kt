@@ -73,8 +73,8 @@ class SeenGameTest {
     fun aVanishedAdminReadsAsOfflineToEveryoneButAdmins(helper: GameTestHelper) {
         val server = helper.level.server
         val stranger = TestPlayer.join(server, "SeenStrangerD")
-        val adminViewer = TestPlayer.join(server, "SeenAdminViewerD").also { server.playerList.op(it.player.nameAndId()) }
-        val vanished = TestPlayer.join(server, "SeenVanishedD").also { server.playerList.op(it.player.nameAndId()) }
+        val adminViewer = TestPlayer.join(server, "SeenAdminViewerD").also { server.playerList.op(it.player.nameAndId()); eu.mctraveler.admin.StaffAccess.setOnForTests(it.player.uuid, true) }
+        val vanished = TestPlayer.join(server, "SeenVanishedD").also { server.playerList.op(it.player.nameAndId()); eu.mctraveler.admin.StaffAccess.setOnForTests(it.player.uuid, true) }
         vanished.runCommand("vanish")
 
         helper.runAfterDelay(3) {

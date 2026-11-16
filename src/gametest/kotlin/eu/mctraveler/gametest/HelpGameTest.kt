@@ -372,7 +372,7 @@ class HelpGameTest {
         val target = MessageCapturingPlayer.join(helper, "HelpRankTarget")
         try {
             PacketCapture.drain(target)
-            RankFeature.setRank(target, Rank.DONATOR)
+            RankFeature.setDonator(target, true)
             helper.assertTrue(
                 PacketCapture.drainOf<ClientboundCommandsPacket>(target).isNotEmpty(),
                 "setRank did not re-send the command tree",

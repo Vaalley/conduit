@@ -38,6 +38,7 @@ import net.minecraft.world.entity.monster.Enemy
 import net.minecraft.world.entity.monster.cubemob.SulfurCube
 import net.minecraft.world.entity.decoration.ArmorStand
 import net.minecraft.world.entity.decoration.BlockAttachedEntity
+import net.minecraft.world.entity.decoration.Cushion
 import net.minecraft.world.entity.npc.villager.AbstractVillager
 import net.minecraft.world.entity.projectile.Projectile
 import net.minecraft.world.entity.vehicle.boat.AbstractBoat
@@ -812,6 +813,10 @@ object RegionProtection {
         if (entity is SulfurCube) {
             return region == null || canModifyRegion(p, region) || refuse(p, region)
         }
+        // A cushion is a BlockAttachedEntity, which would put it under the
+        // decoration rule below — but its only interaction is sitting on it, so
+        // anyone may use one. Breaking it stays protected (allowsDecorationDamage).
+        if (entity is Cushion) return true
         if (isOwnedBy(entity, p)) return true
 
         val protecting = entityProtectedBy(p, region) ?: return true

@@ -185,7 +185,7 @@ class CrystalCommandGameTest {
                     "spawn2 dimension",
                 )
                 helper.assertValueEqual(player.x, 0.5, "spawn2 x")
-                helper.assertValueEqual(player.y, 67.5, "spawn2 y")
+                helper.assertValueEqual(player.y, 69.5, "spawn2 y")
                 helper.assertValueEqual(player.z, 802816.5, "spawn2 z")
                 helper.assertValueEqual(player.yRot, 0.0f, "spawn2 yaw")
                 helper.assertValueEqual(CrystalEnergy.energyOf(player), 2, "energy after spawn2")

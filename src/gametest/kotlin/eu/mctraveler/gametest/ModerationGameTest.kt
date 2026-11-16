@@ -243,6 +243,7 @@ class ModerationGameTest {
 
     private fun op(server: net.minecraft.server.MinecraftServer, player: TestPlayer) {
         server.playerList.op(player.player.nameAndId())
+        eu.mctraveler.admin.StaffAccess.setOnForTests(player.player.uuid, true)
     }
 
     private fun cleanup(vararg players: TestPlayer) {

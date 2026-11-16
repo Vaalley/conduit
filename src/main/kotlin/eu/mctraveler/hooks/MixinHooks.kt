@@ -38,6 +38,17 @@ interface MixinHooks {
     /** Issue #52: whether [player] is away and so excluded from the sleep-percentage maths. */
     fun isAway(player: ServerPlayer): Boolean
 
+    // Staff / admin mode
+    fun profilePermissions(
+        server: MinecraftServer,
+        id: net.minecraft.server.players.NameAndId,
+        vanilla: net.minecraft.server.permissions.LevelBasedPermissionSet,
+    ): net.minecraft.server.permissions.LevelBasedPermissionSet
+
+    fun hidesCommand(node: com.mojang.brigadier.tree.CommandNode<*>, source: Any): Boolean
+    fun beforeCommand(player: ServerPlayer, command: String)
+    fun afterCommand(player: ServerPlayer)
+
     // MOTD
     fun decorateStatus(status: ServerStatus, server: MinecraftServer): ServerStatus
 
@@ -143,6 +154,23 @@ object Hooks {
     }
 
     @JvmStatic fun isAway(player: ServerPlayer): Boolean = impl?.isAway(player) ?: false
+
+    @JvmStatic fun profilePermissions(
+        server: MinecraftServer,
+        id: net.minecraft.server.players.NameAndId,
+        vanilla: net.minecraft.server.permissions.LevelBasedPermissionSet,
+    ): net.minecraft.server.permissions.LevelBasedPermissionSet = impl?.profilePermissions(server, id, vanilla) ?: vanilla
+
+    @JvmStatic fun hidesCommand(node: com.mojang.brigadier.tree.CommandNode<*>, source: Any): Boolean =
+        impl?.hidesCommand(node, source) ?: false
+
+    @JvmStatic fun beforeCommand(player: ServerPlayer, command: String) {
+        impl?.beforeCommand(player, command)
+    }
+
+    @JvmStatic fun afterCommand(player: ServerPlayer) {
+        impl?.afterCommand(player)
+    }
 
     @JvmStatic fun decorateStatus(status: ServerStatus, server: MinecraftServer): ServerStatus =
         impl?.decorateStatus(status, server) ?: status

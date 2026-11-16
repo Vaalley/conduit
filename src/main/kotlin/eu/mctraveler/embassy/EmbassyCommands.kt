@@ -31,7 +31,7 @@ object EmbassyCommands {
     fun register(dispatcher: CommandDispatcher<CommandSourceStack>) {
         dispatcher.register(
             Commands.literal("embassy")
-                .requires(Audience.ADMIN.gate)
+                .requires(Audience.STAFF.gate)
                 .executes { ctx ->
                     // Nucleus sent two plain lines, with no prefix at all, to
                     // any sender — the console included.

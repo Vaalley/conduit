@@ -32,7 +32,7 @@ class SignNameTokenGameTest {
     @GameTest(maxTicks = 40)
     fun eachViewerSeesTheirOwnNameWhereADonatorTypedTheToken(helper: GameTestHelper) {
         val donator = MessageCapturingPlayer.join(helper, "SignNameDon")
-        RankFeature.setRank(donator, Rank.DONATOR)
+        RankFeature.setDonator(donator, true)
         val sign = placeSign(helper, donator)
         writeFirstLine(helper, donator, "Hi <name>!")
 
@@ -54,7 +54,7 @@ class SignNameTokenGameTest {
     @GameTest(maxTicks = 40)
     fun aReaderWhoEntersTheChunkLaterGetsTheirNameAfterTheChunk(helper: GameTestHelper) {
         val donator = MessageCapturingPlayer.join(helper, "SignChunkDon")
-        RankFeature.setRank(donator, Rank.DONATOR)
+        RankFeature.setDonator(donator, true)
         val sign = placeSign(helper, donator)
         writeFirstLine(helper, donator, "Hi <name>!")
         val viewer = MessageCapturingPlayer.join(helper, "SignChunkLater")
