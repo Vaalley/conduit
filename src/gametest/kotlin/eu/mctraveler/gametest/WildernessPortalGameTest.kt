@@ -56,7 +56,12 @@ class WildernessPortalGameTest {
             helper.assertTrue(admin.messages.any { it.string.contains("Second position set") && it.string.contains("8 blocks") }, "no size in the second feedback")
             helper.assertTrue(admin.messages.any { it.string.contains("[Accept]") }, "no prompt to accept")
 
+            // Accept is a chat button: it runs a command that carries a one-time token.
+            val accept = admin.messages.flatMap { buttons(it) }.firstOrNull { it.startsWith("/wilderness portal accept ") }
+            helper.assertTrue(accept != null, "the Accept button carries no command")
             admin.runCommand("wilderness portal accept")
+            helper.assertBlockNotPresent(Blocks.WATER, first)
+            admin.runCommand(accept!!.removePrefix("/"))
             helper.assertBlockPresent(Blocks.WATER, first)
             helper.assertBlockPresent(Blocks.WATER, second)
             helper.assertTrue(WildernessPortals.all().any { it.box.volume == 8L }, "the portal was not recorded")
@@ -76,6 +81,12 @@ class WildernessPortalGameTest {
                 .forEach { WildernessPortals.remove(helper.level, it) }
             admin.leave()
         }
+    }
+
+    /** The commands the click events in [message] would run. */
+    private fun buttons(message: net.minecraft.network.chat.Component): List<String> {
+        val own = (message.style.clickEvent as? net.minecraft.network.chat.ClickEvent.RunCommand)?.command()
+        return listOfNotNull(own) + message.siblings.flatMap { buttons(it) }
     }
 
     @GameTest

@@ -240,6 +240,31 @@ class RtpGameTest {
     }
 
     @GameTest
+    fun onlyStaffEditsTurnAWildernessSignOn(helper: GameTestHelper) {
+        val visitor = MessageCapturingPlayer.join(helper, "RtpSignVisitor")
+        val staff = MessageCapturingPlayer.join(helper, "RtpSignStaff")
+        try {
+            staff.makeAdmin()
+            val lines = listOf("<wilderness>", "", "", "").map { net.minecraft.server.network.FilteredText.passThrough(it) }
+
+            val plain = helper.placeSign()
+            plain.setAllowedPlayerEditor(visitor.uuid)
+            plain.updateSignText(visitor, SignTextSlot.FRONT, lines)
+            helper.assertTrue(!RtpSigns.isMarked(plain), "an ordinary player made a wilderness sign")
+
+            helper.setBlock(BlockPos(2, 2, 3), Blocks.OAK_SIGN)
+            val staffSign = helper.level.getBlockEntity(helper.absolutePos(BlockPos(2, 2, 3))) as SignBlockEntity
+            staffSign.setAllowedPlayerEditor(staff.uuid)
+            staffSign.updateSignText(staff, SignTextSlot.FRONT, lines)
+            helper.assertTrue(RtpSigns.isMarked(staffSign), "staff in admin mode could not make a wilderness sign")
+            helper.succeed()
+        } finally {
+            visitor.leave()
+            staff.leave()
+        }
+    }
+
+    @GameTest
     fun aSignInTheEndSaysTheEnd(helper: GameTestHelper) {
         helper.assertValueEqual(RtpSigns.wildernessLines(inEnd = true)[0].string, "[The End]", "the End sign title")
         helper.assertValueEqual(RtpSigns.wildernessLines(inEnd = false)[0].string, "[Wilderness]", "the overworld sign title")

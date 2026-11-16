@@ -2,6 +2,7 @@ package eu.mctraveler.rtp
 
 import com.mojang.brigadier.Command
 import com.mojang.brigadier.CommandDispatcher
+import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.context.CommandContext
 import eu.mctraveler.command.Audience
 import eu.mctraveler.crystal.CrystalSpawns
@@ -64,10 +65,22 @@ object RtpFeature {
                 .then(
                     Commands.literal("portal")
                         .requires(Audience.STAFF.gate)
-                        .executes { ctx -> reply(ctx) { Paint.usage("/$NAME portal <create|accept|cancel|remove>") } }
+                        .executes { ctx -> reply(ctx) { Paint.usage("/$NAME portal <create|remove>") } }
                         .then(Commands.literal("create").executes { ctx -> reply(ctx) { staffOnly(it, PortalSelector::give) } })
-                        .then(Commands.literal("accept").executes { ctx -> reply(ctx) { staffOnly(it, PortalSelector::accept) } })
-                        .then(Commands.literal("cancel").executes { ctx -> reply(ctx) { staffOnly(it, PortalSelector::cancel) } })
+                        // The Accept and Cancel buttons in chat run these; the token they need is
+                        // only in the button, so they are not something to type.
+                        .then(
+                            Commands.literal("accept").then(
+                                Commands.argument("token", StringArgumentType.word())
+                                    .executes { ctx -> reply(ctx) { p -> staffOnly(p) { PortalSelector.accept(it, StringArgumentType.getString(ctx, "token")) } } },
+                            ),
+                        )
+                        .then(
+                            Commands.literal("cancel").then(
+                                Commands.argument("token", StringArgumentType.word())
+                                    .executes { ctx -> reply(ctx) { p -> staffOnly(p) { PortalSelector.cancel(it, StringArgumentType.getString(ctx, "token")) } } },
+                            ),
+                        )
                         .then(Commands.literal("remove").executes { ctx -> reply(ctx) { staffOnly(it, ::removeNearestPortal) } }),
                 ),
         )

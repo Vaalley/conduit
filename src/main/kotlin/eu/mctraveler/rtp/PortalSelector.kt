@@ -34,6 +34,8 @@ object PortalSelector {
     private const val TAG = "mctraveler_portal_selector"
 
     private class Selection(val dimension: ResourceKey<Level>) {
+        /** What the chat buttons carry; a new pair of corners gets a new one. */
+        var token: String = ""
         var first: BlockPos? = null
         var second: BlockPos? = null
     }
@@ -104,20 +106,24 @@ object PortalSelector {
             ),
         )
         if (size != null) {
+            selection.token = UUID.randomUUID().toString().substring(0, 8)
             player.sendSystemMessage(
                 Paint(
                     Paint.gray("Make this a wilderness portal? "),
-                    Paint.green.bold.runs("/wilderness portal accept")("[Accept]"),
+                    Paint.green.bold.runs("/wilderness portal accept ${selection.token}")("[Accept]"),
                     " ",
-                    Paint.red.bold.runs("/wilderness portal cancel")("[Cancel]"),
+                    Paint.red.bold.runs("/wilderness portal cancel ${selection.token}")("[Cancel]"),
                 ),
             )
         }
     }
 
-    /** `/wilderness portal accept`: builds the portal from the two selected corners. */
-    fun accept(player: ServerPlayer): Component {
-        val selection = selections[player.uuid]?.takeIf { it.dimension == player.level().dimension() }
+    /**
+     * The [Accept] button: builds the portal from the two selected corners. The command is
+     * only ever run by clicking, since it needs the [token] the button for this selection carries.
+     */
+    fun accept(player: ServerPlayer, token: String): Component {
+        val selection = selections[player.uuid]?.takeIf { it.dimension == player.level().dimension() && it.token == token }
         val a = selection?.first
         val b = selection?.second
         if (a == null || b == null) return Paint.error("Select two corners with the Portal selector first")
@@ -134,9 +140,11 @@ object PortalSelector {
         return Paint.success("Wilderness portal created (${box.volume} blocks). Walk into the water to travel.")
     }
 
-    /** `/wilderness portal cancel`: forgets the selection. */
-    fun cancel(player: ServerPlayer): Component {
-        selections.remove(player.uuid) ?: return Paint.error("You have nothing selected")
+    /** The [Cancel] button: forgets the selection. */
+    fun cancel(player: ServerPlayer, token: String): Component {
+        val selection = selections[player.uuid]
+        if (selection == null || selection.token != token) return Paint.error("You have nothing selected")
+        selections.remove(player.uuid)
         return Paint.success("Selection cleared")
     }
 
@@ -146,7 +154,7 @@ object PortalSelector {
         if (!player.inventory.add(tool())) return Paint.error("Your inventory is full")
         return Paint.success(
             "Left click a block for the first corner, right click for the second. ",
-            "Then accept in chat.",
+            "Then press Accept in chat.",
         )
     }
 }
