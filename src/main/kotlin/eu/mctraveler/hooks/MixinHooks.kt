@@ -108,6 +108,7 @@ interface MixinHooks {
     // Region environment
     fun allowsCreatureBlockChange(level: Level, pos: BlockPos, creature: Entity?): Boolean
     fun trapdoorKeepsSupporting(level: LevelReader, pos: BlockPos): Boolean
+    fun allowsBoatPush(boat: net.minecraft.world.entity.vehicle.boat.AbstractBoat, pusher: Entity): Boolean
     fun allowsExplosionDamage(level: Level, pos: BlockPos): Boolean
     fun removeExplosionBlockedBlocks(level: Level, exploded: MutableList<BlockPos>)
     fun allowsFireDamage(level: Level, pos: BlockPos): Boolean
@@ -277,6 +278,9 @@ object Hooks {
 
     @JvmStatic fun trapdoorKeepsSupporting(level: LevelReader, pos: BlockPos): Boolean =
         impl?.trapdoorKeepsSupporting(level, pos) ?: false
+
+    @JvmStatic fun allowsBoatPush(boat: net.minecraft.world.entity.vehicle.boat.AbstractBoat, pusher: Entity): Boolean =
+        impl?.allowsBoatPush(boat, pusher) ?: true
 
     @JvmStatic fun allowsExplosionDamage(level: Level, pos: BlockPos): Boolean =
         impl?.allowsExplosionDamage(level, pos) ?: true

@@ -56,6 +56,7 @@ import net.minecraft.world.level.block.LecternBlock
 import net.minecraft.world.level.block.LoomBlock
 import net.minecraft.world.level.block.NoteBlock
 import net.minecraft.world.level.block.RespawnAnchorBlock
+import net.minecraft.world.level.block.CopperGolemStatueBlock
 import net.minecraft.world.level.block.ShelfBlock
 import net.minecraft.world.level.block.SignBlock
 import net.minecraft.world.level.block.SmithingTableBlock
@@ -122,7 +123,7 @@ object RegionInteractables {
         is ComposterBlock, is AbstractCauldronBlock, is ChiseledBookShelfBlock,
         is DecoratedPotBlock, is JukeboxBlock, is DaylightDetectorBlock,
         is NoteBlock, is AnvilBlock, is FlowerPotBlock, is BeehiveBlock,
-        is ShelfBlock, is DragonEggBlock, is RespawnAnchorBlock, is SignBlock,
+        is ShelfBlock, is DragonEggBlock, is CopperGolemStatueBlock, is RespawnAnchorBlock, is SignBlock,
         // A cake is eaten slice by slice, and a candle (or a candle cake) is snuffed by an
         // empty hand and lit or added to by an item: all of it changes the region's build.
         is CakeBlock, is AbstractCandleBlock,

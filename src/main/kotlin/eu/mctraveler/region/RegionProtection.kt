@@ -125,7 +125,7 @@ object RegionProtection {
      * outside the region is still refused (the Portal captured the feet region
      * and so had this gap).
      */
-    private val pendingContainerRegion = HashMap<UUID, Pair<Region, Long>>()
+    private val pendingContainerRegion = HashMap<UUID, Pair<Region?, Long>>()
 
     /**
      * Last refusal-message tick per player and live region identity. Identity
@@ -402,6 +402,19 @@ object RegionProtection {
         }
     }
 
+    /**
+     * Whether [pusher] may shove [boat]. A chest boat inside a region does not move for a
+     * player who is not a member, which is what keeps it from being pushed out of the
+     * region; anything else (mobs, other boats, members, other boat kinds) is untouched.
+     */
+    @JvmStatic
+    fun allowsBoatPush(boat: AbstractBoat, pusher: Entity): Boolean {
+        if (boat !is AbstractChestBoat) return true
+        val player = pusher as? ServerPlayer ?: return true
+        val region = RegionsFeature.regionAt(boat.level(), boat.blockPosition()) ?: return true
+        return canModifyRegion(player, region)
+    }
+
     /** Releases the captured region: the container session is over. */
     @JvmStatic
     fun containerClosed(player: ServerPlayer) {
@@ -434,11 +447,10 @@ object RegionProtection {
 
     /** Records the region under the block [player] just right-clicked. */
     private fun rememberContainerBlock(player: ServerPlayer, region: Region?) {
-        if (region == null) {
-            pendingContainerRegion.remove(player.uuid)
-        } else {
-            pendingContainerRegion[player.uuid] = region to player.level().server.tickCount.toLong()
-        }
+        // A null region is remembered too: it says the clicked block is outside every
+        // region, so a container opened from it must not be judged by the region the
+        // player happens to be standing in.
+        pendingContainerRegion[player.uuid] = region to player.level().server.tickCount.toLong()
     }
 
     /**

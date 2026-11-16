@@ -179,6 +179,9 @@ object MixinHooksImpl : MixinHooks {
     override fun trapdoorKeepsSupporting(level: LevelReader, pos: BlockPos): Boolean =
         RegionEnvironment.trapdoorKeepsSupporting(level, pos)
 
+    override fun allowsBoatPush(boat: net.minecraft.world.entity.vehicle.boat.AbstractBoat, pusher: Entity): Boolean =
+        RegionProtection.allowsBoatPush(boat, pusher)
+
     override fun allowsExplosionDamage(level: Level, pos: BlockPos): Boolean =
         RegionEnvironment.allowsExplosionDamage(level, pos)
 
