@@ -113,7 +113,7 @@ class RegionAdminCommandGameTest {
     @GameTest
     fun aDonatorSetsAndReadsTheBoundsOfTheirOwnRegion(helper: GameTestHelper) {
         val donator = MessageCapturingPlayer.join(helper, "T12BndDon")
-        RankFeature.setRank(donator, Rank.DONATOR)
+        RankFeature.setDonator(donator, true)
         val region = createRegion(helper, donator, 0.0 to 0.0, 4.0 to 4.0)
         donator.standAt(helper, 2.0, 100.0, 2.0)
 
@@ -140,7 +140,7 @@ class RegionAdminCommandGameTest {
     fun aDonatorCannotTouchTheBoundsOfARegionThatIsNotTheirs(helper: GameTestHelper) {
         val owner = MessageCapturingPlayer.join(helper, "T12BndOwner")
         val donator = MessageCapturingPlayer.join(helper, "T12BndStranger")
-        RankFeature.setRank(donator, Rank.DONATOR)
+        RankFeature.setDonator(donator, true)
         val region = createRegion(helper, owner, 0.0 to 0.0, 4.0 to 4.0)
         donator.standAt(helper, 2.0, 100.0, 2.0)
 

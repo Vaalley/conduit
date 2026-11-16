@@ -653,7 +653,7 @@ class CrystalMenuGameTest {
                     listOf("Teleporting in 3...", "Teleporting in 2...", "Teleporting in 1..."),
                     "the count spoken to the player",
                 )
-                val spawn = helper.level.server.overworld().respawnData.pos()
+                val spawn = eu.mctraveler.crystal.CrystalSpawns.definitions()[1]
                 val distance = hypot(player.x - spawn.x, player.z - spawn.z)
                 helper.assertTrue(
                     distance >= RtpConfig.settings().minDistance - 1,
@@ -684,7 +684,7 @@ class CrystalMenuGameTest {
             player.containerMenu.clicked(WILDERNESS_SLOT, 0, ContainerInput.PICKUP, player)
             helper.assertOnlyMessage(
                 player,
-                Paint.error("You can use /rtp again in ", Paint.gold("5m")),
+                Paint.error("You can use /wilderness again in ", Paint.gold("5m")),
                 "the cooldown refusal",
             )
             helper.assertValueEqual(CrystalEnergy.energyOf(player), 5, "energy after a refused Wilderness")

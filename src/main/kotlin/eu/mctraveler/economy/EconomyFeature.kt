@@ -111,7 +111,7 @@ object EconomyFeature {
                         .suggests(players)
                         .executes { ctx ->
                             reply(ctx) { sender ->
-                                RegionsFeature.adminGate(sender)?.let { return@reply it }
+                                RegionsFeature.fullAdminGate(sender)?.let { return@reply it }
                                 val target = profile(ctx) ?: return@reply Paint.error("Player not found")
                                 Paint.balance(target.name(), " has ", Economy.format(economy().balanceOf(target.id())))
                             }
@@ -162,7 +162,7 @@ object EconomyFeature {
                     .executes { ctx ->
                         reply(ctx) { sender ->
                             val target = profile(ctx) ?: return@reply Paint.error("Player not found")
-                            RegionsFeature.adminGate(sender)?.let { return@reply it }
+                            RegionsFeature.fullAdminGate(sender)?.let { return@reply it }
                             val value = amount(ctx, minimum)
                                 ?: return@reply Paint.error("Amount must be a number like 12.50")
                             mutation(target.id(), value, sender)
@@ -176,7 +176,8 @@ object EconomyFeature {
             ),
     )
 
-    private fun drainJoins(server: MinecraftServer) {
+    /** Public for tests: pays out any join bonus still queued, so a test can set balances afterwards. */
+    fun drainJoins(server: MinecraftServer) {
         while (true) {
             val pending = pendingJoins.removeFirstOrNull() ?: break
             val uuid = pending.uuid
@@ -228,7 +229,7 @@ object EconomyFeature {
         val sender = context.source.playerOrException
         val actual = target ?: NameAndId(sender.uuid, sender.gameProfile.name)
         if (actual.id() != sender.uuid) {
-            RegionsFeature.adminGate(sender)?.let {
+            RegionsFeature.fullAdminGate(sender)?.let {
                 sender.sendSystemMessage(it)
                 return Command.SINGLE_SUCCESS
             }
@@ -262,7 +263,7 @@ object EconomyFeature {
     }
 
     private fun stats(player: ServerPlayer): Int {
-        RegionsFeature.adminGate(player)?.let {
+        RegionsFeature.fullAdminGate(player)?.let {
             player.sendSystemMessage(it)
             return Command.SINGLE_SUCCESS
         }

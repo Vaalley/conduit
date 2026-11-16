@@ -81,7 +81,7 @@ object DragonFightCommands {
                                 }
                                 .executes { context ->
                                     val admin = context.source.playerOrException
-                                    RegionsFeature.adminGate(admin)?.let {
+                                    RegionsFeature.fullAdminGate(admin)?.let {
                                         admin.sendSystemMessage(it)
                                         return@executes Command.SINGLE_SUCCESS
                                     }

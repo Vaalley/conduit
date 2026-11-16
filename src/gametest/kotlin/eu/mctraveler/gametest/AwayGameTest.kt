@@ -220,6 +220,26 @@ class AwayGameTest {
             actor.teleportTo(actor.x + 1.0, actor.y, actor.z)
         }
 
+    /** Turning the head is not activity: only moving to another block (or interacting) brings a player back. */
+    @GameTest(maxTicks = 100)
+    fun turningTheHeadDoesNotClearAway(helper: GameTestHelper) {
+        val actor = AwayTestPlayer.join(helper, "AwayLook")
+        helper.runAfterDelay(2) { actor.runCommand("away") }
+        helper.runAfterDelay(5) {
+            actor.yRot += 90f
+            actor.xRot = 30f
+        }
+        helper.runAfterDelay(12) {
+            helper.assertTrue(AwayFeature.isAway(actor), "turning the head must not bring a player back")
+            helper.assertTrue(
+                actor.received.none { it.string == "AwayLook is no longer away" },
+                "got a return line after only looking around",
+            )
+            actor.leave()
+            helper.succeed()
+        }
+    }
+
     /**
      * Shared skeleton: mark the actor away with /away, perform one interaction,
      * and expect the exact "no longer away" broadcast.

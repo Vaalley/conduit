@@ -134,6 +134,10 @@ class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
 
     override fun setRank(uuid: UUID, rank: String) = write(uuid, RANK, PortalJson.encodeString(rank))
 
+    override fun donator(uuid: UUID): Boolean? = read(uuid)[DONATOR]?.rawValue?.toBooleanStrictOrNull()
+
+    override fun setDonator(uuid: UUID, donator: Boolean) = write(uuid, DONATOR, donator.toString())
+
     override fun firstJoin(uuid: UUID): Long? {
         val timestamps = try {
             read(uuid)["timestamps"]?.rawValue ?: return null
@@ -310,6 +314,7 @@ class JsonPlayerStore(private val playersDir: Path) : PlayerStore {
 
         // Ranks: Newbie/Traveler/Donator.
         const val RANK = "rank"
+        const val DONATOR = "donator"
         const val LAST_LOGIN_AT = "lastLoginAt"
         const val LAST_LOGOUT_AT = "lastLogoutAt"
         const val LAST_LOCATION_WORLD = "lastWorld"
