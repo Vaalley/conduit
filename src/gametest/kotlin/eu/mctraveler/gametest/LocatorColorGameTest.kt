@@ -18,7 +18,7 @@ class LocatorColorGameTest {
 
     private fun donator(helper: GameTestHelper, name: String): MessageCapturingPlayer {
         val player = MessageCapturingPlayer.join(helper, name)
-        RankFeature.setRank(player, Rank.DONATOR)
+        RankFeature.setDonator(player, true)
         return player
     }
 

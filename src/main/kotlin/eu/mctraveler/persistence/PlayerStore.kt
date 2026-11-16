@@ -90,13 +90,18 @@ interface PlayerStore {
     fun hasRecord(uuid: UUID): Boolean
 
     /**
-     * The player's rank (`"NEWBIE"`, `"TRAVELER"`, `"DONATOR"`), or null if
+     * The player's rank (`"NEWBIE"`, `"TRAVELER"`, `"MODERATOR"`, or the legacy `"DONATOR"`), or null if
      * never recorded — read by [eu.mctraveler.rank.RankFeature], which owns
      * the default for that case.
      */
     fun rank(uuid: UUID): String?
 
     fun setRank(uuid: UUID, rank: String)
+
+    /** Whether the player holds the Donator extra, or null if never recorded. */
+    fun donator(uuid: UUID): Boolean?
+
+    fun setDonator(uuid: UUID, donator: Boolean)
 
     /** The legacy Portal first-seen timestamp, or null when absent/malformed. */
     fun firstJoin(uuid: UUID): Long?

@@ -388,10 +388,13 @@ class HelpTest {
         }
         assertFalse(Audience.TRAVELER.permits(admin = false, rank = Rank.NEWBIE))
         assertTrue(Audience.TRAVELER.permits(admin = false, rank = Rank.TRAVELER))
-        assertTrue(Audience.TRAVELER.permits(admin = false, rank = Rank.DONATOR))
+        assertTrue(Audience.TRAVELER.permits(admin = false, rank = Rank.MODERATOR))
+        // Donator is an extra any rank can hold, not a rank of its own.
         assertFalse(Audience.DONATOR.permits(admin = false, rank = Rank.NEWBIE))
         assertFalse(Audience.DONATOR.permits(admin = false, rank = Rank.TRAVELER))
-        assertTrue(Audience.DONATOR.permits(admin = false, rank = Rank.DONATOR))
+        assertFalse(Audience.DONATOR.permits(admin = false, rank = Rank.MODERATOR))
+        assertTrue(Audience.DONATOR.permits(admin = false, rank = Rank.TRAVELER, donator = true))
+        assertTrue(Audience.DONATOR.permits(admin = false, rank = Rank.NEWBIE, donator = true))
     }
 
     @Test

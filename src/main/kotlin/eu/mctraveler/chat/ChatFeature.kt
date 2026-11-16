@@ -284,7 +284,7 @@ object ChatFeature {
      * unreadable rank shows the plain name.
      */
     internal fun nameOr(player: ServerPlayer, plain: () -> Component): Component = runCatching {
-        if (eu.mctraveler.rank.RankFeature.rankOf(player).hasDonatorPerks) {
+        if (eu.mctraveler.rank.RankFeature.hasDonatorPerks(player)) {
             eu.mctraveler.rank.RankFeature.nameColor(player)(player.gameProfile.name)
         } else {
             plain()
