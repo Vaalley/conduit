@@ -139,6 +139,35 @@ class AdminModeGameTest {
         }
     }
 
+    /**
+     * Spark guards its commands with the top permission level. A stand-in with the same gate
+     * shows that a moderator in admin mode gets through it, and a moderator who has not
+     * switched it on does not.
+     */
+    @GameTest(maxTicks = 120)
+    fun moderatorsMayUseSpark(helper: GameTestHelper) {
+        val server = helper.level.server
+        val dispatcher = server.commands.dispatcher
+        val moderator = TestPlayer.join(server, "AdmSparkMod").also { moderator(it) }
+        val plain = TestPlayer.join(server, "AdmSparkPlain")
+        dispatcher.register(
+            net.minecraft.commands.Commands.literal("spark")
+                .requires(net.minecraft.commands.Commands.hasPermission(net.minecraft.commands.Commands.LEVEL_OWNERS))
+                .then(net.minecraft.commands.Commands.literal("tps").executes { 1 }),
+        )
+        try {
+            helper.assertFalse(usable(server, moderator, "spark"), "Spark before the moderator is in admin mode")
+            moderator.runCommand("admin")
+            helper.assertTrue(usable(server, moderator, "spark"), "Spark for a moderator in admin mode")
+            helper.assertFalse(usable(server, plain, "spark"), "Spark for an ordinary player")
+            helper.assertFalse(usable(server, moderator, "stop"), "the level Spark needs must not open /stop")
+            helper.succeed()
+        } finally {
+            eu.mctraveler.command.CommandTree.removeRootCommands(dispatcher, "spark")
+            cleanup(server, moderator, plain)
+        }
+    }
+
     @GameTest(maxTicks = 120)
     fun triggerIsForFullAdminsOnly(helper: GameTestHelper) {
         val server = helper.level.server
