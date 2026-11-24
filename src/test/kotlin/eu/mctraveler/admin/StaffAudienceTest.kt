@@ -55,7 +55,7 @@ class StaffAudienceTest {
     @Test
     fun moderatorVanillaCommandsAreTheListedOnes() {
         assertEquals(
-            setOf("tp", "teleport", "kill", "weather", "time", "whitelist", "recipe"),
+            setOf("tp", "teleport", "kill", "weather", "time", "whitelist", "recipe", "spark"),
             StaffAccess.MODERATOR_VANILLA_COMMANDS,
         )
     }

@@ -28,9 +28,12 @@ import net.minecraft.server.players.NameAndId
  * [MODERATOR_VANILLA_COMMANDS].
  */
 object StaffAccess {
-    /** Vanilla commands a moderator may use while in admin mode. */
+    /**
+     * Commands a moderator may use while in admin mode: the vanilla ones they were given, and
+     * Spark (the profiler), whose every subcommand is theirs.
+     */
     val MODERATOR_VANILLA_COMMANDS: Set<String> =
-        setOf("tp", "teleport", "kill", "weather", "time", "whitelist", "recipe")
+        setOf("tp", "teleport", "kill", "weather", "time", "whitelist", "recipe", "spark")
 
     private val active: MutableSet<UUID> = ConcurrentHashMap.newKeySet()
 
@@ -74,8 +77,9 @@ object StaffAccess {
     /**
      * `MinecraftServer.getProfilePermissions` for [id]: operators are plain players
      * until they switch admin mode on, and a moderator in admin mode is lifted to
-     * admin level (the commands beyond [MODERATOR_VANILLA_COMMANDS] stay hidden by
-     * [hidesCommand]).
+     * owner level, which is what Spark asks for by default (the commands beyond
+     * [MODERATOR_VANILLA_COMMANDS] stay hidden by [hidesCommand], so the level opens
+     * nothing else).
      */
     fun profilePermissions(
         server: MinecraftServer,
@@ -84,7 +88,7 @@ object StaffAccess {
     ): LevelBasedPermissionSet = try {
         when {
             isOperator(server, id) -> if (id.id() in active) vanilla else LevelBasedPermissionSet.ALL
-            id.id() in active && isModerator(id.id()) -> LevelBasedPermissionSet.ADMIN
+            id.id() in active && isModerator(id.id()) -> LevelBasedPermissionSet.OWNER
             else -> vanilla
         }
     } catch (failure: Exception) {
